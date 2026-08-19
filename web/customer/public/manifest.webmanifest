@@ -1,0 +1,18 @@
+{
+  "name": "Ya! Pasakay",
+  "short_name": "Pasakay",
+  "description": "Book a motorcycle or tricycle ride.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#e30613",
+  "theme_color": "#e30613",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
