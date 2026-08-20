@@ -117,6 +117,7 @@ app.MapHub<TripChatHub>("/hubs/chat");
 app.MapHub<DeskHub>("/hubs/desk");
 app.MapHub<OpsHub>("/hubs/ops");
 app.MapGet("/health", () => Results.Ok(new { status = "ok", app = "Ya! Pasakay" }));
+app.MapGet("/Releases", ReleaseStatus.HandleAsync);
 SpaHost.MapFallbacks(app);
 
 app.Run();

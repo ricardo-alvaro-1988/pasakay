@@ -5,6 +5,7 @@ app_dir="${1:-/var/www/yapasakay}"
 service="${2:-yapasakay.service}"
 upload_dir="${3:-/var/lib/yapasakay/uploads}"
 log_dir="${4:-/var/log/yapasakay}"
+release_file="${5:-/var/lib/yapasakay/release.json}"
 
 env_file="/etc/yapasakay/yapasakay-api.env"
 start_script="/etc/yapasakay/start-yapasakay-api.sh"
@@ -26,6 +27,25 @@ wait_for_health() {
 
     systemctl status "${service}" --no-pager -l || true
     return 1
+}
+
+ensure_release_metadata() {
+    if [ -f "${release_file}" ]; then
+        return
+    fi
+
+    mkdir -p "$(dirname "${release_file}")"
+    tee "${release_file}" >/dev/null <<EOF
+{
+  "app": "Ya! Pasakay",
+  "version": "1.0.0",
+  "updatedAtUtc": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "buildNumber": "manual",
+  "commit": "manual",
+  "package": "manual"
+}
+EOF
+    chmod 0644 "${release_file}"
 }
 
 cp "${app_dir}/YaPasakay.Api.dll" "${backup_dir}/" 2>/dev/null || true
@@ -61,13 +81,26 @@ else
     printf 'YP_LOG_ROOT=%s\n' "${log_dir}" >> "${env_file}"
 fi
 
+if grep -q '^YP_RELEASE_FILE=' "${env_file}"; then
+    sed -i "s|^YP_RELEASE_FILE=.*|YP_RELEASE_FILE=${release_file}|" "${env_file}"
+else
+    printf 'YP_RELEASE_FILE=%s\n' "${release_file}" >> "${env_file}"
+fi
+
 if ! grep -q 'Storage__UploadsPath' "${start_script}"; then
     sed -i '/^exec \/var\/www\/yapasakay\/YaPasakay.Api/i export YP_UPLOAD_ROOT="${YP_UPLOAD_ROOT:-/var/lib/yapasakay/uploads}"\
 export YP_LOG_ROOT="${YP_LOG_ROOT:-/var/log/yapasakay}"\
 export Storage__UploadsPath="${Storage__UploadsPath:-$YP_UPLOAD_ROOT}"' "${start_script}"
 fi
 
+if ! grep -q 'Release__MetadataPath' "${start_script}"; then
+    sed -i '/^exec \/var\/www\/yapasakay\/YaPasakay.Api/i export YP_RELEASE_FILE="${YP_RELEASE_FILE:-/var/lib/yapasakay/release.json}"\
+export Release__MetadataPath="${Release__MetadataPath:-$YP_RELEASE_FILE}"' "${start_script}"
+fi
+
+ensure_release_metadata
+
 systemctl start "${service}"
 wait_for_health
 
-printf 'backup=%s\nupload=%s\nlog=%s\nsample=%s\n' "${backup_dir}" "${upload_dir}" "${log_dir}" "${sample}"
+printf 'backup=%s\nupload=%s\nlog=%s\nrelease=%s\nsample=%s\n' "${backup_dir}" "${upload_dir}" "${log_dir}" "${release_file}" "${sample}"

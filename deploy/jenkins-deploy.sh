@@ -26,6 +26,7 @@ fi
 
 upload_dir="${YP_UPLOAD_ROOT:-${Storage__UploadsPath:-/var/lib/yapasakay/uploads}}"
 log_dir="${YP_LOG_ROOT:-/var/log/yapasakay}"
+release_file="${YP_RELEASE_FILE:-${Release__MetadataPath:-/var/lib/yapasakay/release.json}}"
 legacy_uploads="${app_dir}/wwwroot/uploads"
 
 migrate_legacy_uploads() {
@@ -33,6 +34,43 @@ migrate_legacy_uploads() {
         ${sudo_cmd} mkdir -p "${upload_dir}"
         ${sudo_cmd} rsync -a "${legacy_uploads}/" "${upload_dir}/"
     fi
+}
+
+next_release_version() {
+    local current_version=""
+    if [ -f "${release_file}" ]; then
+        current_version="$(${sudo_cmd} sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "${release_file}" | head -n 1 || true)"
+    fi
+
+    if [[ "${current_version}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+        printf '%s.%s.%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$((BASH_REMATCH[3] + 1))"
+    elif [[ "${build_number}" =~ ^[0-9]+$ ]]; then
+        printf '1.0.%s' "${build_number}"
+    else
+        printf '1.0.1'
+    fi
+}
+
+write_release_metadata() {
+    local version
+    local updated_at
+    version="$(next_release_version)"
+    updated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+    ${sudo_cmd} mkdir -p "$(dirname "${release_file}")"
+    ${sudo_cmd} tee "${release_file}.tmp" >/dev/null <<EOF
+{
+  "app": "Ya! Pasakay",
+  "version": "${version}",
+  "updatedAtUtc": "${updated_at}",
+  "buildNumber": "${build_number}",
+  "commit": "${commit}",
+  "package": "$(basename "${package}")"
+}
+EOF
+    ${sudo_cmd} mv "${release_file}.tmp" "${release_file}"
+    ${sudo_cmd} chmod 0644 "${release_file}"
+    echo "Release metadata updated: ${version} ${updated_at}"
 }
 
 wait_for_health() {
@@ -69,7 +107,7 @@ if [ ! -f "${package}" ]; then
     exit 1
 fi
 
-${sudo_cmd} mkdir -p "${release_dir}" "${backup_dir}" "${app_dir}" "${backup_root}" "${upload_dir}" "${log_dir}"
+${sudo_cmd} mkdir -p "${release_dir}" "${backup_dir}" "${app_dir}" "${backup_root}" "${upload_dir}" "${log_dir}" "$(dirname "${release_file}")"
 ${sudo_cmd} tar -xzf "${package}" -C "${release_dir}"
 
 if [ ! -f "${release_dir}/YaPasakay.Api" ]; then
@@ -98,6 +136,7 @@ ${sudo_cmd} chmod +x "${app_dir}/YaPasakay.Api"
 ${sudo_cmd} systemctl start "${service}"
 
 wait_for_health
+write_release_metadata
 
 trap - EXIT
 

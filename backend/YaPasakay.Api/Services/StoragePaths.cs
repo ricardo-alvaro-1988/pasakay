@@ -24,6 +24,28 @@ public static class StoragePaths
         return Path.GetFullPath(configured);
     }
 
+    public static string ReleaseMetadataPath(IConfiguration config, IWebHostEnvironment environment)
+    {
+        var configured = FirstConfigured(
+            config["Release:MetadataPath"],
+            config["YP_RELEASE_FILE"]);
+
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            configured = environment.IsProduction() && OperatingSystem.IsLinux()
+                ? "/var/lib/yapasakay/release.json"
+                : Path.Combine(environment.ContentRootPath, "release.json");
+        }
+
+        configured = Environment.ExpandEnvironmentVariables(configured);
+        if (!Path.IsPathRooted(configured))
+        {
+            configured = Path.Combine(environment.ContentRootPath, configured);
+        }
+
+        return Path.GetFullPath(configured);
+    }
+
     private static string? FirstConfigured(params string?[] values) =>
         values.Select(x => x?.Trim()).FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
 }
