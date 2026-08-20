@@ -6,6 +6,7 @@ namespace YaPasakay.Api.Services;
 
 public static class ReleaseStatus
 {
+    private static readonly TimeSpan PhilippineOffset = TimeSpan.FromHours(8);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -127,7 +128,7 @@ public static class ReleaseStatus
     {
         if (DateTimeOffset.TryParse(value, out var parsed))
         {
-            return parsed.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'");
+            return parsed.ToOffset(PhilippineOffset).ToString("yyyy-MM-dd HH:mm:ss 'Philippine Time'");
         }
 
         return string.IsNullOrWhiteSpace(value) ? "Not set" : value.Trim();
