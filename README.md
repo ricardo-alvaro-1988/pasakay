@@ -69,6 +69,10 @@ One hostname. Paths:
 - `/ops/` — operator + administrator
 - `/api/`, `/hubs/`, `/uploads/`, `/health` — API
 
+Production upload files are served at `/uploads/...` but stored outside the deployed site folder. On Linux the app defaults to `/var/lib/yapasakay/uploads`; override it with `Storage__UploadsPath` or `YP_UPLOAD_ROOT`. Keep server-only settings in `/etc/yapasakay/yapasakay-api.env`, not in the website folder.
+
+The current production release can be checked at `/Releases`. Jenkins updates the server-owned metadata file at `/var/lib/yapasakay/release.json` after each successful deploy. Override that path with `Release__MetadataPath` or `YP_RELEASE_FILE`.
+
 1. Set `PublicOrigin` to `https://yapasakay.com` in [backend/YaPasakay.Api/appsettings.Production.json](backend/YaPasakay.Api/appsettings.Production.json). Replace the JWT key and SQL connection.
 2. Google Cloud: allow that origin for Maps HTTP referrers (`https://yapasakay.com/*`) and OAuth JavaScript origins (`https://yapasakay.com` and `https://www.yapasakay.com`).
 3. Build the webs into the API wwwroot:

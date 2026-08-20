@@ -91,26 +91,24 @@ builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(optio
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+var uploadRoot = StoragePaths.UploadRoot(app.Configuration, app.Environment);
+Directory.CreateDirectory(uploadRoot);
 
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
     var seederLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbSeeder");
-    var uploadRoot = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "uploads");
     await DbSeeder.SeedAsync(db, seederLogger, uploadRoot);
 }
 
 app.UseForwardedHeaders();
 app.UseCors(app.Environment.IsDevelopment() ? "dev" : "site");
-var chatUploadRoot = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "uploads");
-Directory.CreateDirectory(chatUploadRoot);
 SpaHost.UseStatic(app);
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(chatUploadRoot),
-    RequestPath = "/uploads",
-    ServeUnknownFileTypes = true
+    FileProvider = new PhysicalFileProvider(uploadRoot),
+    RequestPath = "/uploads"
 });
 app.UseAuthentication();
 app.UseAuthorization();
@@ -119,6 +117,7 @@ app.MapHub<TripChatHub>("/hubs/chat");
 app.MapHub<DeskHub>("/hubs/desk");
 app.MapHub<OpsHub>("/hubs/ops");
 app.MapGet("/health", () => Results.Ok(new { status = "ok", app = "Ya! Pasakay" }));
+app.MapGet("/Releases", ReleaseStatus.HandleAsync);
 SpaHost.MapFallbacks(app);
 
 app.Run();

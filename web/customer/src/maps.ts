@@ -106,6 +106,7 @@ declare global {
               text?: string
               shape?: string
               width?: number
+              locale?: string
             },
           ) => void
         }
