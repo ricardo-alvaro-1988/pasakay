@@ -1,4 +1,5 @@
 using Microsoft.Extensions.FileProviders;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace YaPasakay.Api.Services;
 
@@ -11,6 +12,18 @@ public static class SpaHost
         var opsRoot = Path.Combine(webRoot, "ops");
         Directory.CreateDirectory(webRoot);
         Directory.CreateDirectory(opsRoot);
+
+        app.Use(async (context, next) =>
+        {
+            if ((HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method))
+                && string.Equals(context.Request.Path.Value, "/ops", StringComparison.OrdinalIgnoreCase))
+            {
+                context.Response.Redirect("/ops/");
+                return;
+            }
+
+            await next();
+        });
 
         app.UseDefaultFiles();
         app.UseStaticFiles();
@@ -34,10 +47,13 @@ public static class SpaHost
             ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
         var opsRoot = Path.Combine(webRoot, "ops");
 
-        app.MapGet("/ops", () => Results.Redirect("/ops/"));
-
         app.MapFallback("/ops/{**path}", async context =>
         {
+            if (await TrySendFileAsync(context, opsRoot, "/ops"))
+            {
+                return;
+            }
+
             await SendHtmlAsync(context, Path.Combine(opsRoot, "index.html"), "Operator portal is not published. Run deploy/sync-wwwroot.ps1.");
         });
 
@@ -71,5 +87,38 @@ public static class SpaHost
 
         context.Response.ContentType = "text/html; charset=utf-8";
         await context.Response.SendFileAsync(file);
+    }
+
+    private static async Task<bool> TrySendFileAsync(HttpContext context, string root, string requestPrefix)
+    {
+        var relative = context.Request.Path.Value;
+        if (string.IsNullOrWhiteSpace(relative) ||
+            !relative.StartsWith(requestPrefix + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        relative = relative[requestPrefix.Length..].TrimStart('/');
+        if (string.IsNullOrWhiteSpace(relative) || relative.EndsWith('/'))
+        {
+            return false;
+        }
+
+        var full = Path.GetFullPath(Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar)));
+        var fullRoot = Path.GetFullPath(root).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        if (!full.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase) || !File.Exists(full))
+        {
+            return false;
+        }
+
+        var provider = new FileExtensionContentTypeProvider();
+        if (!provider.TryGetContentType(full, out var contentType))
+        {
+            contentType = "application/octet-stream";
+        }
+
+        context.Response.ContentType = contentType;
+        await context.Response.SendFileAsync(full);
+        return true;
     }
 }
