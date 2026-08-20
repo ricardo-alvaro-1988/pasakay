@@ -8,6 +8,7 @@ pipeline {
     }
 
     triggers {
+        githubPush()
         pollSCM('H/2 * * * *')
     }
 
@@ -76,6 +77,7 @@ pipeline {
         stage('Deploy Production') {
             when {
                 anyOf {
+                    branch 'main'
                     branch 'master'
                     expression { env.BRANCH_NAME == null || env.BRANCH_NAME == '' }
                 }
