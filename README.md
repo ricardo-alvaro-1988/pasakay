@@ -90,3 +90,7 @@ flutter build apk --dart-define=API_BASE=https://yapasakay.com
 ```
 
 Debug rider builds also use `https://yapasakay.com`.
+
+## Two-site production
+
+Jenkins deploys the same production package to both `yapasakay.com` and `pricebadz.com` from `main`. The second site keeps its own Linux service, upload folder, release metadata, and SQL Server database. See [deploy/pricebadz-production.md](deploy/pricebadz-production.md) for the manual server/database setup required before the first PriceBadz deploy.

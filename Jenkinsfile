@@ -15,8 +15,6 @@ pipeline {
     environment {
         APP_NAME = 'yapasakay'
         DEPLOY_HOST = 'yapasakay.com'
-        DEPLOY_PATH = '/var/www/yapasakay'
-        DEPLOY_SERVICE = 'yapasakay.service'
         SSH_CREDENTIALS_ID = 'yapasakay-prod-ssh'
         DOTNET_CLI_TELEMETRY_OPTOUT = '1'
         DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
@@ -74,7 +72,7 @@ pipeline {
             }
         }
 
-        stage('Deploy Production') {
+        stage('Deploy Production Sites') {
             when {
                 anyOf {
                     branch 'main'
@@ -92,14 +90,25 @@ pipeline {
                         set -euxo pipefail
 
                         package="$(cat .jenkins/package/name)"
-                        remote_package="/tmp/${package}"
                         ssh_opts="-i ${SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
-                        scp ${ssh_opts} ".jenkins/package/${package}" "${SSH_USER}@${DEPLOY_HOST}:${remote_package}"
-                        scp ${ssh_opts} deploy/jenkins-deploy.sh "${SSH_USER}@${DEPLOY_HOST}:/tmp/yapasakay-jenkins-deploy.sh"
+                        while IFS='|' read -r target_name target_host deploy_path deploy_service env_file health_url release_root; do
+                            if [ -z "${target_name}" ] || [[ "${target_name}" == \#* ]]; then
+                                continue
+                            fi
 
-                        ssh ${ssh_opts} "${SSH_USER}@${DEPLOY_HOST}" \
-                            "bash /tmp/yapasakay-jenkins-deploy.sh '${remote_package}' '${DEPLOY_PATH}' '${DEPLOY_SERVICE}' '${BUILD_NUMBER}' '${GIT_COMMIT}'"
+                            echo "Deploying ${target_name} to ${target_host}:${deploy_path}"
+                            remote_package="/tmp/${target_name}-${package}"
+
+                            scp ${ssh_opts} ".jenkins/package/${package}" "${SSH_USER}@${target_host}:${remote_package}"
+                            scp ${ssh_opts} deploy/jenkins-deploy.sh "${SSH_USER}@${target_host}:/tmp/yapasakay-jenkins-deploy.sh"
+
+                            ssh ${ssh_opts} "${SSH_USER}@${target_host}" \
+                                "bash /tmp/yapasakay-jenkins-deploy.sh '${remote_package}' '${deploy_path}' '${deploy_service}' '${BUILD_NUMBER}' '${GIT_COMMIT:-unknown}' '${target_name}' '${env_file}' '${health_url}' '${release_root}'"
+                        done <<TARGETS
+yapasakay|${DEPLOY_HOST}|/var/www/yapasakay|yapasakay.service|/etc/yapasakay/yapasakay-api.env|http://127.0.0.1:5003/health|/var/www/releases/yapasakay
+pricebadz|${DEPLOY_HOST}|/var/www/pricebadz|pricebadz.service|/etc/pricebadz/pricebadz-api.env|http://127.0.0.1:5004/health|/var/www/releases/pricebadz
+TARGETS
                     '''
                 }
             }

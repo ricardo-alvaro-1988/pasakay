@@ -6,13 +6,15 @@ app_dir="${2:-/var/www/yapasakay}"
 service="${3:-yapasakay.service}"
 build_number="${4:-manual}"
 commit="${5:-unknown}"
+app_name="${6:-$(basename "${app_dir}")}"
+env_file="${7:-/etc/${app_name}/${app_name}-api.env}"
+health_url="${8:-}"
+release_root="${9:-/var/www/releases/${app_name}}"
+backup_root="${10:-/var/www/backups}"
 
 timestamp="$(date +%Y%m%d%H%M%S)"
-release_root="/var/www/releases/yapasakay"
-backup_root="/var/www/backups"
 release_dir="${release_root}/${timestamp}-${build_number}-${commit:0:8}"
-backup_dir="${backup_root}/yapasakay-${timestamp}"
-env_file="/etc/yapasakay/yapasakay-api.env"
+backup_dir="${backup_root}/${app_name}-${timestamp}"
 sudo_cmd=""
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -24,9 +26,11 @@ if [ -f "${env_file}" ]; then
     source "${env_file}"
 fi
 
-upload_dir="${YP_UPLOAD_ROOT:-${Storage__UploadsPath:-/var/lib/yapasakay/uploads}}"
-log_dir="${YP_LOG_ROOT:-/var/log/yapasakay}"
-release_file="${YP_RELEASE_FILE:-${Release__MetadataPath:-/var/lib/yapasakay/release.json}}"
+upload_dir="${YP_UPLOAD_ROOT:-${Storage__UploadsPath:-/var/lib/${app_name}/uploads}}"
+log_dir="${YP_LOG_ROOT:-/var/log/${app_name}}"
+release_file="${YP_RELEASE_FILE:-${Release__MetadataPath:-/var/lib/${app_name}/release.json}}"
+release_app="${YP_RELEASE_APP:-${Release__AppName:-Ya! Pasakay}}"
+health_url="${health_url:-${YP_HEALTH_URL:-${Health__Url:-http://127.0.0.1:5003/health}}}"
 legacy_uploads="${app_dir}/wwwroot/uploads"
 
 migrate_legacy_uploads() {
@@ -60,7 +64,7 @@ write_release_metadata() {
     ${sudo_cmd} mkdir -p "$(dirname "${release_file}")"
     ${sudo_cmd} tee "${release_file}.tmp" >/dev/null <<EOF
 {
-  "app": "Ya! Pasakay",
+  "app": "${release_app}",
   "version": "${version}",
   "updatedAtUtc": "${updated_at}",
   "buildNumber": "${build_number}",
@@ -76,7 +80,7 @@ EOF
 wait_for_health() {
     for _ in {1..30}; do
         if ${sudo_cmd} systemctl is-active --quiet "${service}" &&
-            curl -fsS http://127.0.0.1:5003/health >/dev/null; then
+            curl -fsS "${health_url}" >/dev/null; then
             return 0
         fi
         sleep 1
@@ -146,7 +150,7 @@ ${sudo_cmd} find "${release_root}" -mindepth 1 -maxdepth 1 -type d -printf '%T@ 
     | head -n -5 \
     | cut -d' ' -f2- \
     | xargs -r ${sudo_cmd} rm -rf || true
-${sudo_cmd} find "${backup_root}" -mindepth 1 -maxdepth 1 -type d -name 'yapasakay-*' -printf '%T@ %p\n' \
+${sudo_cmd} find "${backup_root}" -mindepth 1 -maxdepth 1 -type d -name "${app_name}-*" -printf '%T@ %p\n' \
     | sort -n \
     | head -n -10 \
     | cut -d' ' -f2- \
