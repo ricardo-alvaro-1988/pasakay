@@ -12,6 +12,8 @@ type LoginBrandPanelProps = {
   description: string
   showPoints?: boolean
   animateCopy?: boolean
+  brandName?: string
+  brandLogo?: string
 }
 
 function AnimatedWords({
@@ -56,6 +58,8 @@ export function LoginBrandPanel({
   description,
   showPoints = false,
   animateCopy = false,
+  brandName = 'Ya! Pasakay',
+  brandLogo = logo,
 }: LoginBrandPanelProps) {
   const [cycle, setCycle] = useState(0)
 
@@ -74,8 +78,8 @@ export function LoginBrandPanel({
         <img className="login-vehicle login-vehicle-trike" src={tricycleHero} alt="" />
       </div>
       <div className="login-brand-top">
-        <img src={logo} alt="Ya! Pasakay" />
-        <span>Ya! Pasakay</span>
+        <img src={brandLogo} alt={brandName} />
+        <span>{brandName}</span>
       </div>
       <div key={cycle} className={`login-brand-copy${animateCopy ? ' login-brand-copy-alive' : ''}`}>
         {animateCopy ? (

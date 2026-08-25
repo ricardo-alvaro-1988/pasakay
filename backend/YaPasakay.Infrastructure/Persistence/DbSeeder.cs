@@ -22,6 +22,7 @@ public static class DbSeeder
 
     public static async Task SeedAsync(AppDbContext db, ILogger? logger = null, string? uploadRoot = null, CancellationToken cancellationToken = default)
     {
+        await SeedBrandSettingsAsync(db, cancellationToken);
         await SeedTerritoriesAsync(db, logger, cancellationToken);
         await SeedAdminAsync(db, cancellationToken);
         await SeedAccessAsync(db, cancellationToken);
@@ -306,6 +307,22 @@ public static class DbSeeder
         {
             await db.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private static async Task SeedBrandSettingsAsync(AppDbContext db, CancellationToken cancellationToken)
+    {
+        if (await db.PlatformBrandSettings.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        db.PlatformBrandSettings.Add(new PlatformBrandSettings
+        {
+            BrandName = BrandThemeCatalog.DefaultBrandName,
+            ShortName = BrandThemeCatalog.DefaultShortName,
+            ThemeId = BrandThemeCatalog.DefaultThemeId,
+        });
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task SeedAdminAsync(AppDbContext db, CancellationToken cancellationToken)

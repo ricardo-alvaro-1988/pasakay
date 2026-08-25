@@ -95,6 +95,12 @@ import { stopSosAlarm } from './sos-alert'
 import logoCircle from './asset/logo-circle.png'
 import FleetMap from './FleetMap'
 import TripLiveMap from './TripLiveMap'
+import { BrandingSettingsPage } from './BrandingSettings'
+import {
+  applyBrand,
+  DEFAULT_BRAND_NAME,
+  type BrandingConfig,
+} from './brand-themes'
 
 const MENUS: { id: PageId; label: string; icon: string; live: boolean }[] = [
   { id: 'overview', label: 'Overview', icon: '⌂', live: true },
@@ -130,11 +136,24 @@ const OPERATOR_MENUS: { id: PageId; label: string; icon: string }[] = [
 
 const COMING_SOON: Record<string, string> = {}
 
-type SettingsSection = 'general'
+type SettingsSection = 'general' | 'branding'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
   const [booting, setBooting] = useState(!!getToken())
+  const [branding, setBranding] = useState<BrandingConfig | null>(null)
+
+  useEffect(() => {
+    api
+      .publicBranding()
+      .then((data) => {
+        applyBrand(data, { titleSuffix: ' Admin' })
+        setBranding(data)
+      })
+      .catch(() => {
+        /* keep bundled defaults */
+      })
+  }, [])
 
   useEffect(() => {
     if (!getToken()) {
@@ -153,29 +172,56 @@ export default function App() {
       .finally(() => setBooting(false))
   }, [])
 
+  const brandName = branding?.brandName || DEFAULT_BRAND_NAME
+  const brandLogo = branding?.logoUrl || logoCircle
+
   if (booting) {
     return (
       <div className="login">
         <div className="login-card">
-          <img className="brand-mark" src={logoCircle} alt="Ya! Pasakay" />
-          Loading Ya! Pasakay…
+          <img className="brand-mark" src={brandLogo} alt={brandName} />
+          Loading {brandName}…
         </div>
       </div>
     )
   }
 
   if (!me) {
-    return <Login onSignedIn={setMe} />
+    return <Login onSignedIn={setMe} brandName={brandName} brandLogo={brandLogo} />
   }
 
   if (me.role === 'Operator') {
-    return <OperatorShell me={me} onLogout={() => { clearAuth(); setMe(null) }} />
+    return (
+      <OperatorShell
+        me={me}
+        onLogout={() => { clearAuth(); setMe(null) }}
+        brandName={brandName}
+        brandLogo={brandLogo}
+      />
+    )
   }
 
-  return <Shell me={me} onLogout={() => { clearAuth(); setMe(null) }} />
+  return (
+    <Shell
+      me={me}
+      onLogout={() => { clearAuth(); setMe(null) }}
+      branding={branding}
+      onBranding={setBranding}
+      brandName={brandName}
+      brandLogo={brandLogo}
+    />
+  )
 }
 
-function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
+function Login({
+  onSignedIn,
+  brandName,
+  brandLogo,
+}: {
+  onSignedIn: (me: Me) => void
+  brandName: string
+  brandLogo: string
+}) {
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -202,8 +248,8 @@ function Login({ onSignedIn }: { onSignedIn: (me: Me) => void }) {
   return (
     <div className="login">
       <form className="login-card" onSubmit={submit}>
-        <img className="brand-mark login-logo" src={logoCircle} alt="Ya! Pasakay" />
-        <h1>Ya! Pasakay</h1>
+        <img className="brand-mark login-logo" src={brandLogo} alt={brandName} />
+        <h1>{brandName}</h1>
         <p>Sign in with your phone and password.</p>
         <label className="field">
           <span>Phone</span>
@@ -276,7 +322,21 @@ function SosBanner({
   )
 }
 
-function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
+function Shell({
+  me,
+  onLogout,
+  branding,
+  onBranding,
+  brandName,
+  brandLogo,
+}: {
+  me: Me
+  onLogout: () => void
+  branding: BrandingConfig | null
+  onBranding: (brand: BrandingConfig) => void
+  brandName: string
+  brandLogo: string
+}) {
   const allowedMenus = (me.isMainAdmin
     ? MENUS
     : MENUS.filter((item) => (me.accessPages ?? []).includes(item.id))
@@ -382,9 +442,9 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
     <div className={`shell${collapsed ? ' collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="side-brand">
-          <img className="brand-mark" src={logoCircle} alt="Ya! Pasakay" />
+          <img className="brand-mark" src={brandLogo} alt={brandName} />
           <div className="side-copy">
-            <strong>Ya! Pasakay</strong>
+            <strong>{brandName}</strong>
             <span>{me.isMainAdmin ? 'Administrator' : me.accessGroupName || 'Admin'}</span>
           </div>
         </div>
@@ -491,6 +551,8 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
             me={me}
             section={settingsSection}
             onSection={setSettingsSection}
+            branding={branding}
+            onBranding={onBranding}
           />
         )}
         {page === 'profile' ? <AdminProfilePage me={me} /> : null}
@@ -4808,32 +4870,49 @@ function toPhInput(value: string | null | undefined) {
 function SettingsPage({
   theme,
   onTheme,
+  section,
+  onSection,
+  onBranding,
 }: {
   theme: Theme
   onTheme: () => void
   me: Me
   section: SettingsSection
   onSection: (section: SettingsSection) => void
+  branding: BrandingConfig | null
+  onBranding: (brand: BrandingConfig) => void
 }) {
   return (
     <div className="form-sections">
-      <div className="grid-2">
-        <div className="card">
-          <h2>Vehicle types</h2>
-          <p>Locked for this product. Operators will assign one of these when they create a rider.</p>
-          <div className="chips" style={{ marginTop: 12 }}>
-            <button type="button" className="on">Motorcycle</button>
-            <button type="button" className="on">Tricycle</button>
+      <div className="chips" style={{ marginBottom: 4 }}>
+        <button type="button" className={section === 'general' ? 'on' : ''} onClick={() => onSection('general')}>
+          General
+        </button>
+        <button type="button" className={section === 'branding' ? 'on' : ''} onClick={() => onSection('branding')}>
+          Branding
+        </button>
+      </div>
+      {section === 'branding' ? (
+        <BrandingSettingsPage onApplied={onBranding} />
+      ) : (
+        <div className="grid-2">
+          <div className="card">
+            <h2>Vehicle types</h2>
+            <p>Locked for this product. Operators will assign one of these when they create a rider.</p>
+            <div className="chips" style={{ marginTop: 12 }}>
+              <button type="button" className="on">Motorcycle</button>
+              <button type="button" className="on">Tricycle</button>
+            </div>
+          </div>
+          <div className="card">
+            <h2>Appearance</h2>
+            <p>Same dashboard in dark and light. Choice is saved on this browser.</p>
+            <button className="btn" type="button" onClick={onTheme} style={{ maxWidth: 220, marginTop: 12 }}>
+              Switch to {theme === 'dark' ? 'light' : 'dark'} mode
+            </button>
           </div>
         </div>
-        <div className="card">
-          <h2>Appearance</h2>
-          <p>Same dashboard in dark and light. Choice is saved on this browser.</p>
-          <button className="btn" type="button" onClick={onTheme} style={{ maxWidth: 220, marginTop: 12 }}>
-            Switch to {theme === 'dark' ? 'light' : 'dark'} mode
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   )
 }
@@ -5807,7 +5886,17 @@ function ComingSoon({ title, body }: { title: string; body: string }) {
   )
 }
 
-function OperatorShell({ me, onLogout }: { me: Me; onLogout: () => void }) {
+function OperatorShell({
+  me,
+  onLogout,
+  brandName,
+  brandLogo,
+}: {
+  me: Me
+  onLogout: () => void
+  brandName: string
+  brandLogo: string
+}) {
   const [page, setPage] = useState<PageId>('dashboard')
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed)
   const [theme, setThemeState] = useState<Theme>(readTheme)
@@ -5860,9 +5949,9 @@ function OperatorShell({ me, onLogout }: { me: Me; onLogout: () => void }) {
     <div className={`shell${collapsed ? ' collapsed' : ''}`}>
       <aside className="sidebar">
         <div className="side-brand">
-          <img className="brand-mark" src={logoCircle} alt="Ya! Pasakay" />
+          <img className="brand-mark" src={brandLogo} alt={brandName} />
           <div className="side-copy">
-            <strong>Ya! Pasakay</strong>
+            <strong>{brandName}</strong>
             <span>{me.companyName || 'Operator'}</span>
           </div>
         </div>

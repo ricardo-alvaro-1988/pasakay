@@ -2,7 +2,7 @@ namespace YaPasakay.Api.Services;
 
 public class UploadStore(IWebHostEnvironment environment, IConfiguration configuration)
 {
-    private static readonly HashSet<string> Allowed = [".jpg", ".jpeg", ".png", ".webp"];
+    private static readonly HashSet<string> Allowed = [".jpg", ".jpeg", ".png", ".webp", ".ico", ".svg"];
     private readonly string root = StoragePaths.UploadRoot(configuration, environment);
 
     public async Task<string?> SaveAsync(IFormFile? file, string folder, string fileName, CancellationToken cancellationToken)
@@ -19,12 +19,15 @@ public class UploadStore(IWebHostEnvironment environment, IConfiguration configu
             {
                 "image/png" => ".png",
                 "image/webp" => ".webp",
+                "image/svg+xml" => ".svg",
+                "image/x-icon" => ".ico",
+                "image/vnd.microsoft.icon" => ".ico",
                 _ => ".jpg"
             };
         }
         if (!Allowed.Contains(ext))
         {
-            throw new InvalidOperationException("Use a JPG, PNG, or WEBP image.");
+            throw new InvalidOperationException("Use a JPG, PNG, WEBP, SVG, or ICO image.");
         }
 
         var relative = BuildRelativePath(folder, fileName, ext);

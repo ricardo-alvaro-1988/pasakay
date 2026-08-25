@@ -346,6 +346,16 @@ async function requestForm<T>(path: string, body: FormData): Promise<T> {
 
 export const api = {
   authConfig: () => request<{ googleClientId: string }>('/api/public/auth'),
+  branding: () =>
+    request<{
+      brandName: string
+      shortName: string
+      logoUrl: string | null
+      faviconUrl: string | null
+      themeId: string
+      accent: string
+      good: string
+    }>('/api/public/branding'),
   googleSignIn: (idToken: string) =>
     request<AuthResponse>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
   mapsConfig: () => request<{ googleMapsBrowserKey: string }>('/api/public/maps'),

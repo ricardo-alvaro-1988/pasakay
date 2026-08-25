@@ -52,6 +52,7 @@ import { readTheme, setTheme, type Theme } from './theme'
 import { ThemeSwitch } from './theme-switch'
 import { ShareTripButton } from './share-trip-button'
 import { lastKnownGps, readBootGps, readPickupGps, readGps, watchTripGps } from './gps'
+import { applyBrand, DEFAULT_BRAND_NAME, type BrandingConfig } from './brand-themes'
 
 type Tab = 'home' | 'booking' | 'schedule' | 'account'
 type SearchTarget = 'pickup' | 'dropoff' | null
@@ -65,6 +66,19 @@ export default function App() {
   const [boot, setBoot] = useState(true)
   const [tab, setTab] = useState<Tab>('home')
   const [accountPage, setAccountPage] = useState<AccountPage>('menu')
+  const [branding, setBranding] = useState<BrandingConfig | null>(null)
+
+  useEffect(() => {
+    api
+      .branding()
+      .then((data) => {
+        applyBrand(data)
+        setBranding(data)
+      })
+      .catch(() => {
+        /* bundled defaults */
+      })
+  }, [])
 
   useEffect(() => {
     if (!getToken()) {
@@ -104,19 +118,24 @@ export default function App() {
     }
   }, [desk?.customerId])
 
+  const brandName = branding?.brandName || DEFAULT_BRAND_NAME
+  const brandLogo = branding?.logoUrl || logo
+
   if (boot) {
     return (
       <div className="login">
         <LoginBrandPanel
           kicker="Getting ready"
-          title="Ya! Pasakay"
+          title={brandName}
           description="Loading your ride…"
+          brandName={brandName}
+          brandLogo={brandLogo}
         />
       </div>
     )
   }
-  if (!desk) return <AuthScreen onReady={setDesk} />
-  if (desk.needsMobile) return <CompleteMobile desk={desk} onDesk={setDesk} />
+  if (!desk) return <AuthScreen onReady={setDesk} brandName={brandName} brandLogo={brandLogo} />
+  if (desk.needsMobile) return <CompleteMobile desk={desk} onDesk={setDesk} brandName={brandName} brandLogo={brandLogo} />
 
   return (
     <RideApp
@@ -129,6 +148,8 @@ export default function App() {
       accountPage={accountPage}
       onAccountPage={setAccountPage}
       onDesk={setDesk}
+      brandName={brandName}
+      brandLogo={brandLogo}
     />
   )
 }
@@ -140,6 +161,8 @@ function RideApp({
   accountPage,
   onAccountPage,
   onDesk,
+  brandName,
+  brandLogo,
 }: {
   desk: Desk
   tab: Tab
@@ -147,6 +170,8 @@ function RideApp({
   accountPage: AccountPage
   onAccountPage: (page: AccountPage) => void
   onDesk: (desk: Desk | null) => void
+  brandName: string
+  brandLogo: string
 }) {
   return (
     <div className="app">
@@ -157,6 +182,8 @@ function RideApp({
         accountPage={accountPage}
         onAccountPage={onAccountPage}
         onDesk={onDesk}
+        brandName={brandName}
+        brandLogo={brandLogo}
         onLogout={() => {
           clearToken()
           onDesk(null)
@@ -174,6 +201,8 @@ function Home({
   onAccountPage,
   onDesk,
   onLogout,
+  brandName,
+  brandLogo,
 }: {
   desk: Desk
   tab: Tab
@@ -182,6 +211,8 @@ function Home({
   onAccountPage: (page: AccountPage) => void
   onDesk: (desk: Desk) => void
   onLogout: () => void
+  brandName: string
+  brandLogo: string
 }) {
   const mapEl = useRef<HTMLDivElement>(null)
   const mapRef = useRef<MapHandle | null>(null)
@@ -691,7 +722,7 @@ function Home({
     if (isStandaloneApp() || installed) {
       markAppInstalled()
       setInstalled(true)
-      setInstallNote('Ya! Pasakay is already installed on this phone.')
+      setInstallNote(`${brandName} is already installed on this phone.`)
       return
     }
     const pending = installPrompt.current
@@ -740,14 +771,14 @@ function Home({
           <div className="brand-col">
             {installed ? (
               <div className="brand-pill">
-                <img src={logo} alt="" />
-                <span>Ya! Pasakay</span>
+                <img src={brandLogo} alt="" />
+                <span>{brandName}</span>
               </div>
             ) : (
               <button type="button" className={`brand-pill${canInstall ? ' ready' : ''}`} onClick={() => void installOnPhone()} title="Install on my Android phone">
-                <img src={logo} alt="" />
+                <img src={brandLogo} alt="" />
                 <span>
-                  Ya! Pasakay
+                  {brandName}
                   <small>
                     <InstallMark />
                     Tap to install

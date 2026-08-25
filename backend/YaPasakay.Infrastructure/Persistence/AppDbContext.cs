@@ -31,6 +31,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AccessGroup> AccessGroups => Set<AccessGroup>();
     public DbSet<AccessGroupPage> AccessGroupPages => Set<AccessGroupPage>();
     public DbSet<DeviceRegistration> DeviceRegistrations => Set<DeviceRegistration>();
+    public DbSet<PlatformBrandSettings> PlatformBrandSettings => Set<PlatformBrandSettings>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -425,6 +426,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(x => x.AppUserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PlatformBrandSettings>(entity =>
+        {
+            entity.Property(x => x.BrandName).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.ShortName).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.LogoPath).HasMaxLength(260);
+            entity.Property(x => x.FaviconPath).HasMaxLength(260);
+            entity.Property(x => x.ThemeId).HasMaxLength(40).IsRequired();
         });
     }
 }

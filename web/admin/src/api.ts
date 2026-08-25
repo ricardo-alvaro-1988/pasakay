@@ -1116,6 +1116,72 @@ export const api = {
   cancelScheduledBooking: (id: string) =>
     request<RideDetail>(`/api/operator/schedule/${id}/cancel`, { method: 'POST' }),
   mapsConfig: () => request<{ googleMapsBrowserKey: string }>('/api/public/maps'),
+  publicBranding: () =>
+    request<{
+      brandName: string
+      shortName: string
+      logoUrl: string | null
+      faviconUrl: string | null
+      themeId: string
+      accent: string
+      good: string
+    }>('/api/public/branding'),
+  getBranding: () =>
+    request<{
+      brandName: string
+      shortName: string
+      logoUrl: string | null
+      faviconUrl: string | null
+      themeId: string
+      accent: string
+      good: string
+      themes: { id: string; label: string; accent: string; good: string }[]
+    }>('/api/admin/branding'),
+  updateBranding: (body: {
+    brandName: string
+    shortName?: string
+    themeId: string
+    clearLogo?: boolean
+    clearFavicon?: boolean
+  }) =>
+    request<{
+      brandName: string
+      shortName: string
+      logoUrl: string | null
+      faviconUrl: string | null
+      themeId: string
+      accent: string
+      good: string
+      themes: { id: string; label: string; accent: string; good: string }[]
+    }>('/api/admin/branding', { method: 'PUT', body: JSON.stringify(body) }),
+  uploadBrandLogo: (file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request<{
+      brandName: string
+      shortName: string
+      logoUrl: string | null
+      faviconUrl: string | null
+      themeId: string
+      accent: string
+      good: string
+      themes: { id: string; label: string; accent: string; good: string }[]
+    }>('/api/admin/branding/logo', { method: 'POST', body: data })
+  },
+  uploadBrandFavicon: (file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request<{
+      brandName: string
+      shortName: string
+      logoUrl: string | null
+      faviconUrl: string | null
+      themeId: string
+      accent: string
+      good: string
+      themes: { id: string; label: string; accent: string; good: string }[]
+    }>('/api/admin/branding/favicon', { method: 'POST', body: data })
+  },
   operatorFleet: () => request<OperatorFleet>('/api/operator/fleet'),
   operatorCompany: () => request<OperatorDetail>('/api/operator/company'),
   changeOperatorPassword: (currentPassword: string, newPassword: string) =>

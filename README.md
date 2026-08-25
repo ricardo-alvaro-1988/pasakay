@@ -26,10 +26,10 @@ Chrome or Edge can **Install app** on the customer site (Add to Home Screen).
 ## Database
 
 ```
-Data Source=.\SQLEXPRESS01;Initial Catalog=YaPasakay;Integrated Security=True;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;Application Name=YaPasakay.Api
+Data Source=.\SQLEXPRESS01;Initial Catalog=YaPasakay;User ID=sa;Password=***;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=True;Application Name=YaPasakay.Api
 ```
 
-The API creates the `YaPasakay` catalog on first run.
+Restore from `db_backup\yapasakay2.bak` onto SQL Server 2022 Express (`.\SQLEXPRESS01`) when setting up a machine. The API expects the `YaPasakay` catalog.
 
 ## Sign in
 

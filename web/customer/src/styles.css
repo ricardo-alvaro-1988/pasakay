@@ -3,12 +3,12 @@
   --type: 13px;
   --type-weight: 650;
   --type-line: 1.35;
-  --accent: #e30613;
-  --accent-soft: rgba(227, 6, 19, 0.16);
+  --accent: var(--accent);
+  --accent-soft: var(--accent-soft);
   --good: #1ea36a;
   --radius: 22px;
   --shadow: 0 12px 28px rgba(22, 24, 29, 0.08);
-  --red: #e30613;
+  --red: var(--accent);
   --ink: #16181d;
   --soft: #f5f7fa;
   --surface-on: #ffffff;
@@ -37,7 +37,7 @@
   --chip: #262b34;
   --input: #12151a;
   --surface-on: #171a1f;
-  --accent-soft: rgba(227, 6, 19, 0.24);
+  --accent-soft: var(--accent-soft);
   --shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
 }
 
@@ -69,7 +69,7 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
   display: grid;
   overflow-y: auto;
   background:
-    radial-gradient(circle at 82% 18%, rgba(227, 6, 19, 0.12), transparent 28%),
+    radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 28%),
     linear-gradient(180deg, #f7f8fb, var(--bg));
 }
 @media (min-width: 900px) {
@@ -81,7 +81,7 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
   background:
     radial-gradient(ellipse at 12% 8%, rgba(255, 210, 170, 0.28), transparent 42%),
     radial-gradient(circle at 86% 78%, rgba(0, 0, 0, 0.22), transparent 36%),
-    linear-gradient(155deg, #ff2a2a 0%, #e30613 38%, #8b0610 100%);
+    linear-gradient(155deg, #ff2a2a 0%, var(--accent) 38%, #8b0610 100%);
   color: #fff;
   padding: 36px 40px 44px;
   display: flex;
@@ -287,7 +287,7 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
   border-radius: 18px;
   border: 1px solid var(--line);
   background:
-    radial-gradient(circle at 100% 0%, rgba(227, 6, 19, 0.08), transparent 42%),
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 42%),
     var(--bg-soft);
 }
 .login-vehicle-card img {
@@ -334,7 +334,7 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
   height: 56px;
   border-radius: 50%;
   margin-bottom: 18px;
-  box-shadow: 0 10px 22px rgba(227, 6, 19, 0.18);
+  box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .login-form h2 { margin: 0 0 8px; font-size: 28px; letter-spacing: -.6px; font-weight: 800; color: var(--ink); }
 .login-form .lede {
@@ -370,13 +370,13 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
   min-height: 48px;
   padding: 0 18px;
   border-radius: 999px;
-  border: 2px solid #e30613;
+  border: 2px solid var(--accent);
   background: #fff;
   color: #1f1f1f;
   font-size: 15px;
   font-weight: 700;
   line-height: 1;
-  box-shadow: 0 0 0 0 rgba(227, 6, 19, 0.42);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 42%, transparent);
   animation: googleBeat 1.7s ease-out infinite;
   pointer-events: none;
 }
@@ -401,9 +401,9 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
   max-width: none;
 }
 @keyframes googleBeat {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(227, 6, 19, 0.42); }
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 42%, transparent); }
   22% { box-shadow: 0 0 0 7px rgba(227, 6, 19, 0); }
-  40% { box-shadow: 0 0 0 0 rgba(227, 6, 19, 0.28); }
+  40% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 28%, transparent); }
   58% { box-shadow: 0 0 0 10px rgba(227, 6, 19, 0); }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -578,14 +578,14 @@ button.brand-pill:active { transform: scale(.98); }
   font-size: 10px;
   font-weight: 800;
   letter-spacing: .03em;
-  box-shadow: 0 4px 10px rgba(227, 6, 19, 0.28);
+  box-shadow: 0 4px 10px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 .brand-pill.ready small {
   animation: install-glow 1.8s ease-in-out infinite;
 }
 .brand-pill small svg { display: block; }
 @keyframes install-glow {
-  50% { box-shadow: 0 0 0 4px var(--accent-soft), 0 4px 10px rgba(227, 6, 19, 0.28); }
+  50% { box-shadow: 0 0 0 4px var(--accent-soft), 0 4px 10px color-mix(in srgb, var(--accent) 28%, transparent); }
 }
 .brand-pill img { width: 32px; height: 32px; border-radius: 50%; }
 .install-note {
@@ -813,8 +813,8 @@ button.brand-pill:active { transform: scale(.98); }
     gap: 14px;
     padding: max(12px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
     background:
-      radial-gradient(circle at 82% 8%, rgba(227, 6, 19, 0.16), transparent 34%),
-      radial-gradient(circle at 12% 92%, rgba(227, 6, 19, 0.08), transparent 30%),
+      radial-gradient(circle at 82% 8%, var(--accent-soft), transparent 34%),
+      radial-gradient(circle at 12% 92%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 30%),
       linear-gradient(180deg, #f7f8fb, var(--bg));
   }
   .login-brand {
@@ -826,7 +826,7 @@ button.brand-pill:active { transform: scale(.98); }
     border-radius: 24px;
     padding: 20px 20px 76px;
     overflow: hidden;
-    box-shadow: 0 16px 40px rgba(227, 6, 19, 0.18);
+    box-shadow: 0 16px 40px color-mix(in srgb, var(--accent) 18%, transparent);
     background:
       radial-gradient(ellipse at 12% 8%, rgba(255, 210, 170, 0.18), transparent 42%),
       radial-gradient(circle at 86% 78%, rgba(0, 0, 0, 0.28), transparent 36%),
@@ -997,7 +997,7 @@ button.brand-pill:active { transform: scale(.98); }
     height: 10px;
     border-radius: 50%;
     background: var(--accent);
-    box-shadow: 0 0 0 4px rgba(227, 6, 19, 0.18);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent);
     animation: loginLivePulse 1.8s ease-out infinite;
   }
   .login-trust strong {
@@ -2051,7 +2051,7 @@ button.brand-pill:active { transform: scale(.98); }
   z-index: 3;
 }
 .yp-stop-pin.pickup { color: #12b76a; }
-.yp-stop-pin.dropoff { color: #e30613; }
+.yp-stop-pin.dropoff { color: var(--accent); }
 .yp-stop-core {
   position: relative;
   z-index: 2;

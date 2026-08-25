@@ -37,7 +37,15 @@ function GoogleMark() {
   )
 }
 
-export function AuthScreen({ onReady }: { onReady: (desk: Desk) => void }) {
+export function AuthScreen({
+  onReady,
+  brandName = 'Ya! Pasakay',
+  brandLogo = logo,
+}: {
+  onReady: (desk: Desk) => void
+  brandName?: string
+  brandLogo?: string
+}) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLDivElement>(null)
   const onReadyRef = useRef(onReady)
@@ -110,14 +118,16 @@ export function AuthScreen({ onReady }: { onReady: (desk: Desk) => void }) {
       <LoginBrandPanel
         kicker="Motorcycle · Tricycle · Live map"
         title="Go where you need to go."
-        description="Book a ride in seconds, watch your rider on the map, and get there with Ya! Pasakay."
+        description={`Book a ride in seconds, watch your rider on the map, and get there with ${brandName}.`}
         showPoints
         animateCopy
+        brandName={brandName}
+        brandLogo={brandLogo}
       />
       <div className="login-form">
-        <img className="login-form-mark" src={logo} alt="" />
+        <img className="login-form-mark" src={brandLogo} alt="" />
         <h2>Welcome back</h2>
-        <p className="lede login-lede-full">Sign in with Google to book a motorcycle or tricycle, or create your Ya! Pasakay profile in one tap.</p>
+        <p className="lede login-lede-full">Sign in with Google to book a motorcycle or tricycle, or create your {brandName} profile in one tap.</p>
         <p className="lede login-lede-short">Sign in with Google to book rides and track your driver live.</p>
         {missingClient && (
           <p className="error">Google sign-in is not configured. Add GoogleAuth:ClientId in the API appsettings.</p>
@@ -139,7 +149,17 @@ export function AuthScreen({ onReady }: { onReady: (desk: Desk) => void }) {
   )
 }
 
-export function CompleteMobile({ desk, onDesk }: { desk: Desk; onDesk: (desk: Desk) => void }) {
+export function CompleteMobile({
+  desk,
+  onDesk,
+  brandName = 'Ya! Pasakay',
+  brandLogo = logo,
+}: {
+  desk: Desk
+  onDesk: (desk: Desk) => void
+  brandName?: string
+  brandLogo?: string
+}) {
   const [phone, setPhone] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -163,9 +183,11 @@ export function CompleteMobile({ desk, onDesk }: { desk: Desk; onDesk: (desk: De
         kicker="Almost there"
         title="Add your mobile number."
         description="Riders and operators use this number to reach you during a trip."
+        brandName={brandName}
+        brandLogo={brandLogo}
       />
       <form className="login-form" onSubmit={submit}>
-        <img className="login-form-mark" src={logo} alt="" />
+        <img className="login-form-mark" src={brandLogo} alt="" />
         <h2>Mobile number</h2>
         <p className="lede">Enter a Philippine mobile number to finish setting up {desk.fullName}.</p>
         <label className="field">

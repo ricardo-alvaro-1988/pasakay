@@ -1,7 +1,7 @@
 :root {
   --font: "Segoe UI", Inter, system-ui, sans-serif;
-  --accent: #e30613;
-  --accent-soft: rgba(227, 6, 19, 0.16);
+  --accent: var(--accent);
+  --accent-soft: var(--accent-soft);
   --good: #8be34a;
   --radius: 22px;
   --shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
@@ -117,7 +117,7 @@ input:-webkit-autofill:focus {
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(circle at 20% 10%, rgba(227, 6, 19, 0.18), transparent 28%),
+    radial-gradient(circle at 20% 10%, color-mix(in srgb, var(--accent) calc(0.18 * 100%), transparent), transparent 28%),
     var(--bg);
 }
 
@@ -907,7 +907,7 @@ input:-webkit-autofill:focus {
   background: currentColor;
 }
 .tag.active { background: rgba(139, 227, 74, 0.16); color: #4caf2a; }
-.tag.pending { background: rgba(227, 6, 19, 0.16); color: var(--accent); }
+.tag.pending { background: var(--accent-soft); color: var(--accent); }
 .tag.approved { background: rgba(139, 227, 74, 0.16); color: #4caf2a; }
 .tag.rejected { background: var(--chip); color: var(--muted); }
 .delete-box {
@@ -944,7 +944,7 @@ input:-webkit-autofill:focus {
   min-width: 1.4em;
   text-align: center;
 }
-.tag.mc { background: rgba(227, 6, 19, 0.16); color: #e30613; }
+.tag.mc { background: var(--accent-soft); color: var(--accent); }
 .tag.trike { background: rgba(30, 120, 90, 0.16); color: #1b8a5a; }
 .tag.payment { font-weight: 600; letter-spacing: 0.01em; }
 .tag.payment-cash { background: rgba(120, 120, 130, 0.16); color: var(--text); }
@@ -970,17 +970,17 @@ input:-webkit-autofill:focus {
   letter-spacing: 0.04em;
 }
 .wallet-balance { font-size: 1.6rem; color: var(--accent); line-height: 1.1; }
-.wallet-balance.negative { color: #e30613; }
+.wallet-balance.negative { color: var(--accent); }
 .wallet-balance-box:has(.wallet-balance.negative) {
-  border-color: #e30613;
-  background: color-mix(in srgb, #e30613 10%, var(--panel));
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
 }
 .tag.wallet-kind { font-weight: 600; }
 .tag.wallet-cash-in { background: rgba(30, 120, 90, 0.16); color: #1b8a5a; }
-.tag.wallet-cash-out { background: rgba(227, 6, 19, 0.14); color: #e30613; }
+.tag.wallet-cash-out { background: color-mix(in srgb, var(--accent) calc(0.14 * 100%), transparent); color: var(--accent); }
 .tag.wallet-commission { background: rgba(120, 90, 200, 0.16); color: #6b4fd8; }
 .wallet-credit { color: #1b8a5a; font-weight: 600; }
-.wallet-debit { color: #e30613; font-weight: 600; }
+.wallet-debit { color: var(--accent); font-weight: 600; }
 button.linkish {
   background: none;
   border: none;
@@ -1911,6 +1911,78 @@ tr.clickable:hover { background: var(--bg-soft); }
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 16px;
+}
+
+.brand-preview {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: hidden;
+  margin: 14px 0 18px;
+  background: var(--bg-elev);
+}
+.brand-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  color: #fff;
+}
+.brand-preview-bar img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff;
+}
+.brand-preview-body {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+}
+.brand-asset-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+.brand-favicon-preview {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: var(--chip);
+  border: 1px solid var(--line);
+}
+.brand-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.brand-theme-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-weight: 650;
+  font-size: 13px;
+}
+.brand-theme-chip.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.brand-theme-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  flex: 0 0 18px;
 }
 
 @media (max-width: 1100px) {
