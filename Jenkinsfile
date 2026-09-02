@@ -103,7 +103,7 @@ pipeline {
                             scp ${ssh_opts} ".jenkins/package/${package}" "${SSH_USER}@${target_host}:${remote_package}"
                             scp ${ssh_opts} deploy/jenkins-deploy.sh "${SSH_USER}@${target_host}:/tmp/yapasakay-jenkins-deploy.sh"
 
-                            ssh ${ssh_opts} "${SSH_USER}@${target_host}" \
+                            ssh -n ${ssh_opts} "${SSH_USER}@${target_host}" \
                                 "bash /tmp/yapasakay-jenkins-deploy.sh '${remote_package}' '${deploy_path}' '${deploy_service}' '${BUILD_NUMBER}' '${GIT_COMMIT:-unknown}' '${target_name}' '${env_file}' '${health_url}' '${release_root}'"
                         done <<TARGETS
 yapasakay|${DEPLOY_HOST}|/var/www/yapasakay|yapasakay.service|/etc/yapasakay/yapasakay-api.env|http://127.0.0.1:5003/health|/var/www/releases/yapasakay
