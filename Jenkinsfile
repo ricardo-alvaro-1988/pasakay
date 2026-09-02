@@ -15,6 +15,7 @@ pipeline {
     environment {
         APP_NAME = 'yapasakay'
         DEPLOY_HOST = 'yapasakay.com'
+        PASAKAY_RELEASE_FILE = '/var/lib/yapasakay/release.json'
         SSH_CREDENTIALS_ID = 'yapasakay-prod-ssh'
         DOTNET_CLI_TELEMETRY_OPTOUT = '1'
         DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
@@ -99,12 +100,16 @@ pipeline {
 
                             echo "Deploying ${target_name} to ${target_host}:${deploy_path}"
                             remote_package="/tmp/${target_name}-${package}"
+                            version_source_file=""
+                            if [ "${target_name}" != "yapasakay" ]; then
+                                version_source_file="${PASAKAY_RELEASE_FILE}"
+                            fi
 
                             scp ${ssh_opts} ".jenkins/package/${package}" "${SSH_USER}@${target_host}:${remote_package}"
                             scp ${ssh_opts} deploy/jenkins-deploy.sh "${SSH_USER}@${target_host}:/tmp/yapasakay-jenkins-deploy.sh"
 
                             ssh -n ${ssh_opts} "${SSH_USER}@${target_host}" \
-                                "bash /tmp/yapasakay-jenkins-deploy.sh '${remote_package}' '${deploy_path}' '${deploy_service}' '${BUILD_NUMBER}' '${GIT_COMMIT:-unknown}' '${target_name}' '${env_file}' '${health_url}' '${release_root}'"
+                                "bash /tmp/yapasakay-jenkins-deploy.sh '${remote_package}' '${deploy_path}' '${deploy_service}' '${BUILD_NUMBER}' '${GIT_COMMIT:-unknown}' '${target_name}' '${env_file}' '${health_url}' '${release_root}' '' '${version_source_file}'"
                         done <<TARGETS
 yapasakay|${DEPLOY_HOST}|/var/www/yapasakay|yapasakay.service|/etc/yapasakay/yapasakay-api.env|http://127.0.0.1:5003/health|/var/www/releases/yapasakay
 pricebadz|${DEPLOY_HOST}|/var/www/pricebadz|pricebadz.service|/etc/pricebadz/pricebadz-api.env|http://127.0.0.1:5004/health|/var/www/releases/pricebadz

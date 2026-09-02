@@ -11,6 +11,7 @@ env_file="${7:-/etc/${app_name}/${app_name}-api.env}"
 health_url="${8:-}"
 release_root="${9:-/var/www/releases/${app_name}}"
 backup_root="${10:-/var/www/backups}"
+version_source_file="${11:-}"
 
 timestamp="$(date +%Y%m%d%H%M%S)"
 release_dir="${release_root}/${timestamp}-${build_number}-${commit:0:8}"
@@ -40,11 +41,16 @@ migrate_legacy_uploads() {
     fi
 }
 
+release_version_from_file() {
+    local source_file="${1:?source file is required}"
+    if [ -f "${source_file}" ]; then
+        ${sudo_cmd} sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "${source_file}" | head -n 1 || true
+    fi
+}
+
 next_release_version() {
     local current_version=""
-    if [ -f "${release_file}" ]; then
-        current_version="$(${sudo_cmd} sed -nE 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "${release_file}" | head -n 1 || true)"
-    fi
+    current_version="$(release_version_from_file "${release_file}")"
 
     if [[ "${current_version}" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
         printf '%s.%s.%s' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "$((BASH_REMATCH[3] + 1))"
@@ -55,10 +61,26 @@ next_release_version() {
     fi
 }
 
+release_version_for_metadata() {
+    if [ -n "${version_source_file}" ]; then
+        local source_version
+        source_version="$(release_version_from_file "${version_source_file}")"
+        if [ -z "${source_version}" ]; then
+            echo "Release version source file has no version: ${version_source_file}" >&2
+            exit 1
+        fi
+
+        printf '%s' "${source_version}"
+        return
+    fi
+
+    next_release_version
+}
+
 write_release_metadata() {
     local version
     local updated_at
-    version="$(next_release_version)"
+    version="$(release_version_for_metadata)"
     updated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
     ${sudo_cmd} mkdir -p "$(dirname "${release_file}")"
