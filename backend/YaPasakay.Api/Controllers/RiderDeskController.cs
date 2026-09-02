@@ -376,12 +376,16 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
                 x.Status,
                 x.Fare,
                 x.DistanceKm,
-                Math.Max(1, x.PassengerCount),
+                x.PassengerCount < 1 ? 1 : x.PassengerCount,
                 x.PaymentMethod,
                 x.PaymentMethodOther,
                 null))
             .ToListAsync(cancellationToken);
-        return Ok(trips);
+        return Ok(trips.Select(x => x with
+        {
+            Pickup = TripAddress.Clean(x.Pickup),
+            Dropoff = TripAddress.Clean(x.Dropoff)
+        }).ToList());
     }
 
     [HttpGet("trips/{id:guid}/chat")]

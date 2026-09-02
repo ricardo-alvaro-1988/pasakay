@@ -120,7 +120,9 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 RequestedAtUtc = DateTime.SpecifyKind(x.RequestedAtUtc, DateTimeKind.Utc),
                 ScheduledAtUtc = x.ScheduledAtUtc is DateTime scheduled
                     ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc)
-                    : null
+                    : null,
+                Pickup = TripAddress.Clean(x.Pickup),
+                Dropoff = TripAddress.Clean(x.Dropoff)
             }).ToList(),
             page,
             pageSize,
@@ -303,11 +305,17 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 x.Status,
                 x.Fare,
                 x.DistanceKm,
-                Math.Max(1, x.PassengerCount),
+                x.PassengerCount < 1 ? 1 : x.PassengerCount,
                 x.PaymentMethod,
                 x.PaymentMethodOther,
                 null))
             .ToListAsync(cancellationToken);
-        return new OperatorBookingColumn(total, items);
+        return new OperatorBookingColumn(
+            total,
+            items.Select(x => x with
+            {
+                Pickup = TripAddress.Clean(x.Pickup),
+                Dropoff = TripAddress.Clean(x.Dropoff)
+            }).ToList());
     }
 }

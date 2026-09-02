@@ -623,6 +623,28 @@ function peso(value: number) {
   return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
+/** Drop barangay/city suffix historically appended after the Google place. */
+function stopAddress(value: string | null | undefined) {
+  const text = (value ?? '').trim()
+  if (!text) return '—'
+  const idx = text.search(/Philippines/i)
+  if (idx >= 0) {
+    return text.slice(0, idx + 'Philippines'.length).replace(/[,\s;]+$/, '')
+  }
+  const parts = text.split(',').map((p) => p.trim()).filter(Boolean)
+  if (parts.length >= 4) {
+    for (let take = 3; take >= 2; take -= 1) {
+      if (parts.length <= take) continue
+      const tail = parts.slice(-take)
+      const head = parts.slice(0, -take)
+      if (tail.every((part) => head.some((h) => h.toLowerCase() === part.toLowerCase()))) {
+        return head.join(', ')
+      }
+    }
+  }
+  return text
+}
+
 function percent(value: number) {
   return `${value.toLocaleString('en-PH', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}%`
 }
@@ -3213,48 +3235,49 @@ function CommissionSection({
     return null
   }
 
+  const estimated = status !== 'Completed'
+
   return (
     <section className="commission-section">
-      <div className="panel-head" style={{ marginBottom: 8 }}>
+      <div className="commission-fare">
         <div>
-          <h3 style={{ margin: 0 }}>Commission</h3>
-          <p className="muted" style={{ margin: '4px 0 0' }}>
-            {status === 'Completed' ? 'Split of the trip fare' : 'Estimated split of the trip fare'} · Fare {peso(fare)}
-          </p>
+          <span className="commission-fare-label">{estimated ? 'Estimated fare' : 'Trip fare'}</span>
+          <strong className="commission-fare-value">{peso(fare)}</strong>
         </div>
+        <p className="commission-fare-note">
+          {estimated ? 'Projected commission split' : 'Commission split of this fare'}
+        </p>
       </div>
       {view === 'rider' ? (
-        <div className="fare-cards">
-          <div className="detail-card">
-            <span>System</span>
-            <p className="detail-name" style={{ marginTop: 8 }}>
-              {peso(commission.systemAmount + commission.operatorAmount)}
-            </p>
-            <p className="muted">{percent(commission.systemPercent + commission.operatorPercent)}</p>
-          </div>
-          <div className="detail-card">
-            <span>Rider</span>
-            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.driverAmount)}</p>
-            <p className="muted">{percent(commission.driverPercent)}</p>
-          </div>
+        <div className="commission-cards two">
+          <article className="commission-card system">
+            <span className="commission-card-role">System</span>
+            <strong className="commission-card-amount">{peso(commission.systemAmount + commission.operatorAmount)}</strong>
+            <span className="commission-card-pct">{percent(commission.systemPercent + commission.operatorPercent)}</span>
+          </article>
+          <article className="commission-card rider">
+            <span className="commission-card-role">Rider</span>
+            <strong className="commission-card-amount">{peso(commission.driverAmount)}</strong>
+            <span className="commission-card-pct">{percent(commission.driverPercent)}</span>
+          </article>
         </div>
       ) : (
-        <div className="fare-cards three">
-          <div className="detail-card">
-            <span>Admin</span>
-            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.systemAmount)}</p>
-            <p className="muted">{percent(commission.systemPercent)}</p>
-          </div>
-          <div className="detail-card">
-            <span>Operator</span>
-            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.operatorAmount)}</p>
-            <p className="muted">{percent(commission.operatorPercent)}</p>
-          </div>
-          <div className="detail-card">
-            <span>Rider</span>
-            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.driverAmount)}</p>
-            <p className="muted">{percent(commission.driverPercent)}</p>
-          </div>
+        <div className="commission-cards three">
+          <article className="commission-card admin">
+            <span className="commission-card-role">Admin</span>
+            <strong className="commission-card-amount">{peso(commission.systemAmount)}</strong>
+            <span className="commission-card-pct">{percent(commission.systemPercent)}</span>
+          </article>
+          <article className="commission-card operator">
+            <span className="commission-card-role">Operator</span>
+            <strong className="commission-card-amount">{peso(commission.operatorAmount)}</strong>
+            <span className="commission-card-pct">{percent(commission.operatorPercent)}</span>
+          </article>
+          <article className="commission-card rider">
+            <span className="commission-card-role">Rider</span>
+            <strong className="commission-card-amount">{peso(commission.driverAmount)}</strong>
+            <span className="commission-card-pct">{percent(commission.driverPercent)}</span>
+          </article>
         </div>
       )}
     </section>
@@ -3326,11 +3349,11 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
         <DetailItem label="Customer phone" value={ride.customerPhone} />
         <div className="detail-item wide">
           <span>Pickup</span>
-          <p>{ride.pickupStop?.details || ride.pickup}</p>
+          <p>{stopAddress(ride.pickupStop?.details || ride.pickup)}</p>
         </div>
         <div className="detail-item wide">
           <span>Drop-off</span>
-          <p>{ride.dropoffStop?.details || ride.dropoff}</p>
+          <p>{stopAddress(ride.dropoffStop?.details || ride.dropoff)}</p>
         </div>
         <DetailItem label="Distance" value={`${ride.distanceKm.toFixed(1)} km`} />
         <DetailItem
@@ -3775,9 +3798,9 @@ function RidesReport({
                       <td>
                         <div className="route-cell">
                           <span>Pickup</span>
-                          <p>{ride.pickup}</p>
+                          <p>{stopAddress(ride.pickup)}</p>
                           <span>Drop-off</span>
-                          <p>{ride.dropoff}</p>
+                          <p>{stopAddress(ride.dropoff)}</p>
                         </div>
                       </td>
                       <td><PaymentMethodTag method={ride.paymentMethod} other={ride.paymentMethodOther} /></td>
@@ -6545,8 +6568,8 @@ function OperatorBookingList({
                   <div><small>{row.plateNumber}</small></div>
                 </td>
                 <td>
-                  <small>{row.pickup}</small>
-                  <div><small>→ {row.dropoff}</small></div>
+                  <small>{stopAddress(row.pickup)}</small>
+                  <div><small>→ {stopAddress(row.dropoff)}</small></div>
                 </td>
                 <td><PaymentMethodTag method={row.paymentMethod} other={row.paymentMethodOther} /></td>
                 <td><TripStatusTag status={row.status} /></td>
@@ -6727,7 +6750,7 @@ function OperatorDashboardPage() {
                       <TripStatusTag status={ride.status} />
                     </span>
                     <small>{ride.customerName}</small>
-                    <small>{ride.pickup} → {ride.dropoff}</small>
+                    <small>{stopAddress(ride.pickup)} → {stopAddress(ride.dropoff)}</small>
                     <span className="booking-card-meta">
                       <VehicleTag type={ride.vehicleType} />
                       <PaymentMethodTag method={ride.paymentMethod} other={ride.paymentMethodOther} />
@@ -6860,8 +6883,8 @@ function OperatorScheduleList({
                   <div><small>{row.plateNumber}</small></div>
                 </td>
                 <td>
-                  <small>{row.pickup}</small>
-                  <div><small>→ {row.dropoff}</small></div>
+                  <small>{stopAddress(row.pickup)}</small>
+                  <div><small>→ {stopAddress(row.dropoff)}</small></div>
                 </td>
                 <td><PaymentMethodTag method={row.paymentMethod} other={row.paymentMethodOther} /></td>
                 <td><TripStatusTag status={row.status} /></td>

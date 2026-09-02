@@ -708,7 +708,9 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 RequestedAtUtc = DateTime.SpecifyKind(x.RequestedAtUtc, DateTimeKind.Utc),
                 ScheduledAtUtc = x.ScheduledAtUtc is DateTime scheduled
                     ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc)
-                    : null
+                    : null,
+                Pickup = TripAddress.Clean(x.Pickup),
+                Dropoff = TripAddress.Clean(x.Dropoff)
             }).ToList(),
             page,
             pageSize,
