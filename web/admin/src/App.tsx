@@ -4390,62 +4390,73 @@ function RelatedFareRatesTable({
     const tiers = draft.passengerTiers.length ? draft.passengerTiers : [defaultTierDraft()]
     return (
       <div className="fare-tier-editor">
-        {tiers.map((tier, index) => (
-          <div key={`${vehicle}-${index}`} className="fare-tier-row">
-            <label>
-              <small>Persons</small>
-              <input
-                value={tier.passengerCount}
-                disabled={locked}
-                onChange={(e) => updateTier(vehicle, tiers, index, 'passengerCount', e.target.value)}
-              />
-            </label>
-            <label>
-              <small>Base km amount</small>
-              <input
-                value={tier.baseFare}
-                disabled={locked}
-                onChange={(e) => updateTier(vehicle, tiers, index, 'baseFare', e.target.value)}
-              />
-            </label>
-            <label>
-              <small>Included km</small>
-              <input
-                value={tier.includedKm}
-                disabled={locked}
-                onChange={(e) => updateTier(vehicle, tiers, index, 'includedKm', e.target.value)}
-              />
-            </label>
-            <label>
-              <small>Succeeding km</small>
-              <input
-                value={tier.perKm}
-                disabled={locked}
-                onChange={(e) => updateTier(vehicle, tiers, index, 'perKm', e.target.value)}
-              />
-            </label>
-            <label>
-              <small>Minimum</small>
-              <input
-                value={tier.minimumFare}
-                disabled={locked}
-                onChange={(e) => updateTier(vehicle, tiers, index, 'minimumFare', e.target.value)}
-              />
-            </label>
-            {editable ? (
-              <button
-                type="button"
-                className="btn tiny"
-                disabled={locked || tiers.length <= 1}
-                onClick={() => removeTier(vehicle, tiers, index)}
-              >
-                Remove
-              </button>
-            ) : null}
-          </div>
-        ))}
+        <table className="fare-tier-table">
+          <thead>
+            <tr>
+              <th>Persons</th>
+              <th>Base</th>
+              <th>Incl. km</th>
+              <th>Per km</th>
+              <th>Min</th>
+              {editable ? <th aria-label="Actions" /> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {tiers.map((tier, index) => (
+              <tr key={`${vehicle}-${index}`}>
+                <td>
+                  <input
+                    value={tier.passengerCount}
+                    disabled={locked}
+                    onChange={(e) => updateTier(vehicle, tiers, index, 'passengerCount', e.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={tier.baseFare}
+                    disabled={locked}
+                    onChange={(e) => updateTier(vehicle, tiers, index, 'baseFare', e.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={tier.includedKm}
+                    disabled={locked}
+                    onChange={(e) => updateTier(vehicle, tiers, index, 'includedKm', e.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={tier.perKm}
+                    disabled={locked}
+                    onChange={(e) => updateTier(vehicle, tiers, index, 'perKm', e.target.value)}
+                  />
+                </td>
+                <td>
+                  <input
+                    value={tier.minimumFare}
+                    disabled={locked}
+                    onChange={(e) => updateTier(vehicle, tiers, index, 'minimumFare', e.target.value)}
+                  />
+                </td>
+                {editable ? (
+                  <td className="fare-tier-actions">
+                    <button
+                      type="button"
+                      className="btn tiny"
+                      disabled={locked || tiers.length <= 1}
+                      onClick={() => removeTier(vehicle, tiers, index)}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                ) : null}
+              </tr>
+            ))}
+          </tbody>
+        </table>
         {editable ? (
-          <button type="button" className="btn tiny" disabled={locked} onClick={() => addTier(vehicle, tiers)}>
+          <button type="button" className="btn tiny" disabled={locked} onClick={() => addTier(vehicle, tiers)} style={{ width: 'auto', justifySelf: 'start' }}>
             Add person tier
           </button>
         ) : null}
@@ -4498,7 +4509,7 @@ function RelatedFareRatesTable({
           <tr>
             <td>
               Passenger tiers
-              <small className="muted" style={{ display: 'block' }}>Base km amount + succeeding km by person count</small>
+              <small className="muted" style={{ display: 'block', fontWeight: 500 }}>By person count</small>
             </td>
             <td>{editable ? tiersEditor('Motorcycle', mc, false) : tiersReadonly(data.motorcycle)}</td>
             <td>{editable ? tiersEditor('Tricycle', trike, !!linked) : tiersReadonly(data.tricycle)}</td>
