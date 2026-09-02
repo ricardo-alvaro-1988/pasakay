@@ -33,6 +33,7 @@ export type CustomerTrip = {
   dropoffLng: number | null
   fare: number
   distanceKm: number
+  passengerCount?: number
   vehicleType: VehicleType
   paymentMethod: PaymentMethod | number
   paymentMethodOther: string | null
@@ -109,6 +110,7 @@ export type BookBody = {
   paymentMethodOther?: string
   scheduledAtUtc?: string
   riderId?: string
+  passengerCount?: number
 }
 
 export type HailRider = {
@@ -154,6 +156,7 @@ export type CustomerTripDetail = {
   notes: string | null
   fare: number
   distanceKm: number
+  passengerCount?: number
   durationMinutes: number | null
   vehicleType: VehicleType
   requestedAtUtc: string
@@ -215,6 +218,11 @@ export function kmLabel(value: number | null | undefined) {
   const km = Number(value || 0)
   if (!km) return ''
   return `${km.toFixed(km >= 10 ? 0 : 1)} km`
+}
+
+export function passengerLabel(value: number | null | undefined) {
+  const count = Math.max(1, Number(value || 1))
+  return `${count} passenger${count === 1 ? '' : 's'}`
 }
 
 export function tripHeadline(status: string) {

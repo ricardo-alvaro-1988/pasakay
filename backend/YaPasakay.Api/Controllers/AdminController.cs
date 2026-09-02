@@ -322,6 +322,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             ? []
             : await db.FareMatrices
                 .Include(x => x.Surcharges)
+                .Include(x => x.PassengerTiers)
                 .Where(x => ids.Contains(x.OperatorId))
                 .ToListAsync(cancellationToken);
 
@@ -350,7 +351,11 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             return NotFound();
         }
 
-        var fares = await db.FareMatrices.Include(x => x.Surcharges).Where(x => x.OperatorId == id).ToListAsync(cancellationToken);
+        var fares = await db.FareMatrices
+            .Include(x => x.Surcharges)
+            .Include(x => x.PassengerTiers)
+            .Where(x => x.OperatorId == id)
+            .ToListAsync(cancellationToken);
         return Ok(new OperatorFareDetailResponse(
             op.Id,
             op.CompanyName,
@@ -1149,6 +1154,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             trip.Notes,
             trip.Fare,
             trip.DistanceKm,
+            Math.Max(1, trip.PassengerCount),
             duration,
             trip.VehicleType,
             trip.RequestedAtUtc,
@@ -1302,6 +1308,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                     x.Status,
                     x.Fare,
                     x.DistanceKm,
+                    Math.Max(1, x.PassengerCount),
                     x.PaymentMethod,
                     x.PaymentMethodOther,
                     RideCommissionCalculator.ForTrip(x, fare));
@@ -1362,40 +1369,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         return name.Length > 0 ? name : customer.AppUser.FullName;
     }
 
-    private static FareRatesItem? MapFareRates(FareMatrix? fare, bool includeSamples)
-    {
-        if (fare is null)
-        {
-            return null;
-        }
-
-        return new FareRatesItem(
-            fare.VehicleType,
-            fare.BaseFare,
-            fare.PerKm,
-            fare.MinimumFare,
-            fare.IncludedKm,
-            fare.OperatorCommissionPercent,
-            fare.DriverCommissionPercent,
-            fare.IsActive,
-            fare.Surcharges
-                .OrderBy(x => x.Kind)
-                .ThenBy(x => x.Name)
-                .Select(x => new FareSurchargeItem(
-                    x.Id,
-                    x.Kind,
-                    x.Name,
-                    x.Amount,
-                    x.WindowStart?.ToString("HH\\:mm"),
-                    x.WindowEnd?.ToString("HH\\:mm"),
-                    x.RangeStartUtc is DateTime start ? DateTime.SpecifyKind(start, DateTimeKind.Utc) : null,
-                    x.RangeEndUtc is DateTime end ? DateTime.SpecifyKind(end, DateTimeKind.Utc) : null,
-                    x.IsActive))
-                .ToList(),
-            includeSamples
-                ? FareQuote.Samples(fare.BaseFare, fare.PerKm, fare.MinimumFare, fare.IncludedKm)
-                : []);
-    }
+    private static FareRatesItem? MapFareRates(FareMatrix? fare, bool includeSamples) =>
+        OperatorMaps.FareRates(fare, includeSamples);
 
     private static (bool Ok, decimal Value, string Error) ParseCommission(decimal? raw, string vehicle)
     {

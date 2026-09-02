@@ -331,6 +331,7 @@ public class CustomerBookingsController(
                 : string.IsNullOrWhiteSpace(body.Notes) ? null : body.Notes.Trim(),
             Fare = prepared.Fare,
             DistanceKm = prepared.DistanceKm,
+            PassengerCount = prepared.PassengerCount,
             PaymentMethod = body.PaymentMethod,
             PaymentMethodOther = body.PaymentMethod == PaymentMethod.Cash || string.IsNullOrWhiteSpace(body.PaymentMethodOther)
                 ? null
@@ -523,11 +524,13 @@ public class CustomerBookingsController(
         }
 
         var (distance, eta) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
+        var passengers = vehicle == VehicleType.Motorcycle
+            ? 1
+            : Math.Max(1, request.PassengerCount);
         var fareRow = await db.FareMatrices
+            .Include(x => x.PassengerTiers)
             .FirstOrDefaultAsync(x => x.OperatorId == op.Id && x.VehicleType == vehicle && x.IsActive, cancellationToken);
-        var fare = fareRow is null
-            ? FareQuote.Compute(50, 12, 50, 1, distance)
-            : FareQuote.Compute(fareRow.BaseFare, fareRow.PerKm, fareRow.MinimumFare, fareRow.IncludedKm, distance);
+        var fare = FareQuote.ComputeForPassengers(fareRow, passengers, distance);
 
         var rider = hail.Rider ?? await PickRiderAsync(
             op.Id,
@@ -566,6 +569,7 @@ public class CustomerBookingsController(
             DropoffLng = dropoffLng,
             DistanceKm = distance,
             Fare = fare,
+            PassengerCount = passengers,
             EtaMinutes = eta,
             VehicleType = vehicle
         };
@@ -693,6 +697,7 @@ public class CustomerBookingsController(
         public double DropoffLng { get; set; }
         public decimal DistanceKm { get; set; }
         public decimal Fare { get; set; }
+        public int PassengerCount { get; set; } = 1;
         public int EtaMinutes { get; set; }
         public VehicleType VehicleType { get; set; }
     }

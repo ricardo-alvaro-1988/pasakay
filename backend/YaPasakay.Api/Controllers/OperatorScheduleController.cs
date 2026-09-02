@@ -124,7 +124,10 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
         }
 
         var distance = request.DistanceKm <= 0 ? 4m : Math.Round(request.DistanceKm, 1, MidpointRounding.AwayFromZero);
-        var fare = await QuoteAsync(op.Id, rider.VehicleType, distance, cancellationToken);
+        var passengers = rider.VehicleType == VehicleType.Motorcycle
+            ? 1
+            : Math.Max(1, request.PassengerCount);
+        var fare = await QuoteAsync(op.Id, rider.VehicleType, distance, passengers, cancellationToken);
         var paymentError = RiderPaymentSync.ValidateTripPayment(request.PaymentMethod, request.PaymentMethodOther);
         if (paymentError is not null)
         {
@@ -159,6 +162,7 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
             Fare = fare,
             DistanceKm = distance,
+            PassengerCount = passengers,
             PaymentMethod = request.PaymentMethod,
             PaymentMethodOther = request.PaymentMethod == PaymentMethod.Other
                 ? request.PaymentMethodOther?.Trim()
@@ -211,16 +215,17 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
             .ThenInclude(x => x.Province)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
-    private async Task<decimal> QuoteAsync(Guid operatorId, VehicleType vehicleType, decimal distanceKm, CancellationToken cancellationToken)
+    private async Task<decimal> QuoteAsync(
+        Guid operatorId,
+        VehicleType vehicleType,
+        decimal distanceKm,
+        int passengerCount,
+        CancellationToken cancellationToken)
     {
         var fare = await db.FareMatrices
+            .Include(x => x.PassengerTiers)
             .FirstOrDefaultAsync(x => x.OperatorId == operatorId && x.VehicleType == vehicleType && x.IsActive, cancellationToken);
-        if (fare is null)
-        {
-            return FareQuote.Compute(50, 12, 50, 1, distanceKm);
-        }
-
-        return FareQuote.Compute(fare.BaseFare, fare.PerKm, fare.MinimumFare, fare.IncludedKm, distanceKm);
+        return FareQuote.ComputeForPassengers(fare, passengerCount, distanceKm);
     }
 
     private static ScheduledBookingItem Map(Trip trip) =>

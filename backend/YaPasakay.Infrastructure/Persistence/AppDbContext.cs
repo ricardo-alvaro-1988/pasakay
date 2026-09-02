@@ -22,6 +22,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TripChatMessage> TripChatMessages => Set<TripChatMessage>();
     public DbSet<FareMatrix> FareMatrices => Set<FareMatrix>();
     public DbSet<FareSurcharge> FareSurcharges => Set<FareSurcharge>();
+    public DbSet<FarePassengerTier> FarePassengerTiers => Set<FarePassengerTier>();
     public DbSet<OperatorBill> OperatorBills => Set<OperatorBill>();
     public DbSet<OperatorNotification> OperatorNotifications => Set<OperatorNotification>();
     public DbSet<AdminNotification> AdminNotifications => Set<AdminNotification>();
@@ -306,6 +307,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
             entity.HasOne(x => x.FareMatrix)
                 .WithMany(x => x.Surcharges)
+                .HasForeignKey(x => x.FareMatrixId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FarePassengerTier>(entity =>
+        {
+            entity.HasIndex(x => new { x.FareMatrixId, x.PassengerCount }).IsUnique();
+            entity.Property(x => x.BaseFare).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.PerKm).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.MinimumFare).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.IncludedKm).HasColumnType("decimal(6,2)");
+            entity.HasOne(x => x.FareMatrix)
+                .WithMany(x => x.PassengerTiers)
                 .HasForeignKey(x => x.FareMatrixId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

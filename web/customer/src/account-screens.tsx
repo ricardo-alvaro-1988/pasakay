@@ -14,6 +14,7 @@ import {
   paymentLabel,
   peso,
   kmLabel,
+  passengerLabel,
   phWhen,
   Stop,
   tripHeadline,
@@ -124,7 +125,7 @@ function TripCard({
       <div className="booking-meta">
         <div className="booking-meta-row">
           <span>Trip details</span>
-          <p>{kmLabel(trip.distanceKm)} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}</p>
+          <p>{kmLabel(trip.distanceKm)} · {passengerLabel(trip.passengerCount)} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}</p>
         </div>
         {trip.riderName && (
           <div className="booking-meta-row">
@@ -181,7 +182,7 @@ function HistoryTripCard({
               <div className="booking-meta">
                 <div className="booking-meta-row">
                   <span>Trip details</span>
-                  <p>{kmLabel(trip.distanceKm)} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}</p>
+                  <p>{kmLabel(trip.distanceKm)} · {passengerLabel(trip.passengerCount)} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}</p>
                 </div>
                 {trip.riderName && (
                   <div className="booking-meta-row">
@@ -234,7 +235,7 @@ function BookingDetailBody({ detail }: { detail: CustomerTripDetail }) {
       <div className="booking-meta">
         <div className="booking-meta-row">
           <span>Trip details</span>
-          <p>{kmLabel(detail.distanceKm)} · {detail.vehicleType} · {paymentLabel(detail.paymentMethod, detail.paymentMethodOther)}</p>
+          <p>{kmLabel(detail.distanceKm)} · {passengerLabel(detail.passengerCount)} · {detail.vehicleType} · {paymentLabel(detail.paymentMethod, detail.paymentMethodOther)}</p>
         </div>
         <div className="booking-meta-row">
           <span>Rider</span>
@@ -288,6 +289,7 @@ export function ScheduleScreen({
   onPickDropoff: () => void
 }) {
   const [vehicle, setVehicle] = useState<VehicleType>('Motorcycle')
+  const [passengers, setPassengers] = useState(1)
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
   const [paymentRef, setPaymentRef] = useState('')
   const [when, setWhen] = useState(() => toLocalInput(new Date(Date.now() + 60 * 60 * 1000)))
@@ -317,7 +319,7 @@ export function ScheduleScreen({
     setNote('')
     try {
       onDesk(await api.book({
-        ...bookBody(vehicle, pickup, dropoff, payment, paymentRef),
+        ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, vehicle === 'Tricycle' ? passengers : 1),
         scheduledAtUtc: scheduled.toISOString(),
       }))
       setNote('Scheduled booking requested. Riders in the area will see it closer to that time.')
@@ -373,7 +375,7 @@ export function ScheduleScreen({
       </div>
       <p className="section-title">Vehicle</p>
       <div className="vehicles">
-        <button type="button" className={`vehicle ${vehicle === 'Motorcycle' ? 'on' : ''}`} onClick={() => setVehicle('Motorcycle')}>
+        <button type="button" className={`vehicle ${vehicle === 'Motorcycle' ? 'on' : ''}`} onClick={() => { setVehicle('Motorcycle'); setPassengers(1) }}>
           <span className="icon moto"><img src={VEHICLE_ART.Motorcycle} alt="" /></span>
           <span className="copy"><b>Motorcycle</b></span>
         </button>
@@ -382,6 +384,42 @@ export function ScheduleScreen({
           <span className="copy"><b>Tricycle</b></span>
         </button>
       </div>
+      {vehicle === 'Tricycle' && (
+        <div className="passenger-picker" role="group" aria-label="Number of passengers">
+          <span className="passenger-label">Passengers</span>
+          <div className="passenger-controls">
+            <button
+              type="button"
+              className="passenger-btn"
+              disabled={passengers <= 1}
+              onClick={() => setPassengers((n) => Math.max(1, n - 1))}
+              aria-label="Fewer passengers"
+            >
+              −
+            </button>
+            <input
+              className="passenger-input"
+              type="number"
+              min={1}
+              inputMode="numeric"
+              value={passengers}
+              onChange={(e) => {
+                const next = Math.floor(Number(e.target.value))
+                setPassengers(Number.isFinite(next) && next >= 1 ? next : 1)
+              }}
+              aria-label="Passenger count"
+            />
+            <button
+              type="button"
+              className="passenger-btn"
+              onClick={() => setPassengers((n) => n + 1)}
+              aria-label="More passengers"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      )}
       <p className="section-title">Payment</p>
       <PaymentBar
         payment={payment}
@@ -410,7 +448,7 @@ export function ScheduleScreen({
   )
 }
 
-function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = ''): BookBody {
+function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', passengerCount = 1): BookBody {
   return {
     vehicleType: vehicle,
     pickupBarangayId: pickup.barangayId,
@@ -423,6 +461,7 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     dropoffLng: dropoff.lng,
     paymentMethod: payment,
     paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
+    passengerCount: vehicle === 'Motorcycle' ? 1 : Math.max(1, passengerCount),
   }
 }
 

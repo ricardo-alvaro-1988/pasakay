@@ -169,6 +169,7 @@ public static class CustomerDeskBuilder
             trip.DropoffLng,
             trip.Fare,
             trip.DistanceKm,
+            Math.Max(1, trip.PassengerCount),
             trip.VehicleType,
             trip.PaymentMethod == 0 ? PaymentMethod.Cash : trip.PaymentMethod,
             trip.PaymentMethodOther,

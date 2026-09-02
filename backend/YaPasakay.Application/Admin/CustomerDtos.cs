@@ -26,7 +26,8 @@ public record CustomerBookRequest(
     string? Notes,
     DateTime? ScheduledAtUtc,
     Guid? RiderId,
-    bool HailQr);
+    bool HailQr,
+    int PassengerCount = 1);
 
 public record CustomerHailRider(
     Guid RiderId,
@@ -76,6 +77,7 @@ public record CustomerTripItem(
     double? DropoffLng,
     decimal Fare,
     decimal DistanceKm,
+    int PassengerCount,
     VehicleType VehicleType,
     PaymentMethod PaymentMethod,
     string? PaymentMethodOther,

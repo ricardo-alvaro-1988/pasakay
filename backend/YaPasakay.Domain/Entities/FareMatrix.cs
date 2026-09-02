@@ -16,4 +16,5 @@ public class FareMatrix : BaseEntity
     public decimal DriverCommissionPercent { get; set; }
     public bool IsActive { get; set; } = true;
     public ICollection<FareSurcharge> Surcharges { get; set; } = new List<FareSurcharge>();
+    public ICollection<FarePassengerTier> PassengerTiers { get; set; } = new List<FarePassengerTier>();
 }

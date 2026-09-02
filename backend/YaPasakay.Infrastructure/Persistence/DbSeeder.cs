@@ -54,6 +54,7 @@ public static class DbSeeder
         await SeedTripCustomersAsync(db, op, cancellationToken);
         await SeedAccountDeleteAlertsAsync(db, cancellationToken);
         await SeedFareMatricesAsync(db, op, cancellationToken);
+        await SeedFarePassengerTiersAsync(db, op, cancellationToken);
         await SeedFareCommissionSplitsAsync(db, op, cancellationToken);
         await SeedFareSurchargesAsync(db, op, cancellationToken);
         await SeedAnnouncementsAsync(db, cancellationToken);
@@ -1649,7 +1650,18 @@ public static class DbSeeder
                 IncludedKm = 1m,
                 OperatorCommissionPercent = FareCommissionSplit.Defaults(op.MotorcycleCommissionPercent).Operator,
                 DriverCommissionPercent = FareCommissionSplit.Defaults(op.MotorcycleCommissionPercent).Driver,
-                IsActive = true
+                IsActive = true,
+                PassengerTiers =
+                {
+                    new FarePassengerTier
+                    {
+                        PassengerCount = 1,
+                        BaseFare = 40m,
+                        PerKm = 12m,
+                        MinimumFare = 40m,
+                        IncludedKm = 1m
+                    }
+                }
             },
             new FareMatrix
             {
@@ -1661,8 +1673,61 @@ public static class DbSeeder
                 IncludedKm = 1m,
                 OperatorCommissionPercent = FareCommissionSplit.Defaults(op.TricycleCommissionPercent).Operator,
                 DriverCommissionPercent = FareCommissionSplit.Defaults(op.TricycleCommissionPercent).Driver,
-                IsActive = true
+                IsActive = true,
+                PassengerTiers =
+                {
+                    new FarePassengerTier
+                    {
+                        PassengerCount = 1,
+                        BaseFare = 50m,
+                        PerKm = 15m,
+                        MinimumFare = 50m,
+                        IncludedKm = 1m
+                    },
+                    new FarePassengerTier
+                    {
+                        PassengerCount = 2,
+                        BaseFare = 60m,
+                        PerKm = 18m,
+                        MinimumFare = 60m,
+                        IncludedKm = 1m
+                    },
+                    new FarePassengerTier
+                    {
+                        PassengerCount = 3,
+                        BaseFare = 70m,
+                        PerKm = 20m,
+                        MinimumFare = 70m,
+                        IncludedKm = 1m
+                    }
+                }
             });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static async Task SeedFarePassengerTiersAsync(AppDbContext db, Operator op, CancellationToken cancellationToken)
+    {
+        var fares = await db.FareMatrices
+            .Include(x => x.PassengerTiers)
+            .Where(x => x.OperatorId == op.Id)
+            .ToListAsync(cancellationToken);
+        foreach (var fare in fares)
+        {
+            if (fare.PassengerTiers.Count > 0)
+            {
+                continue;
+            }
+
+            fare.PassengerTiers.Add(new FarePassengerTier
+            {
+                PassengerCount = 1,
+                BaseFare = fare.BaseFare,
+                PerKm = fare.PerKm,
+                MinimumFare = fare.MinimumFare,
+                IncludedKm = fare.IncludedKm
+            });
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 

@@ -10,6 +10,7 @@ import {
   paymentLabel,
   peso,
   kmLabel,
+  passengerLabel,
   Quote,
   Stop,
   tripHeadline,
@@ -223,6 +224,7 @@ function Home({
   const [pickup, setPickup] = useState<Stop | null>(null)
   const [dropoff, setDropoff] = useState<Stop | null>(null)
   const [vehicle, setVehicle] = useState<VehicleType>('Motorcycle')
+  const [passengers, setPassengers] = useState(1)
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
   const [paymentRef, setPaymentRef] = useState('')
   const [quotes, setQuotes] = useState<Record<VehicleType, Quote | null>>({ Motorcycle: null, Tricycle: null })
@@ -478,7 +480,7 @@ function Home({
     let ignore = false
     async function quoteOne(type: VehicleType): Promise<{ quote: Quote | null; error: string }> {
       try {
-        return { quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId)), error: '' }
+        return { quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, type === 'Tricycle' ? passengers : 1)), error: '' }
       } catch (err) {
         return { quote: null, error: err instanceof Error ? err.message : 'Could not quote fare.' }
       }
@@ -518,7 +520,7 @@ function Home({
     }
     void load()
     return () => { ignore = true }
-  }, [pickup, dropoff, payment, paymentRef, trip, hail?.riderId, hail?.vehicleType])
+  }, [pickup, dropoff, payment, paymentRef, trip, hail?.riderId, hail?.vehicleType, passengers])
 
   useEffect(() => {
     if (hail) setShowQr(false)
@@ -676,7 +678,7 @@ function Home({
     setBusy(true)
     setError('')
     try {
-      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, hail?.riderId)))
+      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, hail?.riderId, vehicle === 'Tricycle' ? passengers : 1)))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not book.'
       setError(isOperatorCoverageError(message) ? '' : message)
@@ -849,7 +851,7 @@ function Home({
                   </div>
                 </div>
                 <div className="vehicles">
-                  <button type="button" disabled={!!hail && hail.vehicleType !== 'Motorcycle'} className={`vehicle ${vehicle === 'Motorcycle' ? 'on' : ''}`} onClick={() => setVehicle('Motorcycle')}>
+                  <button type="button" disabled={!!hail && hail.vehicleType !== 'Motorcycle'} className={`vehicle ${vehicle === 'Motorcycle' ? 'on' : ''}`} onClick={() => { setVehicle('Motorcycle'); setPassengers(1) }}>
                     <span className="icon moto"><img src={VEHICLE_ART.Motorcycle} alt="" /></span>
                     <span className="copy">
                       <b>Motorcycle</b>
@@ -864,6 +866,42 @@ function Home({
                     </span>
                   </button>
                 </div>
+                {vehicle === 'Tricycle' && (
+                  <div className="passenger-picker" role="group" aria-label="Number of passengers">
+                    <span className="passenger-label">Passengers</span>
+                    <div className="passenger-controls">
+                      <button
+                        type="button"
+                        className="passenger-btn"
+                        disabled={passengers <= 1}
+                        onClick={() => setPassengers((n) => Math.max(1, n - 1))}
+                        aria-label="Fewer passengers"
+                      >
+                        −
+                      </button>
+                      <input
+                        className="passenger-input"
+                        type="number"
+                        min={1}
+                        inputMode="numeric"
+                        value={passengers}
+                        onChange={(e) => {
+                          const next = Math.floor(Number(e.target.value))
+                          setPassengers(Number.isFinite(next) && next >= 1 ? next : 1)
+                        }}
+                        aria-label="Passenger count"
+                      />
+                      <button
+                        type="button"
+                        className="passenger-btn"
+                        onClick={() => setPassengers((n) => n + 1)}
+                        aria-label="More passengers"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <PaymentBar
                   payment={payment}
                   refNo={paymentRef}
@@ -1040,7 +1078,7 @@ function TripPanel({ trip, onDesk, onError }: { trip: CustomerTrip; onDesk: (des
           <div className="addr"><small>Drop-off</small>{trip.dropoff}</div>
         </div>
       </div>
-      <p className="fareline"><b>{peso(trip.fare)}</b>{kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}</p>
+      <p className="fareline"><b>{peso(trip.fare)}</b>{kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · {passengerLabel(trip.passengerCount)} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}</p>
       {trip.canCancel && (
         <div className="actions">
           <button className="danger" onClick={() => void cancel()}>Cancel ride</button>
@@ -1100,7 +1138,7 @@ function mapChromePadding() {
   return { top, right: 16, bottom, left: 16 }
 }
 
-function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', riderId?: string): BookBody {
+function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', riderId?: string, passengerCount = 1): BookBody {
   return {
     vehicleType: vehicle,
     pickupBarangayId: pickup.barangayId,
@@ -1114,6 +1152,7 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     paymentMethod: payment,
     paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
     riderId,
+    passengerCount: vehicle === 'Motorcycle' ? 1 : Math.max(1, passengerCount),
   }
 }
 

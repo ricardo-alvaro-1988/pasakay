@@ -186,7 +186,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         var fromName = trip.Rider.AppUser.FullName;
         trip.RiderId = rider.Id;
         trip.VehicleType = rider.VehicleType;
-        trip.Fare = await QuoteAsync(op.Id, rider.VehicleType, trip.DistanceKm, cancellationToken);
+        trip.Fare = await QuoteAsync(op.Id, rider.VehicleType, trip.DistanceKm, trip.PassengerCount, cancellationToken);
         trip.UpdatedAtUtc = DateTime.UtcNow;
         var note = $"Reassigned from {fromName} to {rider.AppUser.FullName}.";
         trip.Notes = string.IsNullOrWhiteSpace(trip.Notes)
@@ -235,16 +235,17 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         return Ok(await OperatorMaps.RideDetailAsync(loaded, db, cancellationToken));
     }
 
-    private async Task<decimal> QuoteAsync(Guid operatorId, VehicleType vehicleType, decimal distanceKm, CancellationToken cancellationToken)
+    private async Task<decimal> QuoteAsync(
+        Guid operatorId,
+        VehicleType vehicleType,
+        decimal distanceKm,
+        int passengerCount,
+        CancellationToken cancellationToken)
     {
         var fare = await db.FareMatrices
+            .Include(x => x.PassengerTiers)
             .FirstOrDefaultAsync(x => x.OperatorId == operatorId && x.VehicleType == vehicleType && x.IsActive, cancellationToken);
-        if (fare is null)
-        {
-            return FareQuote.Compute(50, 12, 50, 1, distanceKm <= 0 ? 4 : distanceKm);
-        }
-
-        return FareQuote.Compute(fare.BaseFare, fare.PerKm, fare.MinimumFare, fare.IncludedKm, distanceKm <= 0 ? 4 : distanceKm);
+        return FareQuote.ComputeForPassengers(fare, passengerCount, distanceKm <= 0 ? 4 : distanceKm);
     }
 
     private static (DateTime Start, DateTime EndExclusive) ResolveBoardWindow(DateOnly? from, DateOnly? to)
@@ -302,6 +303,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 x.Status,
                 x.Fare,
                 x.DistanceKm,
+                Math.Max(1, x.PassengerCount),
                 x.PaymentMethod,
                 x.PaymentMethodOther,
                 null))

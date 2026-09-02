@@ -277,6 +277,7 @@ export type RideListItem = {
   status: TripStatus
   fare: number
   distanceKm: number
+  passengerCount?: number
   paymentMethod: PaymentMethod
   paymentMethodOther: string | null
   commission: RideCommissionBreakdown | null
@@ -295,6 +296,7 @@ export type RideDetail = {
   notes: string | null
   fare: number
   distanceKm: number
+  passengerCount?: number
   durationMinutes: number | null
   vehicleType: VehicleType
   requestedAtUtc: string
@@ -463,6 +465,14 @@ export type FareSurcharge = {
   isActive: boolean
 }
 
+export type FarePassengerTier = {
+  passengerCount: number
+  baseFare: number
+  perKm: number
+  minimumFare: number
+  includedKm: number
+}
+
 export type FareRates = {
   vehicleType: VehicleType
   baseFare: number
@@ -472,6 +482,7 @@ export type FareRates = {
   operatorCommissionPercent: number
   driverCommissionPercent: number
   isActive: boolean
+  passengerTiers: FarePassengerTier[]
   surcharges: FareSurcharge[]
   samples: FareSample[]
 }
@@ -1126,6 +1137,7 @@ export const api = {
     scheduledAtUtc: string
     notes?: string
     distanceKm: number
+    passengerCount?: number
     paymentMethod: PaymentMethod
     paymentMethodOther?: string
   }) => request<RideDetail>('/api/operator/schedule', { method: 'POST', body: JSON.stringify(body) }),
@@ -1290,6 +1302,7 @@ export const api = {
       operatorCommissionPercent: number
       driverCommissionPercent: number
       isActive: boolean
+      passengerTiers: FarePassengerTier[]
     }
     tricycle: {
       baseFare: number
@@ -1299,6 +1312,7 @@ export const api = {
       operatorCommissionPercent: number
       driverCommissionPercent: number
       isActive: boolean
+      passengerTiers: FarePassengerTier[]
     }
   }) => request<OperatorFareMatrix>('/api/operator/fares/matrix', { method: 'PUT', body: JSON.stringify(body) }),
   addOperatorSurcharges: (body: {

@@ -222,6 +222,7 @@ class JobOffer {
     required this.dropoff,
     required this.fare,
     required this.distanceKm,
+    this.passengerCount = 1,
     required this.paymentMethod,
     required this.isPreferred,
     required this.highlighted,
@@ -243,6 +244,7 @@ class JobOffer {
   final double? pickupLng;
   final double fare;
   final double distanceKm;
+  final int passengerCount;
   final double? riderDistanceKm;
   final String paymentMethod;
   final String? paymentMethodOther;
@@ -262,6 +264,7 @@ class JobOffer {
         pickupLng: (json['pickupLng'] as num?)?.toDouble(),
         fare: (json['fare'] as num?)?.toDouble() ?? 0,
         distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+        passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
         riderDistanceKm: (json['riderDistanceKm'] as num?)?.toDouble(),
         paymentMethod: paymentCode(json['paymentMethod']),
         paymentMethodOther: asTextOrNull(json['paymentMethodOther']),
@@ -285,6 +288,7 @@ class RiderTrip {
     required this.dropoff,
     required this.fare,
     required this.distanceKm,
+    this.passengerCount = 1,
     required this.paymentMethod,
     required this.canStart,
     required this.canComplete,
@@ -316,6 +320,7 @@ class RiderTrip {
   final DateTime? lastCompletedAt;
   final double fare;
   final double distanceKm;
+  final int passengerCount;
   final String paymentMethod;
   final String? paymentMethodOther;
   final bool canStart;
@@ -346,6 +351,7 @@ class RiderTrip {
         lastCompletedAt: parseUtc(json['lastCompletedAtUtc']),
         fare: (json['fare'] as num?)?.toDouble() ?? 0,
         distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+        passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
         paymentMethod: paymentCode(json['paymentMethod']),
         paymentMethodOther: asTextOrNull(json['paymentMethodOther']),
         canStart: asFlag(json['canStart']),
@@ -375,6 +381,7 @@ class RiderTripListItem {
     required this.dropoff,
     required this.fare,
     required this.distanceKm,
+    this.passengerCount = 1,
     required this.vehicleType,
     required this.paymentMethod,
     required this.requestedAt,
@@ -389,6 +396,7 @@ class RiderTripListItem {
   final String dropoff;
   final double fare;
   final double distanceKm;
+  final int passengerCount;
   final String vehicleType;
   final String paymentMethod;
   final String? paymentMethodOther;
@@ -403,6 +411,7 @@ class RiderTripListItem {
         dropoff: asText(json['dropoff']),
         fare: (json['fare'] as num?)?.toDouble() ?? 0,
         distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+        passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
         vehicleType: vehicleLabel(json['vehicleType']),
         paymentMethod: paymentCode(json['paymentMethod']),
         paymentMethodOther: asTextOrNull(json['paymentMethodOther']),
@@ -540,6 +549,7 @@ class RiderTripDetail {
     required this.dropoff,
     required this.fare,
     required this.distanceKm,
+    this.passengerCount = 1,
     required this.vehicleType,
     required this.requestedAt,
     required this.paymentMethod,
@@ -575,6 +585,7 @@ class RiderTripDetail {
   final String? notes;
   final double fare;
   final double distanceKm;
+  final int passengerCount;
   final int? durationMinutes;
   final String vehicleType;
   final DateTime requestedAt;
@@ -626,6 +637,7 @@ class RiderTripDetail {
         notes: asTextOrNull(json['notes']),
         fare: (json['fare'] as num?)?.toDouble() ?? 0,
         distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+        passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
         durationMinutes: json['durationMinutes'] == null ? null : asInt(json['durationMinutes']),
         vehicleType: vehicleLabel(json['vehicleType']),
         requestedAt: parseUtc(json['requestedAtUtc']) ?? DateTime.now(),

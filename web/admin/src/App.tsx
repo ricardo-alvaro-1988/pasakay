@@ -679,11 +679,16 @@ function surchargeLine(item: FareSurcharge) {
 
 type RelatedSurcharge = FareSurcharge & { vehicleType: VehicleType }
 
-type FareDraft = {
+type FareTierDraft = {
+  passengerCount: string
   baseFare: string
   perKm: string
   minimumFare: string
   includedKm: string
+}
+
+type FareDraft = {
+  passengerTiers: FareTierDraft[]
   operatorCommissionPercent: string
   driverCommissionPercent: string
   isActive: boolean
@@ -712,37 +717,94 @@ function commissionSum(system: number, draft: FareDraft) {
   return roundPercent(system + Number(draft.operatorCommissionPercent || 0) + Number(draft.driverCommissionPercent || 0))
 }
 
+function defaultTierDraft(): FareTierDraft {
+  return {
+    passengerCount: '1',
+    baseFare: '50',
+    perKm: '12',
+    minimumFare: '50',
+    includedKm: '1',
+  }
+}
+
+function tierDraftsFromRates(rates: FareRates | null): FareTierDraft[] {
+  const tiers = rates?.passengerTiers?.length
+    ? rates.passengerTiers
+    : rates
+      ? [{
+          passengerCount: 1,
+          baseFare: rates.baseFare,
+          perKm: rates.perKm,
+          minimumFare: rates.minimumFare,
+          includedKm: rates.includedKm,
+        }]
+      : null
+  if (!tiers) {
+    return [defaultTierDraft()]
+  }
+  return tiers
+    .slice()
+    .sort((a, b) => a.passengerCount - b.passengerCount)
+    .map((tier) => ({
+      passengerCount: String(tier.passengerCount),
+      baseFare: String(tier.baseFare),
+      perKm: String(tier.perKm),
+      minimumFare: String(tier.minimumFare),
+      includedKm: String(tier.includedKm),
+    }))
+}
+
 function fareDraft(rates: FareRates | null, system = 10): FareDraft {
   const operatorShare = rates?.operatorCommissionPercent ?? Math.min(20, Math.max(0, roundPercent(100 - system)))
   const driverShare = rates?.driverCommissionPercent ?? roundPercent(Math.max(0, 100 - system - operatorShare))
   return {
-    baseFare: String(rates?.baseFare ?? 50),
-    perKm: String(rates?.perKm ?? 12),
-    minimumFare: String(rates?.minimumFare ?? 50),
-    includedKm: String(rates?.includedKm ?? 1),
+    passengerTiers: tierDraftsFromRates(rates),
     operatorCommissionPercent: String(operatorShare),
     driverCommissionPercent: String(driverShare),
     isActive: rates?.isActive ?? true,
   }
 }
 
+function sameTiers(a: FareTierDraft[], b: FareTierDraft[]) {
+  if (a.length !== b.length) return false
+  return a.every((tier, i) =>
+    tier.passengerCount === b[i].passengerCount
+    && tier.baseFare === b[i].baseFare
+    && tier.perKm === b[i].perKm
+    && tier.minimumFare === b[i].minimumFare
+    && tier.includedKm === b[i].includedKm)
+}
+
 function sameDraft(a: FareDraft, b: FareDraft) {
-  return a.baseFare === b.baseFare
-    && a.perKm === b.perKm
-    && a.minimumFare === b.minimumFare
-    && a.includedKm === b.includedKm
-    && a.isActive === b.isActive
+  return sameTiers(a.passengerTiers, b.passengerTiers) && a.isActive === b.isActive
 }
 
 function parseDraft(draft: FareDraft) {
+  const passengerTiers = draft.passengerTiers
+    .map((tier) => ({
+      passengerCount: Math.max(1, Math.floor(Number(tier.passengerCount) || 1)),
+      baseFare: Number(tier.baseFare),
+      perKm: Number(tier.perKm),
+      minimumFare: Number(tier.minimumFare),
+      includedKm: Number(tier.includedKm),
+    }))
+    .sort((a, b) => a.passengerCount - b.passengerCount)
+  const primary = passengerTiers[0] ?? {
+    passengerCount: 1,
+    baseFare: 50,
+    perKm: 12,
+    minimumFare: 50,
+    includedKm: 1,
+  }
   return {
-    baseFare: Number(draft.baseFare),
-    perKm: Number(draft.perKm),
-    minimumFare: Number(draft.minimumFare),
-    includedKm: Number(draft.includedKm),
+    baseFare: primary.baseFare,
+    perKm: primary.perKm,
+    minimumFare: primary.minimumFare,
+    includedKm: primary.includedKm,
     operatorCommissionPercent: Number(draft.operatorCommissionPercent),
     driverCommissionPercent: Number(draft.driverCommissionPercent),
     isActive: draft.isActive,
+    passengerTiers,
   }
 }
 
@@ -3271,6 +3333,10 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
           <p>{ride.dropoffStop?.details || ride.dropoff}</p>
         </div>
         <DetailItem label="Distance" value={`${ride.distanceKm.toFixed(1)} km`} />
+        <DetailItem
+          label="Passengers"
+          value={`${Math.max(1, ride.passengerCount ?? 1)} passenger${(ride.passengerCount ?? 1) === 1 ? '' : 's'}`}
+        />
         <DetailItem label="Fare" value={peso(ride.fare)} />
         <DetailItem label="Payment" value={paymentMethodLabel(ride.paymentMethod, ride.paymentMethodOther)} />
         <DetailItem label="Duration" value={ride.durationMinutes ? `${ride.durationMinutes} min` : '—'} />
@@ -4228,17 +4294,134 @@ function RelatedFareRatesTable({
   onChange?: (vehicle: VehicleType, patch: Partial<FareDraft>) => void
 }) {
   const editable = !!onChange && !!motorcycle && !!tricycle
-  const cell = (vehicle: VehicleType, key: keyof Omit<FareDraft, 'isActive'>, value: string) => (
-    editable ? (
-      <input
-        value={value}
-        disabled={linked && vehicle === 'Tricycle'}
-        onChange={(e) => onChange(vehicle, { [key]: e.target.value })}
-      />
-    ) : value
-  )
   const mc = motorcycle ?? fareDraft(data.motorcycle, data.motorcycleCommissionPercent)
   const trike = tricycle ?? fareDraft(data.tricycle, data.tricycleCommissionPercent)
+
+  function patchTier(vehicle: VehicleType, tiers: FareTierDraft[]) {
+    onChange?.(vehicle, { passengerTiers: tiers })
+  }
+
+  function updateTier(
+    vehicle: VehicleType,
+    current: FareTierDraft[],
+    index: number,
+    key: keyof FareTierDraft,
+    value: string,
+  ) {
+    const next = current.map((tier, i) => (i === index ? { ...tier, [key]: value } : tier))
+    patchTier(vehicle, next)
+  }
+
+  function addTier(vehicle: VehicleType, current: FareTierDraft[]) {
+    const used = new Set(current.map((tier) => Number(tier.passengerCount) || 0))
+    let nextCount = 1
+    while (used.has(nextCount)) nextCount += 1
+    const last = current[current.length - 1] ?? defaultTierDraft()
+    patchTier(vehicle, [
+      ...current,
+      {
+        ...last,
+        passengerCount: String(nextCount),
+      },
+    ])
+  }
+
+  function removeTier(vehicle: VehicleType, current: FareTierDraft[], index: number) {
+    if (current.length <= 1) return
+    patchTier(vehicle, current.filter((_, i) => i !== index))
+  }
+
+  function tiersEditor(vehicle: VehicleType, draft: FareDraft, locked: boolean) {
+    const tiers = draft.passengerTiers.length ? draft.passengerTiers : [defaultTierDraft()]
+    return (
+      <div className="fare-tier-editor">
+        {tiers.map((tier, index) => (
+          <div key={`${vehicle}-${index}`} className="fare-tier-row">
+            <label>
+              <small>Persons</small>
+              <input
+                value={tier.passengerCount}
+                disabled={locked}
+                onChange={(e) => updateTier(vehicle, tiers, index, 'passengerCount', e.target.value)}
+              />
+            </label>
+            <label>
+              <small>Base km amount</small>
+              <input
+                value={tier.baseFare}
+                disabled={locked}
+                onChange={(e) => updateTier(vehicle, tiers, index, 'baseFare', e.target.value)}
+              />
+            </label>
+            <label>
+              <small>Included km</small>
+              <input
+                value={tier.includedKm}
+                disabled={locked}
+                onChange={(e) => updateTier(vehicle, tiers, index, 'includedKm', e.target.value)}
+              />
+            </label>
+            <label>
+              <small>Succeeding km</small>
+              <input
+                value={tier.perKm}
+                disabled={locked}
+                onChange={(e) => updateTier(vehicle, tiers, index, 'perKm', e.target.value)}
+              />
+            </label>
+            <label>
+              <small>Minimum</small>
+              <input
+                value={tier.minimumFare}
+                disabled={locked}
+                onChange={(e) => updateTier(vehicle, tiers, index, 'minimumFare', e.target.value)}
+              />
+            </label>
+            {editable ? (
+              <button
+                type="button"
+                className="btn tiny"
+                disabled={locked || tiers.length <= 1}
+                onClick={() => removeTier(vehicle, tiers, index)}
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
+        ))}
+        {editable ? (
+          <button type="button" className="btn tiny" disabled={locked} onClick={() => addTier(vehicle, tiers)}>
+            Add person tier
+          </button>
+        ) : null}
+      </div>
+    )
+  }
+
+  function tiersReadonly(rates: FareRates | null) {
+    if (!rates) return '—'
+    const tiers = rates.passengerTiers?.length
+      ? rates.passengerTiers
+      : [{
+          passengerCount: 1,
+          baseFare: rates.baseFare,
+          perKm: rates.perKm,
+          minimumFare: rates.minimumFare,
+          includedKm: rates.includedKm,
+        }]
+    return (
+      <div className="fare-tier-readonly">
+        {tiers.map((tier) => (
+          <div key={tier.passengerCount}>
+            <strong>{tier.passengerCount} person{tier.passengerCount === 1 ? '' : 's'}</strong>
+            {' · '}
+            {peso(tier.baseFare)} / {tier.includedKm} km + {peso(tier.perKm)}/km
+            {tier.minimumFare > 0 ? ` · min ${peso(tier.minimumFare)}` : ''}
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   return (
     <div className="table-wrap" style={{ marginTop: 8 }}>
@@ -4258,24 +4441,12 @@ function RelatedFareRatesTable({
         </thead>
         <tbody>
           <tr>
-            <td>Base fare</td>
-            <td>{editable ? cell('Motorcycle', 'baseFare', mc.baseFare) : (data.motorcycle ? peso(data.motorcycle.baseFare) : '—')}</td>
-            <td>{editable ? cell('Tricycle', 'baseFare', trike.baseFare) : (data.tricycle ? peso(data.tricycle.baseFare) : '—')}</td>
-          </tr>
-          <tr>
-            <td>Per km</td>
-            <td>{editable ? cell('Motorcycle', 'perKm', mc.perKm) : (data.motorcycle ? peso(data.motorcycle.perKm) : '—')}</td>
-            <td>{editable ? cell('Tricycle', 'perKm', trike.perKm) : (data.tricycle ? peso(data.tricycle.perKm) : '—')}</td>
-          </tr>
-          <tr>
-            <td>Minimum</td>
-            <td>{editable ? cell('Motorcycle', 'minimumFare', mc.minimumFare) : (data.motorcycle ? peso(data.motorcycle.minimumFare) : '—')}</td>
-            <td>{editable ? cell('Tricycle', 'minimumFare', trike.minimumFare) : (data.tricycle ? peso(data.tricycle.minimumFare) : '—')}</td>
-          </tr>
-          <tr>
-            <td>Included km</td>
-            <td>{editable ? cell('Motorcycle', 'includedKm', mc.includedKm) : (data.motorcycle ? String(data.motorcycle.includedKm) : '—')}</td>
-            <td>{editable ? cell('Tricycle', 'includedKm', trike.includedKm) : (data.tricycle ? String(data.tricycle.includedKm) : '—')}</td>
+            <td>
+              Passenger tiers
+              <small className="muted" style={{ display: 'block' }}>Base km amount + succeeding km by person count</small>
+            </td>
+            <td>{editable ? tiersEditor('Motorcycle', mc, false) : tiersReadonly(data.motorcycle)}</td>
+            <td>{editable ? tiersEditor('Tricycle', trike, !!linked) : tiersReadonly(data.tricycle)}</td>
           </tr>
           <tr>
             <td>Status</td>
@@ -4364,6 +4535,7 @@ function RelatedFareRatesTable({
       </table>
       <p className="muted" style={{ marginTop: 10 }}>
         System commission is set by Super Admin. Operator and driver shares are set here. The three must add up to 100% for each vehicle.
+        Passenger tiers set the base km amount and succeeding km rate by number of persons.
       </p>
     </div>
   )
@@ -6721,6 +6893,7 @@ function OperatorScheduleForm({
   const [scheduledAt, setScheduledAt] = useState(() => toPhInput(new Date(Date.now() + 60 * 60 * 1000).toISOString()))
   const [notes, setNotes] = useState('')
   const [distanceKm, setDistanceKm] = useState('4')
+  const [passengerCount, setPassengerCount] = useState('1')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash')
   const [paymentMethodOther, setPaymentMethodOther] = useState('')
   const [riderPaymentMethods, setRiderPaymentMethods] = useState<PaymentMethod[]>([])
@@ -6777,6 +6950,7 @@ function OperatorScheduleForm({
         scheduledAtUtc,
         notes: notes.trim() || undefined,
         distanceKm: Number(distanceKm) || 4,
+        passengerCount: Math.max(1, Math.floor(Number(passengerCount) || 1)),
         paymentMethod,
         paymentMethodOther: paymentMethod === 'Other' ? paymentMethodOther.trim() : undefined,
       })
@@ -6854,6 +7028,16 @@ function OperatorScheduleForm({
         <label className="field">
           <span>Distance (km)</span>
           <input value={distanceKm} onChange={(e) => setDistanceKm(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>Passengers</span>
+          <input
+            value={passengerCount}
+            onChange={(e) => setPassengerCount(e.target.value)}
+            inputMode="numeric"
+            min={1}
+          />
+          <small className="muted">Used for Tricycle fare tiers. Motorcycle bookings stay at 1.</small>
         </label>
         <label className="field wide">
           <span>Notes</span>
@@ -7806,6 +7990,7 @@ function OperatorFaresPage() {
         <h2 style={{ marginTop: 0 }}>{data.operatorName}</h2>
         <p className="muted">
           One related matrix for motorcycle and tricycle. Use the same rates for both, or set each column.
+          Add passenger tiers so Tricycle (and Motorcycle) fare depends on number of persons: base km amount + succeeding km.
           System, operator, and driver commission must add up to 100% for each vehicle.
           Manage time-window and date-range surcharges in the Surcharges menu.
         </p>

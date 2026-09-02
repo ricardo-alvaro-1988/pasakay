@@ -31,6 +31,7 @@ public class Trip : BaseEntity
     public string? Notes { get; set; }
     public decimal Fare { get; set; }
     public decimal DistanceKm { get; set; }
+    public int PassengerCount { get; set; } = 1;
     public DateTime RequestedAtUtc { get; set; }
     public DateTime? ScheduledAtUtc { get; set; }
     public DateTime? CompletedAtUtc { get; set; }

@@ -139,6 +139,7 @@ public record RideListItem(
     TripStatus Status,
     decimal Fare,
     decimal DistanceKm,
+    int PassengerCount,
     PaymentMethod PaymentMethod,
     string? PaymentMethodOther,
     RideCommissionBreakdown? Commission);
@@ -156,6 +157,7 @@ public record RideDetailResponse(
     string? Notes,
     decimal Fare,
     decimal DistanceKm,
+    int PassengerCount,
     int? DurationMinutes,
     VehicleType VehicleType,
     DateTime RequestedAtUtc,
@@ -252,6 +254,13 @@ public record TerritoryListItem(
 
 public record FareSampleItem(decimal DistanceKm, decimal Fare);
 
+public record FarePassengerTierItem(
+    int PassengerCount,
+    decimal BaseFare,
+    decimal PerKm,
+    decimal MinimumFare,
+    decimal IncludedKm);
+
 public record FareSurchargeItem(
     Guid Id,
     SurchargeKind Kind,
@@ -272,6 +281,7 @@ public record FareRatesItem(
     decimal OperatorCommissionPercent,
     decimal DriverCommissionPercent,
     bool IsActive,
+    IReadOnlyList<FarePassengerTierItem> PassengerTiers,
     IReadOnlyList<FareSurchargeItem> Surcharges,
     IReadOnlyList<FareSampleItem> Samples);
 
@@ -539,7 +549,8 @@ public record CreateScheduledBookingRequest(
     string? Notes,
     decimal DistanceKm,
     PaymentMethod PaymentMethod,
-    string? PaymentMethodOther);
+    string? PaymentMethodOther,
+    int PassengerCount = 1);
 
 public record ReassignBookingRequest(Guid RiderId);
 
@@ -611,7 +622,15 @@ public record SaveFareRatesRequest(
     decimal IncludedKm,
     decimal OperatorCommissionPercent,
     decimal DriverCommissionPercent,
-    bool IsActive);
+    bool IsActive,
+    IReadOnlyList<FarePassengerTierBody>? PassengerTiers = null);
+
+public record FarePassengerTierBody(
+    int PassengerCount,
+    decimal BaseFare,
+    decimal PerKm,
+    decimal MinimumFare,
+    decimal IncludedKm);
 
 public record FareVehicleRatesBody(
     decimal BaseFare,
@@ -620,7 +639,8 @@ public record FareVehicleRatesBody(
     decimal IncludedKm,
     decimal OperatorCommissionPercent,
     decimal DriverCommissionPercent,
-    bool IsActive);
+    bool IsActive,
+    IReadOnlyList<FarePassengerTierBody>? PassengerTiers = null);
 
 public record SaveRelatedFareRatesRequest(
     FareVehicleRatesBody Motorcycle,

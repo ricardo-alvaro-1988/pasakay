@@ -1192,6 +1192,58 @@ button.brand-pill:active { transform: scale(.98); }
   gap: 8px;
   margin: 0 0 8px;
 }
+.passenger-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-soft);
+}
+.passenger-label {
+  font-size: 13px;
+  font-weight: 700;
+}
+.passenger-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.passenger-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-on);
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 700;
+}
+.passenger-btn:disabled {
+  opacity: 0.4;
+}
+.passenger-input {
+  width: 48px;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-on);
+  padding: 8px 4px;
+  font-weight: 700;
+  font-size: 15px;
+}
+.passenger-input::-webkit-outer-spin-button,
+.passenger-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.passenger-input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
 .vehicle {
   display: flex;
   align-items: center;

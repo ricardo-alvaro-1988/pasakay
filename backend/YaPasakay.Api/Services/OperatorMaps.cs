@@ -117,6 +117,7 @@ public static class OperatorMaps
             trip.Notes,
             trip.Fare,
             trip.DistanceKm,
+            Math.Max(1, trip.PassengerCount),
             duration,
             trip.VehicleType,
             trip.RequestedAtUtc,
@@ -319,6 +320,7 @@ public static class OperatorMaps
                     x.Status,
                     x.Fare,
                     x.DistanceKm,
+                    Math.Max(1, x.PassengerCount),
                     x.PaymentMethod,
                     x.PaymentMethodOther,
                     RideCommissionCalculator.ForTrip(x, fare));
@@ -352,15 +354,18 @@ public static class OperatorMaps
             return null;
         }
 
+        var tiers = MapPassengerTiers(fare);
+        var sampleTier = FareQuote.ResolveTier(fare, 1);
         return new FareRatesItem(
             fare.VehicleType,
-            fare.BaseFare,
-            fare.PerKm,
-            fare.MinimumFare,
-            fare.IncludedKm,
+            sampleTier?.BaseFare ?? fare.BaseFare,
+            sampleTier?.PerKm ?? fare.PerKm,
+            sampleTier?.MinimumFare ?? fare.MinimumFare,
+            sampleTier?.IncludedKm ?? fare.IncludedKm,
             fare.OperatorCommissionPercent,
             fare.DriverCommissionPercent,
             fare.IsActive,
+            tiers,
             fare.Surcharges
                 .OrderBy(x => x.Kind)
                 .ThenBy(x => x.Name)
@@ -376,8 +381,34 @@ public static class OperatorMaps
                     x.IsActive))
                 .ToList(),
             includeSamples
-                ? FareQuote.Samples(fare.BaseFare, fare.PerKm, fare.MinimumFare, fare.IncludedKm)
+                ? FareQuote.SamplesForPassengers(fare, sampleTier?.PassengerCount ?? 1)
                 : []);
+    }
+
+    public static IReadOnlyList<FarePassengerTierItem> MapPassengerTiers(FareMatrix fare)
+    {
+        if (fare.PassengerTiers is { Count: > 0 })
+        {
+            return fare.PassengerTiers
+                .OrderBy(x => x.PassengerCount)
+                .Select(x => new FarePassengerTierItem(
+                    x.PassengerCount,
+                    x.BaseFare,
+                    x.PerKm,
+                    x.MinimumFare,
+                    x.IncludedKm))
+                .ToList();
+        }
+
+        return
+        [
+            new FarePassengerTierItem(
+                1,
+                fare.BaseFare,
+                fare.PerKm,
+                fare.MinimumFare,
+                fare.IncludedKm)
+        ];
     }
 
     public static SupportTicketItem Support(SupportTicket ticket)

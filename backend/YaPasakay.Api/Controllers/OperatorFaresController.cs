@@ -25,6 +25,7 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
 
         var fares = await db.FareMatrices
             .Include(x => x.Surcharges)
+            .Include(x => x.PassengerTiers)
             .Where(x => x.OperatorId == op!.Id)
             .ToListAsync(cancellationToken);
         return Ok(new OperatorFareDetailResponse(
@@ -53,9 +54,10 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = "Choose Motorcycle or Tricycle." });
         }
 
-        if (request.BaseFare < 0 || request.PerKm < 0 || request.MinimumFare < 0 || request.IncludedKm < 0)
+        if (request.BaseFare < 0 || request.PerKm < 0 || request.MinimumFare < 0 || request.IncludedKm < 0
+            || InvalidTiers(request.PassengerTiers))
         {
-            return BadRequest(new { message = "Fare amounts cannot be negative." });
+            return BadRequest(new { message = "Fare amounts cannot be negative, and passenger tiers must use unique person counts of 1 or more." });
         }
 
         var splitError = FareCommissionSplit.Validate(
@@ -68,6 +70,7 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         }
 
         var fare = await db.FareMatrices
+            .Include(x => x.PassengerTiers)
             .FirstOrDefaultAsync(x => x.OperatorId == op!.Id && x.VehicleType == request.VehicleType, cancellationToken);
         if (fare is null)
         {
@@ -97,7 +100,12 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
 
         if (InvalidRates(request.Motorcycle) || InvalidRates(request.Tricycle))
         {
-            return BadRequest(new { message = "Fare amounts cannot be negative." });
+            return BadRequest(new { message = "Fare amounts cannot be negative, and passenger tiers must use unique person counts of 1 or more." });
+        }
+
+        if ((request.Motorcycle.PassengerTiers?.Count ?? 0) == 0 && request.Motorcycle.BaseFare < 0)
+        {
+            return BadRequest(new { message = "Add at least one passenger tier for Motorcycle." });
         }
 
         var motorcycleError = FareCommissionSplit.Validate(
@@ -261,8 +269,30 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         return await Get(cancellationToken);
     }
 
-    private static bool InvalidRates(FareVehicleRatesBody rates) =>
-        rates.BaseFare < 0 || rates.PerKm < 0 || rates.MinimumFare < 0 || rates.IncludedKm < 0;
+    private static bool InvalidRates(FareVehicleRatesBody rates)
+    {
+        if (rates.BaseFare < 0 || rates.PerKm < 0 || rates.MinimumFare < 0 || rates.IncludedKm < 0)
+        {
+            return true;
+        }
+
+        return InvalidTiers(rates.PassengerTiers);
+    }
+
+    private static bool InvalidTiers(IReadOnlyList<FarePassengerTierBody>? tiers)
+    {
+        if (tiers is null || tiers.Count == 0)
+        {
+            return false;
+        }
+
+        if (tiers.Any(x => x.PassengerCount < 1 || x.BaseFare < 0 || x.PerKm < 0 || x.MinimumFare < 0 || x.IncludedKm < 0))
+        {
+            return true;
+        }
+
+        return tiers.Select(x => x.PassengerCount).Distinct().Count() != tiers.Count;
+    }
 
     private static void ApplyRates(FareMatrix fare, FareVehicleRatesBody rates) =>
         ApplyRates(
@@ -273,7 +303,8 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             rates.IncludedKm,
             rates.OperatorCommissionPercent,
             rates.DriverCommissionPercent,
-            rates.IsActive);
+            rates.IsActive,
+            rates.PassengerTiers);
 
     private static void ApplyRates(FareMatrix fare, SaveFareRatesRequest request) =>
         ApplyRates(
@@ -284,7 +315,8 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             request.IncludedKm,
             request.OperatorCommissionPercent,
             request.DriverCommissionPercent,
-            request.IsActive);
+            request.IsActive,
+            request.PassengerTiers);
 
     private static void ApplyRates(
         FareMatrix fare,
@@ -294,16 +326,64 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         decimal includedKm,
         decimal operatorCommissionPercent,
         decimal driverCommissionPercent,
-        bool isActive)
+        bool isActive,
+        IReadOnlyList<FarePassengerTierBody>? passengerTiers)
     {
-        fare.BaseFare = FareCommissionSplit.Round(baseFare);
-        fare.PerKm = FareCommissionSplit.Round(perKm);
-        fare.MinimumFare = FareCommissionSplit.Round(minimumFare);
-        fare.IncludedKm = FareCommissionSplit.Round(includedKm);
+        var tiers = NormalizeTiers(passengerTiers, baseFare, perKm, minimumFare, includedKm);
+        var primary = tiers.OrderBy(x => x.PassengerCount).First();
+        fare.BaseFare = FareCommissionSplit.Round(primary.BaseFare);
+        fare.PerKm = FareCommissionSplit.Round(primary.PerKm);
+        fare.MinimumFare = FareCommissionSplit.Round(primary.MinimumFare);
+        fare.IncludedKm = FareCommissionSplit.Round(primary.IncludedKm);
         fare.OperatorCommissionPercent = FareCommissionSplit.Round(operatorCommissionPercent);
         fare.DriverCommissionPercent = FareCommissionSplit.Round(driverCommissionPercent);
         fare.IsActive = isActive;
         fare.UpdatedAtUtc = DateTime.UtcNow;
+        ReplacePassengerTiers(fare, tiers);
+    }
+
+    private static IReadOnlyList<FarePassengerTierBody> NormalizeTiers(
+        IReadOnlyList<FarePassengerTierBody>? passengerTiers,
+        decimal baseFare,
+        decimal perKm,
+        decimal minimumFare,
+        decimal includedKm)
+    {
+        if (passengerTiers is { Count: > 0 })
+        {
+            return passengerTiers
+                .Select(x => new FarePassengerTierBody(
+                    Math.Max(1, x.PassengerCount),
+                    FareCommissionSplit.Round(x.BaseFare),
+                    FareCommissionSplit.Round(x.PerKm),
+                    FareCommissionSplit.Round(x.MinimumFare),
+                    FareCommissionSplit.Round(x.IncludedKm)))
+                .GroupBy(x => x.PassengerCount)
+                .Select(g => g.First())
+                .OrderBy(x => x.PassengerCount)
+                .ToList();
+        }
+
+        return
+        [
+            new FarePassengerTierBody(1, baseFare, perKm, minimumFare, includedKm)
+        ];
+    }
+
+    private static void ReplacePassengerTiers(FareMatrix fare, IReadOnlyList<FarePassengerTierBody> tiers)
+    {
+        fare.PassengerTiers.Clear();
+        foreach (var tier in tiers)
+        {
+            fare.PassengerTiers.Add(new FarePassengerTier
+            {
+                PassengerCount = tier.PassengerCount,
+                BaseFare = tier.BaseFare,
+                PerKm = tier.PerKm,
+                MinimumFare = tier.MinimumFare,
+                IncludedKm = tier.IncludedKm
+            });
+        }
     }
 
     private async Task<FareMatrix?> EnsureMatrixAsync(
@@ -319,6 +399,7 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
 
         var fare = await db.FareMatrices
             .Include(x => x.Surcharges)
+            .Include(x => x.PassengerTiers)
             .FirstOrDefaultAsync(x => x.OperatorId == operatorId && x.VehicleType == vehicleType, cancellationToken);
         if (fare is not null)
         {

@@ -1080,6 +1080,36 @@ button.linkish:hover { text-decoration: underline; }
   border-radius: 10px;
   padding: 8px 10px;
 }
+.fare-tier-editor {
+  display: grid;
+  gap: 10px;
+  min-width: 280px;
+}
+.fare-tier-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+.fare-tier-row label {
+  display: grid;
+  gap: 4px;
+}
+.fare-tier-row small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.fare-tier-row input {
+  max-width: none;
+}
+.fare-tier-readonly {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
 .fare-matrix .chips {
   margin: 0;
 }

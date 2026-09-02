@@ -376,6 +376,7 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
                 x.Status,
                 x.Fare,
                 x.DistanceKm,
+                Math.Max(1, x.PassengerCount),
                 x.PaymentMethod,
                 x.PaymentMethodOther,
                 null))

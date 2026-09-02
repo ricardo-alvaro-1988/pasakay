@@ -19,7 +19,7 @@ export function formatTripShare(trip: CustomerTrip): TripSharePayload {
     `Pickup: ${trip.pickup}`,
     `Drop-off: ${trip.dropoff}`,
     '',
-    `Fare: ${peso(trip.fare)}${kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · ${paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}`,
+    `Fare: ${peso(trip.fare)}${kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · ${Math.max(1, trip.passengerCount || 1)} passenger${Math.max(1, trip.passengerCount || 1) === 1 ? '' : 's'} · ${paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}`,
     `Operator: ${trip.operatorName}`,
   ].filter(Boolean) as string[]
 
