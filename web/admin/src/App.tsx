@@ -3265,20 +3265,10 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
         <div className="detail-item wide">
           <span>Pickup</span>
           <p>{ride.pickupStop?.details || ride.pickup}</p>
-          <small>
-            {[ride.pickupStop?.barangay, ride.pickupStop?.municipality, ride.pickupStop?.province]
-              .filter(Boolean)
-              .join(', ') || ride.pickup}
-          </small>
         </div>
         <div className="detail-item wide">
           <span>Drop-off</span>
           <p>{ride.dropoffStop?.details || ride.dropoff}</p>
-          <small>
-            {[ride.dropoffStop?.barangay, ride.dropoffStop?.municipality, ride.dropoffStop?.province]
-              .filter(Boolean)
-              .join(', ') || ride.dropoff}
-          </small>
         </div>
         <DetailItem label="Distance" value={`${ride.distanceKm.toFixed(1)} km`} />
         <DetailItem label="Fare" value={peso(ride.fare)} />
