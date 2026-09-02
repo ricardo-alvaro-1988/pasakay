@@ -4307,10 +4307,12 @@ function FareDetailPage({
         <div>
           <button className="btn tiny" type="button" onClick={onBack}>Back to fare matrix</button>
           <h2 style={{ marginTop: 12 }}>{data.operatorName}</h2>
-          <p>Read-only related fare matrix for {data.municipalityName ?? 'this municipality'}. Operators create and edit rates. Time windows use Philippine time.</p>
+          <p className="muted" style={{ margin: '6px 0 0', maxWidth: 520 }}>
+            Read-only rates for {data.municipalityName ?? 'this municipality'}. Operators create and edit these.
+          </p>
           {(data.municipalities?.length ?? 0) > 1 ? (
-            <label style={{ display: 'block', marginTop: 10, maxWidth: 320 }}>
-              Municipality
+            <label className="field" style={{ maxWidth: 320, marginTop: 14, marginBottom: 0 }}>
+              <span>Municipality</span>
               <select
                 value={selectedMunicipalityId}
                 onChange={(e) => setSelectedMunicipalityId(e.target.value)}
@@ -8059,18 +8061,19 @@ function OperatorFaresPage() {
       {error ? <p className="error">{error}</p> : null}
       {notice ? <p className="ok">{notice}</p> : null}
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>{data.operatorName}</h2>
-        <p className="muted">
-          Create and edit one related matrix per municipality for motorcycle and tricycle.
-          Quotes use the pickup municipality. Add passenger tiers so Tricycle (and Motorcycle) fare depends on number of persons.
-          System, operator, and driver commission must add up to 100% for each vehicle.
-          Manage time-window and date-range surcharges in the Surcharges menu.
-        </p>
+        <div className="toolbar" style={{ alignItems: 'flex-start' }}>
+          <div>
+            <h2 style={{ margin: 0 }}>{data.operatorName}</h2>
+            <p className="muted" style={{ margin: '6px 0 0', maxWidth: 560 }}>
+              Set motorcycle and tricycle rates for each municipality you serve. Quotes use the pickup city.
+            </p>
+          </div>
+        </div>
         {data.municipalities.length === 0 ? (
           <p className="error">Add service-area barangays first, then create a fare matrix for each municipality.</p>
         ) : (
-          <label style={{ display: 'block', marginBottom: 14, maxWidth: 360 }}>
-            Municipality
+          <label className="field" style={{ maxWidth: 360, marginTop: 16 }}>
+            <span>Municipality</span>
             <select value={municipalityId} onChange={(e) => void changeMunicipality(e.target.value)}>
               {data.municipalities.map((item) => (
                 <option key={item.id} value={item.id}>{item.name}</option>
@@ -8078,6 +8081,11 @@ function OperatorFaresPage() {
             </select>
           </label>
         )}
+        {municipalityId && data.municipalityName ? (
+          <p className="muted" style={{ margin: '0 0 12px' }}>
+            Editing rates for <strong style={{ color: 'var(--text)' }}>{data.municipalityName}</strong>
+          </p>
+        ) : null}
         <RelatedFareRatesTable
           data={data}
           motorcycle={motorcycle}
@@ -8227,13 +8235,13 @@ function OperatorSurchargesPage() {
       <div className="toolbar">
         <div>
           <h2 style={{ margin: 0 }}>Surcharges</h2>
-          <p className="muted" style={{ margin: '6px 0 0' }}>
-            Add time windows or date ranges for {data.operatorName}
-            {data.municipalityName ? ` in ${data.municipalityName}` : ''}. Each surcharge can be Active or Off.
+          <p className="muted" style={{ margin: '6px 0 0', maxWidth: 480 }}>
+            Time windows and date ranges for {data.operatorName}
+            {data.municipalityName ? ` · ${data.municipalityName}` : ''}.
           </p>
           {data.municipalities.length > 0 ? (
-            <label style={{ display: 'block', marginTop: 10, maxWidth: 320 }}>
-              Municipality
+            <label className="field" style={{ maxWidth: 320, marginTop: 14, marginBottom: 0 }}>
+              <span>Municipality</span>
               <select value={municipalityId} onChange={(e) => void changeMunicipality(e.target.value)}>
                 {data.municipalities.map((item) => (
                   <option key={item.id} value={item.id}>{item.name}</option>
