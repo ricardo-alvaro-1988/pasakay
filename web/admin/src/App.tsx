@@ -4489,120 +4489,92 @@ function RelatedFareRatesTable({
     )
   }
 
+  function vehiclePanel(
+    vehicle: VehicleType,
+    draft: FareDraft,
+    systemPercent: number,
+    rates: FareRates | null,
+    locked: boolean,
+  ) {
+    const total = commissionSum(systemPercent, draft)
+    return (
+      <section className="fare-vehicle-panel">
+        <header className="fare-vehicle-panel-head">
+          <h3>{vehicle}</h3>
+          {editable ? (
+            <div className="chips">
+              <button type="button" className={draft.isActive ? 'on' : ''} disabled={locked} onClick={() => onChange?.(vehicle, { isActive: true })}>Active</button>
+              <button type="button" className={!draft.isActive ? 'on' : ''} disabled={locked} onClick={() => onChange?.(vehicle, { isActive: false })}>Off</button>
+            </div>
+          ) : (
+            rates ? <StatusTag active={rates.isActive} /> : <span className="muted">—</span>
+          )}
+        </header>
+
+        <div className="fare-vehicle-block">
+          <div className="fare-vehicle-label">Passenger tiers</div>
+          {editable ? tiersEditor(vehicle, draft, locked) : tiersReadonly(rates)}
+        </div>
+
+        <div className="fare-vehicle-block">
+          <div className="fare-vehicle-label">Commission</div>
+          <div className="fare-commission-grid">
+            <div>
+              <small>System</small>
+              <strong className="fare-matrix-system-value">{percent(systemPercent)}</strong>
+            </div>
+            <div>
+              <small>Operator</small>
+              {editable ? (
+                <input
+                  value={draft.operatorCommissionPercent}
+                  disabled={locked}
+                  onChange={(e) => onChange?.(vehicle, { operatorCommissionPercent: e.target.value })}
+                />
+              ) : (
+                <strong>{rates ? percent(rates.operatorCommissionPercent) : '—'}</strong>
+              )}
+            </div>
+            <div>
+              <small>Driver</small>
+              {editable ? (
+                <input
+                  value={draft.driverCommissionPercent}
+                  disabled={locked}
+                  onChange={(e) => onChange?.(vehicle, { driverCommissionPercent: e.target.value })}
+                />
+              ) : (
+                <strong>{rates ? percent(rates.driverCommissionPercent) : '—'}</strong>
+              )}
+            </div>
+            <div>
+              <small>Total</small>
+              <strong className={total === 100 ? '' : 'error'}>{percent(total)}</strong>
+            </div>
+          </div>
+          <p className="muted" style={{ margin: '8px 0 0', fontSize: 12 }}>System is set by Super Admin. The three shares must add up to 100%.</p>
+        </div>
+
+        <div className="fare-vehicle-block">
+          <div className="fare-vehicle-label">Surcharges</div>
+          <div>{surchargeSummary(rates)}</div>
+        </div>
+      </section>
+    )
+  }
+
   return (
-    <div className="table-wrap" style={{ marginTop: 8 }}>
+    <div className="fare-matrix-layout">
       {editable ? (
-        <div className="chips" style={{ marginBottom: 12 }}>
+        <div className="chips" style={{ marginBottom: 14 }}>
           <button type="button" className={linked ? 'on' : ''} onClick={() => onLinked?.(true)}>Same rates for both</button>
           <button type="button" className={!linked ? 'on' : ''} onClick={() => onLinked?.(false)}>Set each vehicle</button>
         </div>
       ) : null}
-      <table className="fare-matrix">
-        <thead>
-          <tr>
-            <th>Rate</th>
-            <th>Motorcycle</th>
-            <th>Tricycle</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>
-              Passenger tiers
-              <small className="muted" style={{ display: 'block', fontWeight: 500 }}>By person count</small>
-            </td>
-            <td>{editable ? tiersEditor('Motorcycle', mc, false) : tiersReadonly(data.motorcycle)}</td>
-            <td>{editable ? tiersEditor('Tricycle', trike, !!linked) : tiersReadonly(data.tricycle)}</td>
-          </tr>
-          <tr>
-            <td>Status</td>
-            <td>
-              {editable ? (
-                <div className="chips">
-                  <button type="button" className={mc.isActive ? 'on' : ''} onClick={() => onChange('Motorcycle', { isActive: true })}>Active</button>
-                  <button type="button" className={!mc.isActive ? 'on' : ''} onClick={() => onChange('Motorcycle', { isActive: false })}>Off</button>
-                </div>
-              ) : (data.motorcycle ? <StatusTag active={data.motorcycle.isActive} /> : '—')}
-            </td>
-            <td>
-              {editable ? (
-                <div className="chips">
-                  <button type="button" className={trike.isActive ? 'on' : ''} disabled={linked} onClick={() => onChange('Tricycle', { isActive: true })}>Active</button>
-                  <button type="button" className={!trike.isActive ? 'on' : ''} disabled={linked} onClick={() => onChange('Tricycle', { isActive: false })}>Off</button>
-                </div>
-              ) : (data.tricycle ? <StatusTag active={data.tricycle.isActive} /> : '—')}
-            </td>
-          </tr>
-          <tr className="fare-matrix-system">
-            <td>
-              <span className="fare-matrix-system-label">System commission</span>
-              <small className="fare-matrix-system-note">Super Admin · read-only</small>
-            </td>
-            <td><span className="fare-matrix-system-value">{percent(data.motorcycleCommissionPercent)}</span></td>
-            <td><span className="fare-matrix-system-value">{percent(data.tricycleCommissionPercent)}</span></td>
-          </tr>
-          <tr>
-            <td>Operator commission</td>
-            <td>
-              {editable ? (
-                <input
-                  value={mc.operatorCommissionPercent}
-                  onChange={(e) => onChange('Motorcycle', { operatorCommissionPercent: e.target.value })}
-                />
-              ) : (data.motorcycle ? percent(data.motorcycle.operatorCommissionPercent) : '—')}
-            </td>
-            <td>
-              {editable ? (
-                <input
-                  value={trike.operatorCommissionPercent}
-                  onChange={(e) => onChange('Tricycle', { operatorCommissionPercent: e.target.value })}
-                />
-              ) : (data.tricycle ? percent(data.tricycle.operatorCommissionPercent) : '—')}
-            </td>
-          </tr>
-          <tr>
-            <td>Driver commission</td>
-            <td>
-              {editable ? (
-                <input
-                  value={mc.driverCommissionPercent}
-                  onChange={(e) => onChange('Motorcycle', { driverCommissionPercent: e.target.value })}
-                />
-              ) : (data.motorcycle ? percent(data.motorcycle.driverCommissionPercent) : '—')}
-            </td>
-            <td>
-              {editable ? (
-                <input
-                  value={trike.driverCommissionPercent}
-                  onChange={(e) => onChange('Tricycle', { driverCommissionPercent: e.target.value })}
-                />
-              ) : (data.tricycle ? percent(data.tricycle.driverCommissionPercent) : '—')}
-            </td>
-          </tr>
-          <tr>
-            <td>Commission total</td>
-            <td>
-              <strong className={commissionSum(data.motorcycleCommissionPercent, mc) === 100 ? '' : 'error'}>
-                {percent(commissionSum(data.motorcycleCommissionPercent, mc))}
-              </strong>
-            </td>
-            <td>
-              <strong className={commissionSum(data.tricycleCommissionPercent, trike) === 100 ? '' : 'error'}>
-                {percent(commissionSum(data.tricycleCommissionPercent, trike))}
-              </strong>
-            </td>
-          </tr>
-          <tr>
-            <td>Surcharges</td>
-            <td>{surchargeSummary(data.motorcycle)}</td>
-            <td>{surchargeSummary(data.tricycle)}</td>
-          </tr>
-        </tbody>
-      </table>
-      <p className="muted" style={{ marginTop: 10 }}>
-        System commission is set by Super Admin. Operator and driver shares are set here. The three must add up to 100% for each vehicle.
-        Passenger tiers set the base km amount and succeeding km rate by number of persons.
-      </p>
+      <div className="fare-vehicle-panels">
+        {vehiclePanel('Motorcycle', mc, data.motorcycleCommissionPercent, data.motorcycle, false)}
+        {vehiclePanel('Tricycle', trike, data.tricycleCommissionPercent, data.tricycle, !!linked && editable)}
+      </div>
     </div>
   )
 }
