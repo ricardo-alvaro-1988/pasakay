@@ -94,3 +94,5 @@ Debug rider builds also use `https://yapasakay.com`.
 ## Three-site production
 
 Jenkins deploys the same production package to `yapasakay.com`, `pricebadz.com`, and `pasakyaman.com` from `main`. Each site keeps its own Linux service, upload folder, release metadata, and SQL Server database. See [deploy/pricebadz-production.md](deploy/pricebadz-production.md) and [deploy/pasakyaman-production.md](deploy/pasakyaman-production.md) for clone setup notes.
+
+<!-- final testing -->
