@@ -93,7 +93,7 @@ pipeline {
                         ssh_opts="-i ${SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
                         while IFS='|' read -r target_name target_host deploy_path deploy_service env_file health_url release_root; do
-                            if [ -z "${target_name}" ] || [[ "${target_name}" == \#* ]]; then
+                            if [ -z "${target_name}" ] || [[ "${target_name:0:1}" == "#" ]]; then
                                 continue
                             fi
 
