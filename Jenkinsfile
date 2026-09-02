@@ -108,6 +108,7 @@ pipeline {
                         done <<TARGETS
 yapasakay|${DEPLOY_HOST}|/var/www/yapasakay|yapasakay.service|/etc/yapasakay/yapasakay-api.env|http://127.0.0.1:5003/health|/var/www/releases/yapasakay
 pricebadz|${DEPLOY_HOST}|/var/www/pricebadz|pricebadz.service|/etc/pricebadz/pricebadz-api.env|http://127.0.0.1:5004/health|/var/www/releases/pricebadz
+pasakyaman|${DEPLOY_HOST}|/var/www/pasakyaman|pasakyaman.service|/etc/pasakyaman/pasakyaman-api.env|http://127.0.0.1:5005/health|/var/www/releases/pasakyaman
 TARGETS
                     '''
                 }
