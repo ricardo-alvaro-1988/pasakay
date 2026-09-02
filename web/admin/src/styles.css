@@ -827,6 +827,9 @@ input:-webkit-autofill:focus {
   font-size: 14px;
   font-weight: 650;
 }
+.commission-section {
+  margin: 8px 0 18px;
+}
 .star-rating {
   display: flex;
   align-items: center;

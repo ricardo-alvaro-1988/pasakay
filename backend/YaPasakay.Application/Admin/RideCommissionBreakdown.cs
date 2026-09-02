@@ -18,7 +18,7 @@ public static class RideCommissionCalculator
 
     public static RideCommissionBreakdown? ForTrip(Trip trip, Operator op, FareMatrix? fareMatrix)
     {
-        if (trip.Status != TripStatus.Completed)
+        if (trip.Status == TripStatus.Cancelled || trip.Fare <= 0)
         {
             return null;
         }

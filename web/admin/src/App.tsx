@@ -3136,84 +3136,92 @@ function DetailItem({ label, value }: { label: string; value: string }) {
 
 type CommissionView = 'operator' | 'rider'
 
-function commissionAmount(amount: number | null | undefined, pct?: number) {
-  if (amount == null) {
-    return '—'
-  }
-  return pct != null ? `${peso(amount)} (${percent(pct)})` : peso(amount)
-}
-
-function CommissionBreakdown({
+function CommissionSection({
   commission,
   view,
   status,
+  fare,
 }: {
   commission: RideCommissionBreakdown | null | undefined
   view: CommissionView
   status: TripStatus
+  fare: number
 }) {
-  if (status !== 'Completed' || !commission) {
-    return <p className="muted">—</p>
-  }
-
-  if (view === 'rider') {
-    const systemAmount = commission.systemAmount + commission.operatorAmount
-    const systemPercent = commission.systemPercent + commission.operatorPercent
-    return (
-      <div className="commission-grid">
-        <div className="commission-row">
-          <span>System</span>
-          <strong>{commissionAmount(systemAmount, systemPercent)}</strong>
-        </div>
-        <div className="commission-row">
-          <span>Rider</span>
-          <strong>{commissionAmount(commission.driverAmount, commission.driverPercent)}</strong>
-        </div>
-      </div>
-    )
+  if (status === 'Cancelled' || !commission) {
+    return null
   }
 
   return (
-    <div className="commission-grid">
-      <div className="commission-row">
-        <span>Admin</span>
-        <strong>{commissionAmount(commission.systemAmount, commission.systemPercent)}</strong>
+    <section className="commission-section">
+      <div className="panel-head" style={{ marginBottom: 8 }}>
+        <div>
+          <h3 style={{ margin: 0 }}>Commission</h3>
+          <p className="muted" style={{ margin: '4px 0 0' }}>
+            {status === 'Completed' ? 'Split of the trip fare' : 'Estimated split of the trip fare'} · Fare {peso(fare)}
+          </p>
+        </div>
       </div>
-      <div className="commission-row">
-        <span>Operator</span>
-        <strong>{commissionAmount(commission.operatorAmount, commission.operatorPercent)}</strong>
-      </div>
-      <div className="commission-row">
-        <span>Rider</span>
-        <strong>{commissionAmount(commission.driverAmount, commission.driverPercent)}</strong>
-      </div>
-    </div>
+      {view === 'rider' ? (
+        <div className="fare-cards">
+          <div className="detail-card">
+            <span>System</span>
+            <p className="detail-name" style={{ marginTop: 8 }}>
+              {peso(commission.systemAmount + commission.operatorAmount)}
+            </p>
+            <p className="muted">{percent(commission.systemPercent + commission.operatorPercent)}</p>
+          </div>
+          <div className="detail-card">
+            <span>Rider</span>
+            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.driverAmount)}</p>
+            <p className="muted">{percent(commission.driverPercent)}</p>
+          </div>
+        </div>
+      ) : (
+        <div className="fare-cards three">
+          <div className="detail-card">
+            <span>Admin</span>
+            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.systemAmount)}</p>
+            <p className="muted">{percent(commission.systemPercent)}</p>
+          </div>
+          <div className="detail-card">
+            <span>Operator</span>
+            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.operatorAmount)}</p>
+            <p className="muted">{percent(commission.operatorPercent)}</p>
+          </div>
+          <div className="detail-card">
+            <span>Rider</span>
+            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.driverAmount)}</p>
+            <p className="muted">{percent(commission.driverPercent)}</p>
+          </div>
+        </div>
+      )}
+    </section>
   )
 }
 
 function commissionTableCell(commission: RideCommissionBreakdown | null | undefined, status: TripStatus) {
-  if (status !== 'Completed' || !commission) {
+  if (status === 'Cancelled' || !commission) {
     return '—'
   }
   return peso(commission.systemAmount)
 }
 
 function operatorCommissionTableCell(commission: RideCommissionBreakdown | null | undefined, status: TripStatus) {
-  if (status !== 'Completed' || !commission) {
+  if (status === 'Cancelled' || !commission) {
     return '—'
   }
   return peso(commission.operatorAmount)
 }
 
 function driverCommissionTableCell(commission: RideCommissionBreakdown | null | undefined, status: TripStatus) {
-  if (status !== 'Completed' || !commission) {
+  if (status === 'Cancelled' || !commission) {
     return '—'
   }
   return peso(commission.driverAmount)
 }
 
 function systemCommissionTableCell(commission: RideCommissionBreakdown | null | undefined, status: TripStatus) {
-  if (status !== 'Completed' || !commission) {
+  if (status === 'Cancelled' || !commission) {
     return '—'
   }
   return peso(commission.systemAmount + commission.operatorAmount)
@@ -3274,10 +3282,6 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
         </div>
         <DetailItem label="Distance" value={`${ride.distanceKm.toFixed(1)} km`} />
         <DetailItem label="Fare" value={peso(ride.fare)} />
-        <div className="detail-item wide">
-          <span>Commission</span>
-          <CommissionBreakdown commission={ride.commission} view={commissionView} status={ride.status} />
-        </div>
         <DetailItem label="Payment" value={paymentMethodLabel(ride.paymentMethod, ride.paymentMethodOther)} />
         <DetailItem label="Duration" value={ride.durationMinutes ? `${ride.durationMinutes} min` : '—'} />
         <DetailItem label="Vehicle" value={ride.vehicleModel ? `${ride.vehicleType} · ${ride.vehicleModel}` : ride.vehicleType} />
@@ -3308,6 +3312,12 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
           status={ride.status}
         />
       </div>
+      <CommissionSection
+        commission={ride.commission}
+        view={commissionView}
+        status={ride.status}
+        fare={ride.fare}
+      />
       <div className="detail-split">
         <div className="detail-card">
           <span>Rider</span>
