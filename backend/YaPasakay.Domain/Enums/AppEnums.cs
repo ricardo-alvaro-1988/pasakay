@@ -119,3 +119,10 @@ public enum OfferStatus
     Expired = 3,
     Declined = 4
 }
+
+public enum BookingDispatchMode
+{
+    Broadcast = 0,
+    Selection = 1,
+    Both = 2
+}

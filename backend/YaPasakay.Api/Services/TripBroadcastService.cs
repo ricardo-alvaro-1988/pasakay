@@ -42,28 +42,16 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             return;
         }
 
-        var outsideCoverage = await OperatorAreaSync.CoverageErrorAsync(
-                db,
-                trip.OperatorId,
-                trip.PickupBarangayId,
-                cancellationToken) is not null;
-
-        var busy = await db.Trips
-            .Where(x => x.OperatorId == trip.OperatorId
-                && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing))
-            .Select(x => x.RiderId)
-            .ToListAsync(cancellationToken);
-        var hailed = await LiveHailedRiderIdsAsync(cancellationToken);
-
-        var riders = await db.RiderProfiles
-            .Include(x => x.Wallet)
-            .Include(x => x.PaymentMethods)
-            .Include(x => x.AppUser)
-            .Where(x => x.OperatorId == trip.OperatorId
-                && x.IsActive
-                && x.IsOnline
-                && x.AppUser.IsActive)
-            .ToListAsync(cancellationToken);
+        var ranked = await RankEligibleRidersAsync(
+            trip.OperatorId,
+            trip.VehicleType,
+            trip.PaymentMethod,
+            trip.PickupLat,
+            trip.PickupLng,
+            trip.PickupBarangayId,
+            preferredRiderId: trip.RiderId,
+            includePreferredEvenIfIneligible: true,
+            cancellationToken);
 
         var existing = await db.TripOffers
             .Where(x => x.TripId == trip.Id)
@@ -74,64 +62,7 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             ? now.Add(ScheduledOfferTtl)
             : now.Add(LiveOfferTtl);
 
-        var ranked = new List<(RiderProfile Rider, double? Distance, bool Preferred)>();
-        foreach (var rider in riders)
-        {
-            var preferred = rider.Id == trip.RiderId;
-            if (outsideCoverage && !preferred)
-            {
-                continue;
-            }
-
-            if ((busy.Contains(rider.Id) || hailed.Contains(rider.Id)) && !preferred)
-            {
-                continue;
-            }
-
-            if (rider.VehicleType != trip.VehicleType)
-            {
-                continue;
-            }
-
-            if (!rider.PaymentMethods.Any(x => x.Method == trip.PaymentMethod))
-            {
-                continue;
-            }
-
-            var balance = rider.Wallet?.Balance ?? 0;
-            if (!preferred && !CanReceiveBookings(balance))
-            {
-                continue;
-            }
-
-            var distance = Geo.DistanceKm(rider.LastLat, rider.LastLng, trip.PickupLat, trip.PickupLng);
-            if (!preferred
-                && trip.PickupLat is not null
-                && trip.PickupLng is not null
-                && distance is double km
-                && km > RadiusKm)
-            {
-                continue;
-            }
-
-            ranked.Add((rider, distance, preferred));
-        }
-
-        var chosen = ranked
-            .OrderByDescending(x => x.Preferred)
-            .ThenBy(x => x.Distance ?? double.MaxValue)
-            .Take(MaxRiders)
-            .ToList();
-
-        if (chosen.All(x => !x.Preferred))
-        {
-            var preferredRider = riders.FirstOrDefault(x => x.Id == trip.RiderId);
-            if (preferredRider is not null && chosen.Count < MaxRiders)
-            {
-                var distance = Geo.DistanceKm(preferredRider.LastLat, preferredRider.LastLng, trip.PickupLat, trip.PickupLng);
-                chosen.Insert(0, (preferredRider, distance, true));
-            }
-        }
+        var chosen = ranked.Take(MaxRiders).ToList();
 
         var notifyRiderIds = new HashSet<Guid>();
         foreach (var (rider, distance, preferred) in chosen)
@@ -187,6 +118,150 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         }
     }
 
+    public async Task<IReadOnlyList<(RiderProfile Rider, double? Distance, bool Preferred)>> RankEligibleRidersAsync(
+        Guid operatorId,
+        VehicleType vehicleType,
+        PaymentMethod paymentMethod,
+        double? pickupLat,
+        double? pickupLng,
+        Guid? pickupBarangayId,
+        Guid? preferredRiderId,
+        bool includePreferredEvenIfIneligible,
+        CancellationToken cancellationToken)
+    {
+        var outsideCoverage = await OperatorAreaSync.CoverageErrorAsync(
+                db,
+                operatorId,
+                pickupBarangayId,
+                cancellationToken) is not null;
+
+        var busy = await db.Trips
+            .Where(x => x.OperatorId == operatorId
+                && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing))
+            .Select(x => x.RiderId)
+            .ToListAsync(cancellationToken);
+        var hailed = await LiveHailedRiderIdsAsync(cancellationToken);
+
+        var riders = await db.RiderProfiles
+            .Include(x => x.Wallet)
+            .Include(x => x.PaymentMethods)
+            .Include(x => x.AppUser)
+            .Include(x => x.Operator)
+            .Where(x => x.OperatorId == operatorId
+                && x.IsActive
+                && x.IsOnline
+                && x.AppUser.IsActive)
+            .ToListAsync(cancellationToken);
+
+        var ranked = new List<(RiderProfile Rider, double? Distance, bool Preferred)>();
+        foreach (var rider in riders)
+        {
+            var preferred = preferredRiderId is Guid pref && rider.Id == pref;
+            if (outsideCoverage && !preferred)
+            {
+                continue;
+            }
+
+            if ((busy.Contains(rider.Id) || hailed.Contains(rider.Id)) && !preferred)
+            {
+                continue;
+            }
+
+            if (rider.VehicleType != vehicleType)
+            {
+                continue;
+            }
+
+            if (!rider.PaymentMethods.Any(x => x.Method == paymentMethod))
+            {
+                continue;
+            }
+
+            var balance = rider.Wallet?.Balance ?? 0;
+            if (!preferred && !CanReceiveBookings(balance))
+            {
+                continue;
+            }
+
+            var distance = Geo.DistanceKm(rider.LastLat, rider.LastLng, pickupLat, pickupLng);
+            if (!preferred
+                && pickupLat is not null
+                && pickupLng is not null
+                && distance is double km
+                && km > RadiusKm)
+            {
+                continue;
+            }
+
+            ranked.Add((rider, distance, preferred));
+        }
+
+        var ordered = ranked
+            .OrderByDescending(x => x.Preferred)
+            .ThenBy(x => x.Distance ?? double.MaxValue)
+            .ToList();
+
+        if (includePreferredEvenIfIneligible
+            && preferredRiderId is Guid preferredId
+            && ordered.All(x => !x.Preferred))
+        {
+            var preferredRider = riders.FirstOrDefault(x => x.Id == preferredId)
+                ?? await db.RiderProfiles
+                    .Include(x => x.Wallet)
+                    .Include(x => x.PaymentMethods)
+                    .Include(x => x.AppUser)
+                    .Include(x => x.Operator)
+                    .FirstOrDefaultAsync(x => x.Id == preferredId && x.OperatorId == operatorId, cancellationToken);
+            if (preferredRider is not null && ordered.Count < MaxRiders)
+            {
+                var distance = Geo.DistanceKm(preferredRider.LastLat, preferredRider.LastLng, pickupLat, pickupLng);
+                ordered.Insert(0, (preferredRider, distance, true));
+            }
+        }
+
+        return ordered;
+    }
+
+    public async Task<IReadOnlyList<CustomerHailRider>> ListAvailableRidersAsync(
+        Guid operatorId,
+        VehicleType vehicleType,
+        PaymentMethod paymentMethod,
+        double pickupLat,
+        double pickupLng,
+        Guid? pickupBarangayId,
+        CancellationToken cancellationToken)
+    {
+        var ranked = await RankEligibleRidersAsync(
+            operatorId,
+            vehicleType,
+            paymentMethod,
+            pickupLat,
+            pickupLng,
+            pickupBarangayId,
+            preferredRiderId: null,
+            includePreferredEvenIfIneligible: false,
+            cancellationToken);
+
+        return ranked
+            .Take(MaxRiders)
+            .Select(x => MapAvailableRider(x.Rider, x.Distance, busy: false))
+            .ToList();
+    }
+
+    public static CustomerHailRider MapAvailableRider(RiderProfile rider, double? distanceKm, bool busy) =>
+        new(
+            rider.Id,
+            rider.AppUser.FullName,
+            rider.PlateNumber,
+            rider.VehicleType,
+            rider.VehicleModel,
+            UploadUrls.FromPath(rider.ProfilePhotoPath),
+            rider.AppUser.PhoneNumber,
+            rider.IsOnline,
+            busy,
+            rider.Operator?.CompanyName ?? string.Empty,
+            rider.PaymentMethods.Select(x => x.Method).Distinct().OrderBy(x => x).ToList(),
+            distanceKm is double km ? Math.Round(km, 2) : null);
     public async Task BroadcastPendingForOperatorAsync(Guid operatorId, CancellationToken cancellationToken)
     {
         var tripIds = await db.Trips

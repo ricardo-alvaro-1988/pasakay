@@ -13,6 +13,7 @@ import {
   passengerLabel,
   Quote,
   Stop,
+  HailRider,
   tripHeadline,
   tripCanSendChat,
   tripCanViewChat,
@@ -241,6 +242,10 @@ function Home({
   const [installed, setInstalled] = useState(() => isAppInstalled())
   const [installNote, setInstallNote] = useState('')
   const [showQr, setShowQr] = useState(false)
+  const [availableRiders, setAvailableRiders] = useState<HailRider[]>([])
+  const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null)
+  const [dispatchChoice, setDispatchChoice] = useState<'pick' | 'broadcast'>('pick')
+  const [loadingRiders, setLoadingRiders] = useState(false)
   const installPrompt = useRef<BeforeInstallPromptEvent | null>(null)
   const locateGen = useRef(0)
   const [locating, setLocating] = useState(false)
@@ -522,6 +527,38 @@ function Home({
     return () => { ignore = true }
   }, [pickup, dropoff, payment, paymentRef, trip, hail?.riderId, hail?.vehicleType, passengers])
 
+  const dispatchMode = quotes[vehicle]?.bookingDispatchMode ?? 'Broadcast'
+  const needsRiderPick = !hail && (dispatchMode === 'Selection' || (dispatchMode === 'Both' && dispatchChoice === 'pick'))
+
+  useEffect(() => {
+    if (!needsRiderPick || !pickup || !dropoff || trip || hail) {
+      setAvailableRiders([])
+      setSelectedRiderId(null)
+      return
+    }
+    let cancelled = false
+    setLoadingRiders(true)
+    api.availableRiders({
+      vehicleType: vehicle,
+      paymentMethod: payment,
+      pickupLat: pickup.lat,
+      pickupLng: pickup.lng,
+      pickupBarangayId: pickup.barangayId,
+    })
+      .then((rows) => {
+        if (cancelled) return
+        setAvailableRiders(rows)
+        setSelectedRiderId((current) => (current && rows.some((r) => r.riderId === current) ? current : null))
+      })
+      .catch(() => {
+        if (!cancelled) setAvailableRiders([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingRiders(false)
+      })
+    return () => { cancelled = true }
+  }, [needsRiderPick, pickup, dropoff, vehicle, payment, trip, hail?.riderId])
+
   useEffect(() => {
     if (hail) setShowQr(false)
   }, [hail?.riderId])
@@ -675,10 +712,15 @@ function Home({
       setError('This rider is on another trip right now.')
       return
     }
+    if (needsRiderPick && !selectedRiderId) {
+      setError('Choose a rider to continue.')
+      return
+    }
     setBusy(true)
     setError('')
     try {
-      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, hail?.riderId, vehicle === 'Tricycle' ? passengers : 1)))
+      const riderId = hail?.riderId ?? (needsRiderPick ? selectedRiderId ?? undefined : undefined)
+      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, vehicle === 'Tricycle' ? passengers : 1)))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not book.'
       setError(isOperatorCoverageError(message) ? '' : message)
@@ -749,10 +791,12 @@ function Home({
   const quote = quotes[vehicle]
   const searchingArea = noOperator.searching
   const canBook = !!pickup && !!dropoff && !quoting && !searchingArea && !noOperator.uncovered && !!quote && quote.riderAvailable !== false && !hail?.isBusy && (payment !== 'Other' || !!paymentRef.trim())
+    && (!needsRiderPick || !!selectedRiderId)
+    && !(needsRiderPick && !loadingRiders && availableRiders.length === 0)
   const bookLabel = !pickup || !dropoff
     ? 'Choose pickup and drop-off'
     : busy || searchingArea
-      ? (hail && busy ? 'Requesting…' : 'Finding a ride…')
+      ? (hail && busy ? 'Requesting…' : needsRiderPick && busy ? 'Booking…' : 'Finding a ride…')
       : quoting
         ? 'Getting fare…'
         : noOperator.uncovered
@@ -761,9 +805,17 @@ function Home({
           ? `Confirm ${vehicle}`
           : quote.riderAvailable === false
             ? `No ${vehicle.toLowerCase()} rider in this area`
-            : hail
-              ? `Request ${hail.fullName.split(' ')[0]} · ${peso(quote.fare)}`
-              : `Confirm ${vehicle} · ${peso(quote.fare)} · ${kmLabel(quote.distanceKm)}`
+            : needsRiderPick && loadingRiders
+              ? 'Finding riders…'
+              : needsRiderPick && availableRiders.length === 0
+                ? `No ${vehicle.toLowerCase()} riders nearby`
+                : needsRiderPick && !selectedRiderId
+                  ? 'Choose a rider'
+                  : hail
+                    ? `Request ${hail.fullName.split(' ')[0]} · ${peso(quote.fare)}`
+                    : needsRiderPick && selectedRiderId
+                      ? `Book ${availableRiders.find((r) => r.riderId === selectedRiderId)?.fullName.split(' ')[0] ?? 'rider'} · ${peso(quote.fare)}`
+                      : `Confirm ${vehicle} · ${peso(quote.fare)} · ${kmLabel(quote.distanceKm)}`
 
   return (
     <>
@@ -912,6 +964,56 @@ function Home({
                   }}
                   onRefNo={setPaymentRef}
                 />
+                {!hail && dispatchMode === 'Both' && (
+                  <div className="dispatch-choice" role="group" aria-label="How to find a rider">
+                    <button
+                      type="button"
+                      className={dispatchChoice === 'pick' ? 'on' : ''}
+                      onClick={() => setDispatchChoice('pick')}
+                    >
+                      Pick a rider
+                    </button>
+                    <button
+                      type="button"
+                      className={dispatchChoice === 'broadcast' ? 'on' : ''}
+                      onClick={() => { setDispatchChoice('broadcast'); setSelectedRiderId(null) }}
+                    >
+                      Any nearby
+                    </button>
+                  </div>
+                )}
+                {needsRiderPick && (
+                  <div className="rider-pick">
+                    {loadingRiders ? (
+                      <p className="muted">Looking for nearby riders…</p>
+                    ) : availableRiders.length === 0 ? (
+                      <p className="muted">No riders available right now. Try again shortly.</p>
+                    ) : (
+                      <ul className="rider-pick-list">
+                        {availableRiders.map((rider) => (
+                          <li key={rider.riderId}>
+                            <button
+                              type="button"
+                              className={`rider-pick-row${selectedRiderId === rider.riderId ? ' on' : ''}`}
+                              onClick={() => setSelectedRiderId(rider.riderId)}
+                            >
+                              {rider.photoUrl
+                                ? <img src={mediaUrl(rider.photoUrl)} alt="" />
+                                : <div className="hail-fallback">{rider.fullName.slice(0, 1)}</div>}
+                              <span className="rider-pick-copy">
+                                <b>{rider.fullName}</b>
+                                <small>
+                                  {[rider.plateNumber, rider.vehicleModel || rider.vehicleType].filter(Boolean).join(' · ')}
+                                  {typeof rider.distanceKm === 'number' ? ` · ${kmLabel(rider.distanceKm)}` : ''}
+                                </small>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
                 {error && !isOperatorCoverageError(error) && <p className="error">{error}</p>}
                 <NoOperatorNotice show={noOperator.uncovered} />
                 <button className={`primary${searchingArea ? ' searching pulse' : ''}`} disabled={busy || !canBook} onClick={() => void book()}>

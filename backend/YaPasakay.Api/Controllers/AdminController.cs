@@ -656,6 +656,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             op.IsActive,
             op.MotorcycleCommissionPercent,
             op.TricycleCommissionPercent,
+            op.BookingDispatchMode,
             riders.Count,
             op.Riders.Count(x => x.VehicleType == VehicleType.Motorcycle),
             op.Riders.Count(x => x.VehicleType == VehicleType.Tricycle),

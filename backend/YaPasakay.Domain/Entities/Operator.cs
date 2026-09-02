@@ -1,4 +1,5 @@
 using YaPasakay.Domain.Common;
+using YaPasakay.Domain.Enums;
 
 namespace YaPasakay.Domain.Entities;
 
@@ -19,6 +20,7 @@ public class Operator : BaseEntity
     public bool IsActive { get; set; } = true;
     public decimal MotorcycleCommissionPercent { get; set; } = 10;
     public decimal TricycleCommissionPercent { get; set; } = 5;
+    public BookingDispatchMode BookingDispatchMode { get; set; } = BookingDispatchMode.Broadcast;
     public ICollection<AppUser> Users { get; set; } = new List<AppUser>();
     public ICollection<RiderProfile> Riders { get; set; } = new List<RiderProfile>();
     public ICollection<OperatorBarangay> Areas { get; set; } = new List<OperatorBarangay>();

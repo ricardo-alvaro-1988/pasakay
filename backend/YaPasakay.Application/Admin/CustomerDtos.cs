@@ -40,7 +40,8 @@ public record CustomerHailRider(
     bool IsOnline,
     bool IsBusy,
     string CompanyName,
-    IReadOnlyList<PaymentMethod> PaymentMethods);
+    IReadOnlyList<PaymentMethod> PaymentMethods,
+    double? DistanceKm = null);
 
 public record TripChatSendRequest(string Body);
 
@@ -51,7 +52,8 @@ public record CustomerQuoteResponse(
     string OperatorName,
     VehicleType VehicleType,
     PaymentMethod PaymentMethod,
-    bool RiderAvailable);
+    bool RiderAvailable,
+    BookingDispatchMode BookingDispatchMode);
 
 public record CustomerServiceCheckRequest(
     Guid? PickupBarangayId,

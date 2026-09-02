@@ -725,6 +725,76 @@ button.brand-pill:active { transform: scale(.98); }
   padding: 6px 10px;
   font-size: 12px;
 }
+.dispatch-choice {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+.dispatch-choice button {
+  margin: 0;
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  font-weight: 700;
+  font-size: 13px;
+}
+.dispatch-choice button.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+}
+.rider-pick {
+  margin: 0 0 8px;
+}
+.rider-pick .muted {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+.rider-pick-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 180px;
+  overflow: auto;
+}
+.rider-pick-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  text-align: left;
+}
+.rider-pick-row.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.rider-pick-row img {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.rider-pick-copy b,
+.rider-pick-copy small {
+  display: block;
+  line-height: 1.2;
+}
+.rider-pick-copy small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
 .locate {
   position: absolute;
   z-index: 3;

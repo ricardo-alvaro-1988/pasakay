@@ -83,6 +83,7 @@ public record OperatorDetailResponse(
     bool IsActive,
     decimal MotorcycleCommissionPercent,
     decimal TricycleCommissionPercent,
+    BookingDispatchMode BookingDispatchMode,
     int RiderCount,
     int RidersMotorcycle,
     int RidersTricycle,
@@ -90,6 +91,8 @@ public record OperatorDetailResponse(
     OperatorAddressItem Address,
     IReadOnlyList<OperatorAreaItem> Areas,
     IReadOnlyList<RiderListItem> Riders);
+
+public record SaveBookingDispatchModeRequest(BookingDispatchMode BookingDispatchMode);
 
 public record RiderListItem(
     Guid Id,

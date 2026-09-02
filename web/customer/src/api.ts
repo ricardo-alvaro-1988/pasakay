@@ -86,7 +86,10 @@ export type Quote = {
   vehicleType: VehicleType
   paymentMethod: PaymentMethod
   riderAvailable?: boolean
+  bookingDispatchMode?: BookingDispatchMode
 }
+
+export type BookingDispatchMode = 'Broadcast' | 'Selection' | 'Both'
 
 export type Stop = {
   label: string
@@ -125,6 +128,7 @@ export type HailRider = {
   isBusy: boolean
   companyName: string
   paymentMethods: PaymentMethod[]
+  distanceKm?: number | null
 }
 
 export type ChatMessage = {
@@ -369,6 +373,22 @@ export const api = {
   mapsConfig: () => request<{ googleMapsBrowserKey: string }>('/api/public/maps'),
   desk: () => request<Desk>('/api/customer/desk'),
   quote: (body: BookBody) => request<Quote>('/api/customer/quote', { method: 'POST', body: JSON.stringify(body) }),
+  availableRiders: (opts: {
+    vehicleType: VehicleType
+    paymentMethod: PaymentMethod
+    pickupLat: number
+    pickupLng: number
+    pickupBarangayId?: string
+  }) => {
+    const params = new URLSearchParams({
+      vehicleType: opts.vehicleType,
+      paymentMethod: opts.paymentMethod,
+      pickupLat: String(opts.pickupLat),
+      pickupLng: String(opts.pickupLng),
+    })
+    if (opts.pickupBarangayId) params.set('pickupBarangayId', opts.pickupBarangayId)
+    return request<HailRider[]>(`/api/customer/riders/available?${params}`)
+  },
   serviceCheck: (body: {
     pickupBarangayId?: string
     pickupDetails: string

@@ -83,6 +83,48 @@ public class CustomerBookingsController(
             rider.PaymentMethods.Select(x => x.Method).OrderBy(x => x).ToList()));
     }
 
+    [HttpGet("riders/available")]
+    public async Task<ActionResult<IReadOnlyList<CustomerHailRider>>> AvailableRiders(
+        [FromQuery] VehicleType vehicleType,
+        [FromQuery] PaymentMethod paymentMethod,
+        [FromQuery] double pickupLat,
+        [FromQuery] double pickupLng,
+        [FromQuery] Guid? pickupBarangayId,
+        CancellationToken cancellationToken)
+    {
+        var (customer, status, message) = await CustomerContext.RequireAsync(db, User, cancellationToken);
+        if (customer is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        if (pickupLat == 0 || pickupLng == 0)
+        {
+            return BadRequest(new { message = "Set pickup on the map first." });
+        }
+
+        if (vehicleType is not VehicleType.Motorcycle and not VehicleType.Tricycle)
+        {
+            return BadRequest(new { message = "Choose Motorcycle or Tricycle." });
+        }
+
+        var op = await ResolveOperatorForPickupAsync(pickupBarangayId, pickupLat, pickupLng, cancellationToken);
+        if (op is null)
+        {
+            return BadRequest(new { message = "No operator covers this pickup area yet." });
+        }
+
+        var riders = await broadcast.ListAvailableRidersAsync(
+            op.Id,
+            vehicleType,
+            paymentMethod,
+            pickupLat,
+            pickupLng,
+            pickupBarangayId,
+            cancellationToken);
+        return Ok(riders);
+    }
+
     [HttpGet("trips/{id:guid}/chat")]
     public async Task<ActionResult<IReadOnlyList<RideChatMessageItem>>> Chat(
         Guid id,
@@ -215,7 +257,8 @@ public class CustomerBookingsController(
             prepared.Operator!.CompanyName,
             prepared.VehicleType,
             body.PaymentMethod,
-            prepared.Rider is not null));
+            prepared.Rider is not null || prepared.Operator.BookingDispatchMode != BookingDispatchMode.Broadcast,
+            prepared.Operator.BookingDispatchMode));
     }
 
     [HttpPost("service-check")]
@@ -297,19 +340,72 @@ public class CustomerBookingsController(
             return BadRequest(new { message = "Ask the rider to scan your QR first, then confirm the trip." });
         }
 
-        var prepared = await PrepareAsync(body, requireHailReady: body.RiderId is Guid, requireRider: true, cancellationToken);
+        var isDirectHail = body.HailQr
+            || (TripBroadcastService.HailIsLive(customer.HailAtUtc)
+                && customer.HailRiderId is Guid hailedId
+                && body.RiderId == hailedId);
+
+        var preview = await PrepareAsync(
+            body with { RiderId = isDirectHail ? body.RiderId : null },
+            requireHailReady: false,
+            requireRider: false,
+            cancellationToken);
+        if (preview.Error is not null || preview.Operator is null)
+        {
+            return BadRequest(new { message = preview.Error ?? "Could not create this booking." });
+        }
+
+        var mode = preview.Operator.BookingDispatchMode;
+        var customerPicksRider = !isDirectHail && body.RiderId is Guid;
+        if (!isDirectHail)
+        {
+            if (mode == BookingDispatchMode.Selection && body.RiderId is null)
+            {
+                return BadRequest(new { message = "Choose a rider for this trip." });
+            }
+
+            if (mode == BookingDispatchMode.Broadcast && body.RiderId is Guid)
+            {
+                return BadRequest(new { message = "This operator broadcasts to nearby riders. Confirm without picking a rider." });
+            }
+        }
+
+        var prepared = await PrepareAsync(
+            body,
+            requireHailReady: isDirectHail,
+            requireRider: true,
+            cancellationToken);
         if (prepared.Error is not null || prepared.Operator is null || prepared.Rider is null || prepared.Pickup is null || prepared.Dropoff is null)
         {
             return BadRequest(new { message = prepared.Error ?? "Could not create this booking." });
         }
 
+        if (customerPicksRider)
+        {
+            var eligible = await broadcast.RankEligibleRidersAsync(
+                prepared.Operator.Id,
+                prepared.VehicleType,
+                body.PaymentMethod,
+                prepared.PickupLat,
+                prepared.PickupLng,
+                prepared.Pickup.Id,
+                preferredRiderId: null,
+                includePreferredEvenIfIneligible: false,
+                cancellationToken);
+            if (eligible.All(x => x.Rider.Id != prepared.Rider.Id))
+            {
+                return BadRequest(new { message = "That rider is not available for this pickup right now." });
+            }
+        }
+
+        var assignImmediately = isDirectHail || customerPicksRider;
         var now = DateTime.UtcNow;
         var trip = new Trip
         {
             OperatorId = prepared.Operator.Id,
             RiderId = prepared.Rider.Id,
             VehicleType = prepared.VehicleType,
-            Status = body.RiderId is Guid ? TripStatus.Waiting : TripStatus.Pending,
+            Status = assignImmediately ? TripStatus.Waiting : TripStatus.Pending,
             Pickup = prepared.PickupDetails,
             PickupDetails = prepared.PickupDetails,
             PickupBarangayId = prepared.Pickup.Id,
@@ -326,7 +422,7 @@ public class CustomerBookingsController(
             Reference = scheduled is DateTime at
                 ? $"YP{at:yyyyMMdd}-S{Random.Shared.Next(10, 99):00}{now:ss}"
                 : $"YP{now:yyyyMMdd}-C{Random.Shared.Next(10, 99):00}{now:ss}",
-            Notes = body.HailQr || body.RiderId is Guid
+            Notes = isDirectHail
                 ? TripBroadcastService.DirectHailNote
                 : string.IsNullOrWhiteSpace(body.Notes) ? null : body.Notes.Trim(),
             Fare = prepared.Fare,
@@ -340,10 +436,14 @@ public class CustomerBookingsController(
             ScheduledAtUtc = scheduled
         };
         db.Trips.Add(trip);
-        if (body.RiderId is Guid)
+        if (assignImmediately)
         {
-            customer.HailRiderId = null;
-            customer.HailAtUtc = null;
+            if (isDirectHail)
+            {
+                customer.HailRiderId = null;
+                customer.HailAtUtc = null;
+            }
+
             var distance = Geo.DistanceKm(prepared.Rider.LastLat, prepared.Rider.LastLng, prepared.PickupLat, prepared.PickupLng);
             db.TripOffers.Add(new TripOffer
             {
@@ -357,8 +457,8 @@ public class CustomerBookingsController(
                 RespondedAtUtc = now
             });
             await db.SaveChangesAsync(cancellationToken);
-            await live.RiderChangedAsync(prepared.Rider.Id, "hail-booked", cancellationToken);
-            await live.CustomerChangedAsync(customer.Id, "hail-booked", cancellationToken);
+            await live.RiderChangedAsync(prepared.Rider.Id, isDirectHail ? "hail-booked" : "assigned", cancellationToken);
+            await live.CustomerChangedAsync(customer.Id, isDirectHail ? "hail-booked" : "assigned", cancellationToken);
             return Ok(await CustomerDeskBuilder.BuildAsync(db, customer, cancellationToken));
         }
 
@@ -689,6 +789,36 @@ public class CustomerBookingsController(
         string details,
         CancellationToken cancellationToken) =>
         TerritoryLookup.MatchFromAddressAsync(db, id, details, cancellationToken);
+
+    private async Task<Operator?> ResolveOperatorForPickupAsync(
+        Guid? pickupBarangayId,
+        double pickupLat,
+        double pickupLng,
+        CancellationToken cancellationToken)
+    {
+        Barangay? pickup = null;
+        if (pickupBarangayId is Guid id)
+        {
+            pickup = await db.Barangays
+                .Include(x => x.Municipality)
+                .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        }
+
+        if (pickup is null)
+        {
+            return await db.Operators
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.CompanyName)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        return await db.Operators
+            .Where(x => x.IsActive && (
+                x.Areas.Any(a => a.BarangayId == pickup.Id)
+                || x.Areas.Any(a => a.Barangay.MunicipalityId == pickup.MunicipalityId)))
+            .OrderBy(x => x.CompanyName)
+            .FirstOrDefaultAsync(cancellationToken);
+    }
 
     private sealed class PreparedBooking
     {

@@ -8693,6 +8693,20 @@ function OperatorCompanyPage() {
     }
   }
 
+  async function saveDispatch(mode: 'Broadcast' | 'Selection' | 'Both') {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      setData(await api.saveOperatorDispatchMode(mode))
+      setNotice(`Booking dispatch set to ${mode}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save dispatch mode.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   if (!data) return error ? <p className="error">{error}</p> : <p>Loading company…</p>
 
   return (
@@ -8713,12 +8727,33 @@ function OperatorCompanyPage() {
         </div>
         {data.governmentIdPhotoUrl ? <img className="id-preview" src={data.governmentIdPhotoUrl} alt="Government ID" /> : null}
       </div>
-      <p className="muted">Company profile, areas, and commission are set by Super Admin.</p>
+      <p className="muted">Company profile, areas, and commission are set by Super Admin. You can choose how customer bookings find a rider.</p>
       <div className="detail-grid">
         <DetailItem label="Government ID" value={`${data.governmentIdType} · ${data.governmentId}`} />
         <DetailItem label="Area of operation" value={data.areaOfOperation} />
         <DetailItem label="System Comm moto" value={percent(data.motorcycleCommissionPercent)} />
         <DetailItem label="System Comm tri" value={percent(data.tricycleCommissionPercent)} />
+      </div>
+      <h3>Booking dispatch</h3>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Broadcast: nearby riders race to accept. Selection: customer picks a rider. Both: customer chooses at booking time.
+      </p>
+      <div className="chips" style={{ marginBottom: 8 }}>
+        {([
+          ['Broadcast', 'Broadcast'],
+          ['Selection', 'Selection'],
+          ['Both', 'Both'],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className={(data.bookingDispatchMode ?? 'Broadcast') === value ? 'on' : ''}
+            disabled={busy}
+            onClick={() => void saveDispatch(value)}
+          >
+            {label}
+          </button>
+        ))}
       </div>
       <h3>Service areas</h3>
       {data.areas.length === 0 ? <p>No barangays assigned.</p> : (

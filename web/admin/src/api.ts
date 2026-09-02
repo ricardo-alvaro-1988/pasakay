@@ -68,11 +68,14 @@ export type OperatorListItem = {
   isActive: boolean
   motorcycleCommissionPercent: number
   tricycleCommissionPercent: number
+  bookingDispatchMode?: BookingDispatchMode
   riderCount: number
   ridersMotorcycle: number
   ridersTricycle: number
   createdAtUtc: string
 }
+
+export type BookingDispatchMode = 'Broadcast' | 'Selection' | 'Both'
 
 export type Overview = {
   operators: number
@@ -1233,6 +1236,11 @@ export const api = {
   },
   operatorFleet: () => request<OperatorFleet>('/api/operator/fleet'),
   operatorCompany: () => request<OperatorDetail>('/api/operator/company'),
+  saveOperatorDispatchMode: (bookingDispatchMode: BookingDispatchMode) =>
+    request<OperatorDetail>('/api/operator/dispatch', {
+      method: 'PUT',
+      body: JSON.stringify({ bookingDispatchMode }),
+    }),
   changeOperatorPassword: (currentPassword: string, newPassword: string) =>
     request<{ message: string }>('/api/operator/password', {
       method: 'POST',

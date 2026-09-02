@@ -208,6 +208,7 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             loaded.IsActive,
             loaded.MotorcycleCommissionPercent,
             loaded.TricycleCommissionPercent,
+            loaded.BookingDispatchMode,
             riders.Count,
             loaded.Riders.Count(x => x.VehicleType == VehicleType.Motorcycle),
             loaded.Riders.Count(x => x.VehicleType == VehicleType.Tricycle),
@@ -215,6 +216,30 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             YaPasakay.Infrastructure.Persistence.OperatorAddressSync.Map(loaded),
             YaPasakay.Infrastructure.Persistence.OperatorAreaSync.Map(loaded.Areas),
             riders));
+    }
+
+    [HttpPut("dispatch")]
+    public async Task<ActionResult<OperatorDetailResponse>> SaveDispatchMode(
+        [FromBody] SaveBookingDispatchModeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        if (request.BookingDispatchMode is not BookingDispatchMode.Broadcast
+            and not BookingDispatchMode.Selection
+            and not BookingDispatchMode.Both)
+        {
+            return BadRequest(new { message = "Choose Broadcast, Selection, or Both." });
+        }
+
+        op.BookingDispatchMode = request.BookingDispatchMode;
+        op.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return await Company(cancellationToken);
     }
 
     [HttpGet("territories/provinces")]
