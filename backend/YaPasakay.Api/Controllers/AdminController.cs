@@ -694,8 +694,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 x.Rider.AppUser.FullName,
                 x.Rider.PlateNumber,
                 x.VehicleType,
-                x.Pickup,
-                x.Dropoff,
+                x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
+                x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
                 x.Status,
                 x.Fare,
                 x.PaymentMethod,
@@ -1149,8 +1149,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             trip.CustomerPhone,
             MapRideStop(trip.PickupDetails, trip.Pickup, trip.PickupBarangay),
             MapRideStop(trip.DropoffDetails, trip.Dropoff, trip.DropoffBarangay),
-            trip.Pickup,
-            trip.Dropoff,
+            TripAddress.Display(trip.PickupDetails, trip.Pickup),
+            TripAddress.Display(trip.DropoffDetails, trip.Dropoff),
             trip.Notes,
             trip.Fare,
             trip.DistanceKm,
@@ -1183,13 +1183,16 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             RideCommissionCalculator.ForTrip(trip, fare));
     }
 
-    private static RideStopItem MapRideStop(string details, string fullAddress, Barangay? barangay) =>
-        new(
-            string.IsNullOrWhiteSpace(details) ? fullAddress : details,
-            barangay?.Name ?? string.Empty,
-            barangay?.Municipality.Name ?? string.Empty,
-            barangay?.Municipality.Province.Name ?? string.Empty,
-            fullAddress);
+    private static RideStopItem MapRideStop(string details, string fullAddress, Barangay? barangay)
+    {
+        var display = TripAddress.Display(details, fullAddress);
+        return new(
+            display,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            display);
+    }
 
     private IQueryable<Trip> RideDetailQuery() =>
         db.Trips
@@ -1301,8 +1304,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                     x.Id,
                     x.Reference,
                     x.RequestedAtUtc,
-                    x.Pickup,
-                    x.Dropoff,
+                    TripAddress.Display(x.PickupDetails, x.Pickup),
+                    TripAddress.Display(x.DropoffDetails, x.Dropoff),
                     x.CustomerName,
                     x.VehicleType,
                     x.Status,

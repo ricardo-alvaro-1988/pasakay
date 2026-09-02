@@ -115,6 +115,11 @@ class TripScreen extends StatelessWidget {
                     Text(trip.customerName, style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
                     Text(trip.customerPhone, style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Persons: ${passengerLabel(trip.passengerCount)}',
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: brandRed),
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -208,8 +213,15 @@ class TripScreen extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(trip.dropoff, style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 14),
+                    const Text('PERSONS', style: TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12)),
+                    const SizedBox(height: 4),
                     Text(
-                      '${peso(trip.fare)}  ·  ${trip.distanceKm.toStringAsFixed(1)} km  ·  ${passengerLabel(trip.passengerCount)}  ·  ${paymentLabel(trip.paymentMethod)}',
+                      passengerLabel(trip.passengerCount),
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      '${peso(trip.fare)}  ·  ${trip.distanceKm.toStringAsFixed(1)} km  ·  ${paymentLabel(trip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ],

@@ -154,6 +154,11 @@ class _TripsScreenState extends State<TripsScreen> {
                                 const SizedBox(height: 6),
                                 Text(trip.pickup, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600)),
                                 Text(trip.dropoff, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 4),
+                                Text(
+                                  passengerLabel(trip.passengerCount),
+                                  style: const TextStyle(fontWeight: FontWeight.w800, color: brandRed),
+                                ),
                               ],
                             ),
                           ),
@@ -270,7 +275,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                     children: [
                       _row('Customer', detail.customerName),
                       _row('Phone', detail.customerPhone),
-                      _row('Persons', passengerLabel(detail.passengerCount)),
+                      _row('Persons', passengerLabel(detail.passengerCount), emphasize: true),
                       _row('Vehicle', [detail.vehicleType, detail.vehicleModel, detail.plateNumber].where((x) => (x ?? '').toString().isNotEmpty).join(' · ')),
                       _row('Payment', paymentLabel(detail.paymentMethod)),
                       _row('Fare', peso(detail.fare)),
@@ -362,7 +367,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
   }
 }
 
-Widget _row(String label, Object? value) {
+Widget _row(String label, Object? value, {bool emphasize = false}) {
   final text = (value ?? '').toString().trim();
   if (text.isEmpty) {
     return const SizedBox.shrink();
@@ -374,7 +379,14 @@ Widget _row(String label, Object? value) {
       children: [
         Text(label, style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700)),
         const SizedBox(height: 2),
-        Text(text, style: const TextStyle(fontWeight: FontWeight.w700)),
+        Text(
+          text,
+          style: TextStyle(
+            fontWeight: emphasize ? FontWeight.w900 : FontWeight.w700,
+            fontSize: emphasize ? 17 : 14,
+            color: emphasize ? brandRed : brandInk,
+          ),
+        ),
       ],
     ),
   );

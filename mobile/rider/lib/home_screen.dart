@@ -255,6 +255,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     _OfferStop(label: 'PICKUP', value: offer.pickup, icon: Icons.trip_origin),
                     const SizedBox(height: 12),
                     _OfferStop(label: 'DROP-OFF', value: offer.dropoff, icon: Icons.location_on),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFFC9CD)),
+                      ),
+                      child: Text(
+                        'Persons: ${passengerLabel(offer.passengerCount)}',
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -271,13 +285,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: _OfferStat(
                         label: 'TRIP',
                         value: '${offer.distanceKm.toStringAsFixed(1)} km',
-                      ),
-                    ),
-                    Container(width: 1, height: 36, color: brandLine),
-                    Expanded(
-                      child: _OfferStat(
-                        label: 'PERSONS',
-                        value: '${offer.passengerCount}',
                       ),
                     ),
                     Container(width: 1, height: 36, color: brandLine),
@@ -497,9 +504,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(activeTrip.pickup, style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 4),
                     Text(activeTrip.dropoff, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFFC9CD)),
+                      ),
+                      child: Text(
+                        'Persons: ${passengerLabel(activeTrip.passengerCount)}',
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Text(
-                      '${peso(activeTrip.fare)} · ${passengerLabel(activeTrip.passengerCount)} · ${paymentLabel(activeTrip.paymentMethod)}',
+                      '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800, color: brandRed),
                     ),
                     const SizedBox(height: 12),

@@ -112,8 +112,8 @@ public static class OperatorMaps
             trip.CustomerPhone,
             RideStop(trip.PickupDetails, trip.Pickup, trip.PickupBarangay),
             RideStop(trip.DropoffDetails, trip.Dropoff, trip.DropoffBarangay),
-            trip.Pickup,
-            trip.Dropoff,
+            TripAddress.Display(trip.PickupDetails, trip.Pickup),
+            TripAddress.Display(trip.DropoffDetails, trip.Dropoff),
             trip.Notes,
             trip.Fare,
             trip.DistanceKm,
@@ -164,13 +164,16 @@ public static class OperatorMaps
                 x => x.OperatorId == trip.OperatorId && x.VehicleType == trip.VehicleType && x.IsActive,
                 cancellationToken);
 
-    public static RideStopItem RideStop(string details, string fullAddress, Barangay? barangay) =>
-        new(
-            string.IsNullOrWhiteSpace(details) ? fullAddress : details,
-            barangay?.Name ?? string.Empty,
-            barangay?.Municipality.Name ?? string.Empty,
-            barangay?.Municipality.Province.Name ?? string.Empty,
-            fullAddress);
+    public static RideStopItem RideStop(string details, string fullAddress, Barangay? barangay)
+    {
+        var display = TripAddress.Display(details, fullAddress);
+        return new(
+            display,
+            string.Empty,
+            string.Empty,
+            string.Empty,
+            display);
+    }
 
     public static IQueryable<Trip> RideDetailQuery(AppDbContext db) =>
         db.Trips
@@ -313,8 +316,8 @@ public static class OperatorMaps
                     x.Id,
                     x.Reference,
                     x.RequestedAtUtc,
-                    x.Pickup,
-                    x.Dropoff,
+                    TripAddress.Display(x.PickupDetails, x.Pickup),
+                    TripAddress.Display(x.DropoffDetails, x.Dropoff),
                     x.CustomerName,
                     x.VehicleType,
                     x.Status,
