@@ -77,6 +77,11 @@ String paymentLabel(String? method) {
   }
 }
 
+String passengerLabel(int? count) {
+  final n = (count ?? 1).clamp(1, 999);
+  return n == 1 ? '1 person' : '$n persons';
+}
+
 DateTime? parseUtc(dynamic value) {
   if (value is! String || value.isEmpty) {
     return null;

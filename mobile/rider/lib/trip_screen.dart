@@ -209,7 +209,7 @@ class TripScreen extends StatelessWidget {
                     Text(trip.dropoff, style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 14),
                     Text(
-                      '${peso(trip.fare)}  ·  ${trip.distanceKm.toStringAsFixed(1)} km  ·  ${trip.passengerCount} pax  ·  ${paymentLabel(trip.paymentMethod)}',
+                      '${peso(trip.fare)}  ·  ${trip.distanceKm.toStringAsFixed(1)} km  ·  ${passengerLabel(trip.passengerCount)}  ·  ${paymentLabel(trip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                   ],

@@ -276,6 +276,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     Container(width: 1, height: 36, color: brandLine),
                     Expanded(
                       child: _OfferStat(
+                        label: 'PERSONS',
+                        value: '${offer.passengerCount}',
+                      ),
+                    ),
+                    Container(width: 1, height: 36, color: brandLine),
+                    Expanded(
+                      child: _OfferStat(
                         label: 'PAY',
                         value: paymentLabel(offer.paymentMethod),
                       ),
@@ -492,7 +499,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(activeTrip.dropoff, style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 8),
                     Text(
-                      '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
+                      '${peso(activeTrip.fare)} · ${passengerLabel(activeTrip.passengerCount)} · ${paymentLabel(activeTrip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800, color: brandRed),
                     ),
                     const SizedBox(height: 12),

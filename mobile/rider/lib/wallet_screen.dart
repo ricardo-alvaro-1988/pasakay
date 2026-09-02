@@ -422,6 +422,7 @@ class _WalletTripDetailPageState extends State<WalletTripDetailPage> {
                       _detailRow('Status', detail.status),
                       _detailRow('Customer', detail.customerName),
                       _detailRow('Phone', detail.customerPhone),
+                      _detailRow('Persons', passengerLabel(detail.passengerCount)),
                       _detailRow('Vehicle', [detail.vehicleType, detail.vehicleModel, detail.plateNumber].where((x) => (x ?? '').toString().isNotEmpty).join(' · ')),
                       _detailRow('Payment', paymentLabel(detail.paymentMethod)),
                       _detailRow('Requested', _dateTime(detail.requestedAt)),
