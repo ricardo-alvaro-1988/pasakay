@@ -138,7 +138,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
 
         var trip = await OperatorMaps.RideDetailQuery(db)
             .FirstOrDefaultAsync(x => x.OperatorId == op!.Id && x.Id == id, cancellationToken);
-        return trip is null ? NotFound() : Ok(OperatorMaps.RideDetail(trip));
+        return trip is null ? NotFound() : Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
     }
 
     [HttpPost("{id:guid}/reassign")]
@@ -199,7 +199,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
 
         var loaded = await OperatorMaps.RideDetailQuery(db)
             .FirstAsync(x => x.Id == trip.Id, cancellationToken);
-        return Ok(OperatorMaps.RideDetail(loaded));
+        return Ok(await OperatorMaps.RideDetailAsync(loaded, db, cancellationToken));
     }
 
     [HttpPost("{id:guid}/complete")]
@@ -232,7 +232,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
 
         var loaded = await OperatorMaps.RideDetailQuery(db)
             .FirstAsync(x => x.Id == trip.Id, cancellationToken);
-        return Ok(OperatorMaps.RideDetail(loaded));
+        return Ok(await OperatorMaps.RideDetailAsync(loaded, db, cancellationToken));
     }
 
     private async Task<decimal> QuoteAsync(Guid operatorId, VehicleType vehicleType, decimal distanceKm, CancellationToken cancellationToken)
@@ -303,7 +303,8 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 x.Fare,
                 x.DistanceKm,
                 x.PaymentMethod,
-                x.PaymentMethodOther))
+                x.PaymentMethodOther,
+                null))
             .ToListAsync(cancellationToken);
         return new OperatorBookingColumn(total, items);
     }

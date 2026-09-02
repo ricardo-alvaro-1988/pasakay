@@ -655,6 +655,7 @@ public static class DbSeeder
 
         var trips = await db.Trips
             .Where(x => x.Status == TripStatus.Completed)
+            .Include(x => x.Operator)
             .OrderBy(x => x.CompletedAtUtc)
             .ToListAsync(cancellationToken);
         if (trips.Count == 0)
@@ -678,12 +679,13 @@ public static class DbSeeder
             }
 
             var fare = fares.FirstOrDefault(x => x.OperatorId == trip.OperatorId && x.VehicleType == trip.VehicleType);
-            var operatorPercent = fare?.OperatorCommissionPercent ?? FareCommissionSplit.DefaultOperatorShare;
-            var amount = CommissionCut.Round(trip.Fare * operatorPercent / 100m);
-            if (amount <= 0)
+            var deduction = RideCommissionCalculator.WalletDeduction(trip, trip.Operator, fare);
+            if (deduction is null)
             {
                 continue;
             }
+
+            var (amount, remitPercent) = deduction.Value;
 
             wallet.Balance = CommissionCut.Round(wallet.Balance - amount);
             wallet.UpdatedAtUtc = DateTime.UtcNow;
@@ -696,7 +698,7 @@ public static class DbSeeder
                 Amount = amount,
                 BalanceAfter = wallet.Balance,
                 TripId = trip.Id,
-                Note = $"Operator commission ({operatorPercent:0.##}%) for {trip.Reference}",
+                Note = $"System ({remitPercent:0.##}%) for {trip.Reference}",
                 ResolvedAtUtc = trip.CompletedAtUtc ?? trip.RequestedAtUtc
             });
         }

@@ -718,7 +718,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
     {
         var trip = await RideDetailQuery()
             .FirstOrDefaultAsync(x => x.OperatorId == id && x.Id == bookingId, cancellationToken);
-        return trip is null ? NotFound() : Ok(MapRideDetail(trip));
+        return trip is null ? NotFound() : Ok(await MapRideDetailAsync(trip, cancellationToken));
     }
 
     [HttpGet("operators/{id:guid}/riders")]
@@ -836,7 +836,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 x => x.OperatorId == id && x.RiderId == riderId && x.Id == rideId,
                 cancellationToken);
 
-        return trip is null ? NotFound() : Ok(MapRideDetail(trip));
+        return trip is null ? NotFound() : Ok(await MapRideDetailAsync(trip, cancellationToken));
     }
 
     private static (DateTime Start, DateTime EndExclusive, int Days) ResolveRideWindow(
@@ -999,7 +999,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
     {
         var trip = await RideDetailQuery()
             .FirstOrDefaultAsync(x => x.CustomerId == id && x.Id == rideId, cancellationToken);
-        return trip is null ? NotFound() : Ok(MapRideDetail(trip));
+        return trip is null ? NotFound() : Ok(await MapRideDetailAsync(trip, cancellationToken));
     }
 
     [HttpPost("customers/{id:guid}/delete-request")]
@@ -1122,7 +1122,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             OperatorAddressSync.Map(rider),
             RiderPaymentSync.Map(rider.PaymentMethods));
 
-    private static RideDetailResponse MapRideDetail(Trip trip)
+    private async Task<RideDetailResponse> MapRideDetailAsync(Trip trip, CancellationToken cancellationToken)
     {
         DateTime? ended = trip.Status switch
         {
@@ -1133,6 +1133,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         int? duration = ended is { } at
             ? Math.Max(1, (int)Math.Round((at - trip.RequestedAtUtc).TotalMinutes))
             : null;
+
+        var fare = await OperatorMaps.LoadFareMatrixAsync(db, trip, cancellationToken);
 
         return new RideDetailResponse(
             trip.Id,
@@ -1171,7 +1173,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             trip.ChatMessages
                 .OrderBy(x => x.SentAtUtc)
                 .Select(TripChatService.Map)
-                .ToList());
+                .ToList(),
+            RideCommissionCalculator.ForTrip(trip, fare));
     }
 
     private static RideStopItem MapRideStop(string details, string fullAddress, Barangay? barangay) =>
@@ -1244,12 +1247,22 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             query = query.Where(x => x.Status == tripStatus);
         }
 
+        var completedTrips = await query
+            .Where(x => x.Status == TripStatus.Completed)
+            .Include(x => x.Operator)
+            .ToListAsync(cancellationToken);
+        var fares = await LoadFareMatrixLookupAsync(completedTrips, cancellationToken);
+        var (systemAmount, operatorAmount, driverAmount) = RideCommissionCalculator.Sum(completedTrips, fares);
+
         var summary = new RiderRideSummary(
             await query.CountAsync(cancellationToken),
             await query.CountAsync(x => x.Status == TripStatus.Completed, cancellationToken),
             await query.CountAsync(x => x.Status == TripStatus.Cancelled, cancellationToken),
             await query.CountAsync(x => x.Status == TripStatus.Ongoing, cancellationToken),
-            await query.Where(x => x.Status == TripStatus.Completed).SumAsync(x => (decimal?)x.Fare, cancellationToken) ?? 0);
+            completedTrips.Sum(x => x.Fare),
+            systemAmount,
+            operatorAmount,
+            driverAmount);
 
         var tripDays = await query
             .Where(x => x.Status == TripStatus.Completed && x.CompletedAtUtc != null)
@@ -1267,26 +1280,51 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             .ToList();
 
         var total = await query.CountAsync(cancellationToken);
-        var rides = await query
+        var tripRows = await query
+            .Include(x => x.Operator)
             .OrderByDescending(x => x.RequestedAtUtc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => new RideListItem(
-                x.Id,
-                x.Reference,
-                x.RequestedAtUtc,
-                x.Pickup,
-                x.Dropoff,
-                x.CustomerName,
-                x.VehicleType,
-                x.Status,
-                x.Fare,
-                x.DistanceKm,
-                x.PaymentMethod,
-                x.PaymentMethodOther))
             .ToListAsync(cancellationToken);
+        var pageFares = await LoadFareMatrixLookupAsync(tripRows, cancellationToken);
+        var rides = tripRows
+            .Select(x =>
+            {
+                pageFares.TryGetValue((x.OperatorId, x.VehicleType), out var fare);
+                return new RideListItem(
+                    x.Id,
+                    x.Reference,
+                    x.RequestedAtUtc,
+                    x.Pickup,
+                    x.Dropoff,
+                    x.CustomerName,
+                    x.VehicleType,
+                    x.Status,
+                    x.Fare,
+                    x.DistanceKm,
+                    x.PaymentMethod,
+                    x.PaymentMethodOther,
+                    RideCommissionCalculator.ForTrip(x, fare));
+            })
+            .ToList();
 
         return Ok(new RiderRidesResponse(summary, series, new PagedResult<RideListItem>(rides, page, pageSize, total)));
+    }
+
+    private async Task<Dictionary<(Guid OperatorId, VehicleType VehicleType), FareMatrix>> LoadFareMatrixLookupAsync(
+        IReadOnlyList<Trip> trips,
+        CancellationToken cancellationToken)
+    {
+        if (trips.Count == 0)
+        {
+            return [];
+        }
+
+        var operatorIds = trips.Select(x => x.OperatorId).Distinct().ToList();
+        var fares = await db.FareMatrices
+            .Where(x => operatorIds.Contains(x.OperatorId) && x.IsActive)
+            .ToListAsync(cancellationToken);
+        return fares.ToDictionary(x => (x.OperatorId, x.VehicleType));
     }
 
     private static CustomerListItem MapCustomer(CustomerProfile customer) =>

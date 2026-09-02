@@ -17,3 +17,7 @@ backend/YaPasakay.Api/wwwroot/manifest.webmanifest
 backend/YaPasakay.Api/wwwroot/favicon.png
 backend/YaPasakay.Api/wwwroot/icon.png
 backend/YaPasakay.Api/wwwroot/icons/
+
+# Built APKs exceed GitHub's 100 MB file limit
+*.apk
+**/apk/

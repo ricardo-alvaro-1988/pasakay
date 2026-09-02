@@ -303,6 +303,7 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
 
         return Ok(await OperatorMaps.BuildRidesAsync(
             db.Trips.Where(x => x.OperatorId == op.Id && x.RiderId == id),
+            db,
             range,
             from,
             to,
@@ -324,7 +325,7 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
 
         var trip = await OperatorMaps.RideDetailQuery(db)
             .FirstOrDefaultAsync(x => x.OperatorId == op!.Id && x.RiderId == id && x.Id == rideId, cancellationToken);
-        return trip is null ? NotFound() : Ok(OperatorMaps.RideDetail(trip));
+        return trip is null ? NotFound() : Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
     }
 
     private async Task<RiderDetailResponse> LoadDetailAsync(Guid operatorId, Guid riderId, CancellationToken cancellationToken)

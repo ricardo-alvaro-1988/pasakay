@@ -131,9 +131,10 @@ public class OperatorWalletController(AppDbContext db, RiderWalletService wallet
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
+        var splits = await wallets.LoadCommissionSplitsAsync(rows, cancellationToken);
 
         return Ok(new PagedResult<WalletHistoryItem>(
-            rows.Select(MapHistory).ToList(),
+            rows.Select(x => wallets.MapHistory(x, splits)).ToList(),
             page,
             pageSize,
             total));
@@ -170,6 +171,7 @@ public class OperatorWalletController(AppDbContext db, RiderWalletService wallet
             .OrderByDescending(x => x.CreatedAtUtc)
             .Take(100)
             .ToListAsync(cancellationToken);
+        var splits = await wallets.LoadCommissionSplitsAsync(transactions, cancellationToken);
 
         return Ok(new RiderWalletDetailResponse(
             rider.Id,
@@ -177,7 +179,18 @@ public class OperatorWalletController(AppDbContext db, RiderWalletService wallet
             rider.AppUser.PhoneNumber,
             wallet.Balance,
             pending,
-            transactions.Select(x => RiderWalletService.Map(x, x.Trip?.Reference)).ToList()));
+            transactions.Select(x =>
+            {
+                decimal? admin = null;
+                decimal? op = null;
+                if (x.TripId is Guid tripId && splits.TryGetValue(tripId, out var split))
+                {
+                    admin = split.Admin;
+                    op = split.Operator;
+                }
+
+                return RiderWalletService.Map(x, x.Trip?.Reference, x.Trip?.Fare, admin, op);
+            }).ToList()));
     }
 
     [HttpPost("requests/{id:guid}/approve")]
@@ -358,23 +371,4 @@ public class OperatorWalletController(AppDbContext db, RiderWalletService wallet
             tx.Amount,
             tx.Note,
             DateTime.SpecifyKind(tx.CreatedAtUtc, DateTimeKind.Utc));
-
-    private static WalletHistoryItem MapHistory(YaPasakay.Domain.Entities.RiderWalletTransaction tx) =>
-        new(
-            tx.Id,
-            tx.RiderId,
-            tx.Rider.AppUser.FullName,
-            tx.Rider.AppUser.PhoneNumber,
-            tx.Rider.PlateNumber,
-            tx.Kind,
-            tx.Status,
-            tx.PaymentMethod,
-            tx.Amount,
-            tx.BalanceAfter,
-            tx.TripId,
-            tx.Trip?.Reference,
-            tx.Note,
-            tx.RejectionReason,
-            DateTime.SpecifyKind(tx.CreatedAtUtc, DateTimeKind.Utc),
-            tx.ResolvedAtUtc is DateTime resolved ? DateTime.SpecifyKind(resolved, DateTimeKind.Utc) : null);
 }

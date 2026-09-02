@@ -212,16 +212,19 @@ public class RiderWalletService(AppDbContext db)
             return (null, "Commission was already deducted for this trip.");
         }
 
-        var fare = await db.FareMatrices
+        var fareMatrix = await db.FareMatrices
             .FirstOrDefaultAsync(
                 x => x.OperatorId == trip.OperatorId && x.VehicleType == trip.VehicleType && x.IsActive,
                 cancellationToken);
-        var operatorPercent = fare?.OperatorCommissionPercent ?? FareCommissionSplit.DefaultOperatorShare;
-        var amount = CommissionCut.Round(trip.Fare * operatorPercent / 100m);
-        if (amount <= 0)
+        var op = trip.Operator
+            ?? await db.Operators.FirstAsync(x => x.Id == trip.OperatorId, cancellationToken);
+        var deduction = RideCommissionCalculator.WalletDeduction(trip, op, fareMatrix);
+        if (deduction is null)
         {
             return (null, null);
         }
+
+        var (amount, remitPercent) = deduction.Value;
 
         var rider = await db.RiderProfiles
             .Include(x => x.Wallet)
@@ -239,7 +242,7 @@ public class RiderWalletService(AppDbContext db)
             Amount = amount,
             BalanceAfter = wallet.Balance,
             TripId = trip.Id,
-            Note = $"Operator commission ({operatorPercent:0.##}%) for {trip.Reference}",
+            Note = $"System ({remitPercent:0.##}%) for {trip.Reference}",
             ResolvedAtUtc = DateTime.UtcNow
         };
         db.RiderWalletTransactions.Add(tx);
@@ -247,7 +250,12 @@ public class RiderWalletService(AppDbContext db)
         return (tx, null);
     }
 
-    public static WalletTransactionItem Map(RiderWalletTransaction tx, string? tripReference = null, decimal? tripFare = null) =>
+    public static WalletTransactionItem Map(
+        RiderWalletTransaction tx,
+        string? tripReference = null,
+        decimal? tripFare = null,
+        decimal? adminAmount = null,
+        decimal? operatorAmount = null) =>
         new(
             tx.Id,
             tx.Kind,
@@ -258,10 +266,86 @@ public class RiderWalletService(AppDbContext db)
             tx.TripId,
             tripReference,
             tripFare,
+            adminAmount,
+            operatorAmount,
             tx.Note,
             tx.RejectionReason,
             DateTime.SpecifyKind(tx.CreatedAtUtc, DateTimeKind.Utc),
             tx.ResolvedAtUtc is DateTime resolved ? DateTime.SpecifyKind(resolved, DateTimeKind.Utc) : null);
+
+    public async Task<IReadOnlyDictionary<Guid, (decimal Admin, decimal Operator)>> LoadCommissionSplitsAsync(
+        IEnumerable<RiderWalletTransaction> rows,
+        CancellationToken cancellationToken)
+    {
+        var commissionRows = rows
+            .Where(x => x.Kind == WalletTransactionKind.Commission && x.TripId.HasValue)
+            .ToList();
+        if (commissionRows.Count == 0)
+        {
+            return new Dictionary<Guid, (decimal Admin, decimal Operator)>();
+        }
+
+        var tripIds = commissionRows.Select(x => x.TripId!.Value).Distinct().ToList();
+        var trips = await db.Trips
+            .Include(x => x.Operator)
+            .Where(x => tripIds.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+        var operatorIds = trips.Select(x => x.OperatorId).Distinct().ToList();
+        var fares = await db.FareMatrices
+            .Where(x => operatorIds.Contains(x.OperatorId) && x.IsActive)
+            .ToListAsync(cancellationToken);
+        var fareLookup = fares.ToDictionary(x => (x.OperatorId, x.VehicleType));
+
+        var splits = new Dictionary<Guid, (decimal Admin, decimal Operator)>();
+        foreach (var trip in trips)
+        {
+            fareLookup.TryGetValue((trip.OperatorId, trip.VehicleType), out var fare);
+            var breakdown = RideCommissionCalculator.ForTrip(trip, trip.Operator, fare);
+            if (breakdown is null)
+            {
+                continue;
+            }
+
+            splits[trip.Id] = (breakdown.SystemAmount, breakdown.OperatorAmount);
+        }
+
+        return splits;
+    }
+
+    public WalletHistoryItem MapHistory(
+        RiderWalletTransaction tx,
+        IReadOnlyDictionary<Guid, (decimal Admin, decimal Operator)>? commissionSplits = null)
+    {
+        decimal? adminAmount = null;
+        decimal? operatorAmount = null;
+        if (tx.Kind == WalletTransactionKind.Commission
+            && tx.TripId is Guid tripId
+            && commissionSplits?.TryGetValue(tripId, out var split) == true)
+        {
+            adminAmount = split.Admin;
+            operatorAmount = split.Operator;
+        }
+
+        return new WalletHistoryItem(
+            tx.Id,
+            tx.RiderId,
+            tx.Rider.AppUser.FullName,
+            tx.Rider.AppUser.PhoneNumber,
+            tx.Rider.PlateNumber,
+            tx.Kind,
+            tx.Status,
+            tx.PaymentMethod,
+            tx.Amount,
+            tx.BalanceAfter,
+            tx.TripId,
+            tx.Trip?.Reference,
+            adminAmount,
+            operatorAmount,
+            tx.Note,
+            tx.RejectionReason,
+            DateTime.SpecifyKind(tx.CreatedAtUtc, DateTimeKind.Utc),
+            tx.ResolvedAtUtc is DateTime resolved ? DateTime.SpecifyKind(resolved, DateTimeKind.Utc) : null);
+    }
 
     private async Task<string?> ValidateWalletRequestAsync(
         RiderProfile rider,

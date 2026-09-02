@@ -32,6 +32,7 @@ import {
   Overview,
   PageId,
   RideDetail,
+  RideCommissionBreakdown,
   RideChatMessage,
   RideListItem,
   RideQuery,
@@ -821,11 +822,11 @@ function PaymentMethodPicker({
   )
 }
 
-function walletKindLabel(kind: unknown) {
+function walletKindLabel(kind: unknown, walletView: 'operator' | 'rider' = 'operator') {
   switch (normalizeWalletKind(kind)) {
     case 'CashIn': return 'Cash in'
     case 'CashOut': return 'Cash out'
-    case 'Commission': return 'Commission'
+    case 'Commission': return walletView === 'operator' ? 'System' : 'System'
     default: return '—'
   }
 }
@@ -869,12 +870,14 @@ function WalletTransactionsTable({
   onReject,
   showRider = false,
   onOpenRider,
+  walletView = 'operator',
 }: {
   rows: Array<WalletTransaction & Partial<Pick<WalletHistoryItem, 'riderId' | 'riderName' | 'riderPhone' | 'plateNumber'>>>
   onApprove?: (id: string) => void
   onReject?: (id: string) => void
   showRider?: boolean
   onOpenRider?: (riderId: string) => void
+  walletView?: 'operator' | 'rider'
 }) {
   if (rows.length === 0) {
     return <p className="muted">No wallet transactions yet.</p>
@@ -890,6 +893,12 @@ function WalletTransactionsTable({
             <th>Type</th>
             <th>Payment</th>
             <th>Amount</th>
+            {walletView === 'operator' ? (
+              <>
+                <th>Admin</th>
+                <th>Operator</th>
+              </>
+            ) : null}
             <th>Balance</th>
             <th>Status</th>
             <th>Details</th>
@@ -900,6 +909,7 @@ function WalletTransactionsTable({
           {rows.map((row) => {
             const kind = normalizeWalletKind(row.kind)
             const isDebit = kind === 'CashOut' || kind === 'Commission'
+            const showSplit = walletView === 'operator' && kind === 'Commission'
             return (
             <tr key={row.id}>
               <td>{phDateTime(row.createdAtUtc)}</td>
@@ -920,6 +930,16 @@ function WalletTransactionsTable({
               <td><WalletKindTag kind={row.kind} /></td>
               <td>{row.paymentMethod ? <PaymentMethodTag method={row.paymentMethod} /> : '—'}</td>
               <td className={isDebit ? 'wallet-debit' : 'wallet-credit'}>{isDebit ? `−${peso(row.amount)}` : peso(row.amount)}</td>
+              {walletView === 'operator' ? (
+                <>
+                  <td className={showSplit ? 'wallet-debit' : undefined}>
+                    {showSplit && row.adminAmount != null ? `−${peso(row.adminAmount)}` : '—'}
+                  </td>
+                  <td className={showSplit ? 'wallet-debit' : undefined}>
+                    {showSplit && row.operatorAmount != null ? `−${peso(row.operatorAmount)}` : '—'}
+                  </td>
+                </>
+              ) : null}
               <td>{row.balanceAfter != null ? peso(row.balanceAfter) : '—'}</td>
               <td><span className={`tag status ${walletStatusClass(row.status)}`}>{walletStatusLabel(row.status)}</span></td>
               <td>
@@ -1075,7 +1095,7 @@ function RiderWalletPanel({ riderId }: { riderId: string; acceptedMethods?: Paym
       <div className="panel-head" style={{ marginBottom: 12 }}>
         <div>
           <span>{wallet.riderName} · wallet</span>
-          <p className="muted" style={{ marginTop: 6 }}>Cash in, cash out, and commission deductions for this rider.</p>
+          <p className="muted" style={{ marginTop: 6 }}>Cash in, cash out, and system deductions for this rider.</p>
         </div>
         <div className="wallet-balance-box">
           <span>Wallet balance</span>
@@ -1203,7 +1223,7 @@ function WalletHistorySection({
       <div className="panel-head">
         <div>
           <h2 style={{ margin: 0 }}>Wallet history</h2>
-          <p className="muted">Cash in, cash out, and commission deductions across your fleet.</p>
+          <p className="muted">Cash in, cash out, and system deductions across your fleet.</p>
         </div>
       </div>
       <div className="toolbar" style={{ marginBottom: 12 }}>
@@ -3018,6 +3038,7 @@ function RiderDetailPage({
         load={() => api.riderRide(operatorId, riderId, rideId)}
         loadKey={rideId}
         onBack={() => setRideId(null)}
+        commissionView="rider"
       />
     )
   }
@@ -3098,6 +3119,7 @@ function RiderDetailPage({
         sourceKey={`${operatorId}:${riderId}`}
         fetchRides={(opts) => api.riderRides(operatorId, riderId, opts)}
         onOpenRide={setRideId}
+        commissionView="rider"
       />
     </div>
   )
@@ -3110,6 +3132,91 @@ function DetailItem({ label, value }: { label: string; value: string }) {
       <p>{value || '—'}</p>
     </div>
   )
+}
+
+type CommissionView = 'operator' | 'rider'
+
+function commissionAmount(amount: number | null | undefined, pct?: number) {
+  if (amount == null) {
+    return '—'
+  }
+  return pct != null ? `${peso(amount)} (${percent(pct)})` : peso(amount)
+}
+
+function CommissionBreakdown({
+  commission,
+  view,
+  status,
+}: {
+  commission: RideCommissionBreakdown | null | undefined
+  view: CommissionView
+  status: TripStatus
+}) {
+  if (status !== 'Completed' || !commission) {
+    return <p className="muted">—</p>
+  }
+
+  if (view === 'rider') {
+    const systemAmount = commission.systemAmount + commission.operatorAmount
+    const systemPercent = commission.systemPercent + commission.operatorPercent
+    return (
+      <div className="commission-grid">
+        <div className="commission-row">
+          <span>System</span>
+          <strong>{commissionAmount(systemAmount, systemPercent)}</strong>
+        </div>
+        <div className="commission-row">
+          <span>Rider</span>
+          <strong>{commissionAmount(commission.driverAmount, commission.driverPercent)}</strong>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="commission-grid">
+      <div className="commission-row">
+        <span>Admin</span>
+        <strong>{commissionAmount(commission.systemAmount, commission.systemPercent)}</strong>
+      </div>
+      <div className="commission-row">
+        <span>Operator</span>
+        <strong>{commissionAmount(commission.operatorAmount, commission.operatorPercent)}</strong>
+      </div>
+      <div className="commission-row">
+        <span>Rider</span>
+        <strong>{commissionAmount(commission.driverAmount, commission.driverPercent)}</strong>
+      </div>
+    </div>
+  )
+}
+
+function commissionTableCell(commission: RideCommissionBreakdown | null | undefined, status: TripStatus) {
+  if (status !== 'Completed' || !commission) {
+    return '—'
+  }
+  return peso(commission.systemAmount)
+}
+
+function operatorCommissionTableCell(commission: RideCommissionBreakdown | null | undefined, status: TripStatus) {
+  if (status !== 'Completed' || !commission) {
+    return '—'
+  }
+  return peso(commission.operatorAmount)
+}
+
+function driverCommissionTableCell(commission: RideCommissionBreakdown | null | undefined, status: TripStatus) {
+  if (status !== 'Completed' || !commission) {
+    return '—'
+  }
+  return peso(commission.driverAmount)
+}
+
+function systemCommissionTableCell(commission: RideCommissionBreakdown | null | undefined, status: TripStatus) {
+  if (status !== 'Completed' || !commission) {
+    return '—'
+  }
+  return peso(commission.systemAmount + commission.operatorAmount)
 }
 
 function BookingRating({ score, comment, ratedAtUtc, status }: {
@@ -3139,7 +3246,7 @@ function BookingRating({ score, comment, ratedAtUtc, status }: {
   )
 }
 
-function BookingDetailsBody({ ride }: { ride: RideDetail }) {
+function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideDetail; commissionView?: CommissionView }) {
   return (
     <>
       <div className="detail-grid">
@@ -3167,6 +3274,10 @@ function BookingDetailsBody({ ride }: { ride: RideDetail }) {
         </div>
         <DetailItem label="Distance" value={`${ride.distanceKm.toFixed(1)} km`} />
         <DetailItem label="Fare" value={peso(ride.fare)} />
+        <div className="detail-item wide">
+          <span>Commission</span>
+          <CommissionBreakdown commission={ride.commission} view={commissionView} status={ride.status} />
+        </div>
         <DetailItem label="Payment" value={paymentMethodLabel(ride.paymentMethod, ride.paymentMethodOther)} />
         <DetailItem label="Duration" value={ride.durationMinutes ? `${ride.durationMinutes} min` : '—'} />
         <DetailItem label="Vehicle" value={ride.vehicleModel ? `${ride.vehicleType} · ${ride.vehicleModel}` : ride.vehicleType} />
@@ -3231,6 +3342,7 @@ function BookingDetailPage({
   backLabel = 'Back to rides',
   extra,
   allowReassign = false,
+  commissionView = 'operator',
 }: {
   load: () => Promise<RideDetail>
   loadKey: string
@@ -3238,6 +3350,7 @@ function BookingDetailPage({
   backLabel?: string
   extra?: ReactNode
   allowReassign?: boolean
+  commissionView?: CommissionView
 }) {
   const [ride, setRide] = useState<RideDetail | null>(null)
   const [error, setError] = useState('')
@@ -3269,7 +3382,7 @@ function BookingDetailPage({
           <TripStatusTag status={ride.status} />
         </div>
       </div>
-      <BookingDetailsBody ride={ride} />
+      <BookingDetailsBody ride={ride} commissionView={commissionView} />
       {allowReassign && (ride.status === 'Pending' || ride.status === 'Waiting') ? (
         <BookingReassign ride={ride} onAssigned={setRide} />
       ) : null}
@@ -3407,11 +3520,13 @@ function RidesReport({
   fetchRides,
   onOpenRide,
   title = 'Bookings',
+  commissionView = 'operator',
 }: {
   sourceKey: string
   fetchRides: (opts: RideQuery) => Promise<RiderRides>
   onOpenRide: (rideId: string) => void
   title?: string
+  commissionView?: CommissionView
 }) {
   const today = isoDate(new Date())
   const [mode, setMode] = useState<'weekly' | 'monthly' | 'yearly' | 'date' | 'range'>('weekly')
@@ -3514,6 +3629,33 @@ function RidesReport({
             <Stat label="Rides" value={data.summary.total} />
             <Stat label="Completed" value={data.summary.completed} />
             <Stat label="Cancelled" value={data.summary.cancelled} />
+            {commissionView === 'rider' ? (
+              <>
+                <div className="card">
+                  <label>System</label>
+                  <strong>{peso(data.summary.systemAmount + data.summary.operatorAmount)}</strong>
+                </div>
+                <div className="card">
+                  <label>Rider</label>
+                  <strong>{peso(data.summary.driverAmount)}</strong>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="card">
+                  <label>Admin</label>
+                  <strong>{peso(data.summary.systemAmount)}</strong>
+                </div>
+                <div className="card">
+                  <label>Operator</label>
+                  <strong>{peso(data.summary.operatorAmount)}</strong>
+                </div>
+                <div className="card">
+                  <label>Rider</label>
+                  <strong>{peso(data.summary.driverAmount)}</strong>
+                </div>
+              </>
+            )}
             <div className="card">
               <label>Gross fare</label>
               <strong>{peso(data.summary.grossFare)}</strong>
@@ -3543,6 +3685,18 @@ function RidesReport({
                     <th>Route</th>
                     <th>Payment</th>
                     <th>Fare</th>
+                    {commissionView === 'rider' ? (
+                      <>
+                        <th>System</th>
+                        <th>Rider</th>
+                      </>
+                    ) : (
+                      <>
+                        <th>Admin</th>
+                        <th>Operator</th>
+                        <th>Rider</th>
+                      </>
+                    )}
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -3562,6 +3716,18 @@ function RidesReport({
                       </td>
                       <td><PaymentMethodTag method={ride.paymentMethod} other={ride.paymentMethodOther} /></td>
                       <td>{peso(ride.fare)}</td>
+                      {commissionView === 'rider' ? (
+                        <>
+                          <td>{systemCommissionTableCell(ride.commission, ride.status)}</td>
+                          <td>{driverCommissionTableCell(ride.commission, ride.status)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td>{commissionTableCell(ride.commission, ride.status)}</td>
+                          <td>{operatorCommissionTableCell(ride.commission, ride.status)}</td>
+                          <td>{driverCommissionTableCell(ride.commission, ride.status)}</td>
+                        </>
+                      )}
                       <td><TripStatusTag status={ride.status} /></td>
                     </tr>
                   ))}
@@ -7456,6 +7622,7 @@ function OperatorRiderDetail({ riderId, onBack, onEdit }: { riderId: string; onB
         loadKey={rideId}
         onBack={() => setRideId(null)}
         allowReassign
+        commissionView="rider"
       />
     )
   }
@@ -7551,6 +7718,7 @@ function OperatorRiderDetail({ riderId, onBack, onEdit }: { riderId: string; onB
         sourceKey={riderId}
         fetchRides={(opts) => api.opRiderRides(riderId, opts)}
         onOpenRide={setRideId}
+        commissionView="rider"
       />
     </div>
   )

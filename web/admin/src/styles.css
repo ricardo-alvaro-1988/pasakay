@@ -804,6 +804,29 @@ input:-webkit-autofill:focus {
   line-height: 1.35;
 }
 .detail-item.wide { grid-column: 1 / -1; }
+.commission-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+.commission-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.commission-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.commission-row strong {
+  font-size: 14px;
+  font-weight: 650;
+}
 .star-rating {
   display: flex;
   align-items: center;

@@ -121,7 +121,7 @@ public class CustomerBookingsController(
 
         var trip = await OperatorMaps.RideDetailQuery(db)
             .FirstOrDefaultAsync(x => x.Id == id && x.CustomerId == customer.Id, cancellationToken);
-        return trip is null ? NotFound() : Ok(OperatorMaps.RideDetail(trip));
+        return trip is null ? NotFound() : Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
     }
 
     [HttpPost("trips/{id:guid}/chat")]

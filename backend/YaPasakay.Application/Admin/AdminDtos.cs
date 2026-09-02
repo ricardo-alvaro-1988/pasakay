@@ -140,7 +140,8 @@ public record RideListItem(
     decimal Fare,
     decimal DistanceKm,
     PaymentMethod PaymentMethod,
-    string? PaymentMethodOther);
+    string? PaymentMethodOther,
+    RideCommissionBreakdown? Commission);
 
 public record RideDetailResponse(
     Guid Id,
@@ -176,7 +177,8 @@ public record RideDetailResponse(
     string PlateNumber,
     string? VehicleModel,
     string? RiderPhotoUrl,
-    IReadOnlyList<RideChatMessageItem> Chat);
+    IReadOnlyList<RideChatMessageItem> Chat,
+    RideCommissionBreakdown? Commission);
 
 public record RideChatMessageItem(
     Guid Id,
@@ -192,7 +194,10 @@ public record RiderRideSummary(
     int Completed,
     int Cancelled,
     int Ongoing,
-    decimal GrossFare);
+    decimal GrossFare,
+    decimal SystemAmount,
+    decimal OperatorAmount,
+    decimal DriverAmount);
 
 public record RiderRidesResponse(
     RiderRideSummary Summary,
@@ -656,6 +661,8 @@ public record WalletTransactionItem(
     Guid? TripId,
     string? TripReference,
     decimal? TripFare,
+    decimal? AdminAmount,
+    decimal? OperatorAmount,
     string? Note,
     string? RejectionReason,
     DateTime CreatedAtUtc,
@@ -674,6 +681,8 @@ public record WalletHistoryItem(
     decimal? BalanceAfter,
     Guid? TripId,
     string? TripReference,
+    decimal? AdminAmount,
+    decimal? OperatorAmount,
     string? Note,
     string? RejectionReason,
     DateTime CreatedAtUtc,

@@ -74,7 +74,7 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
 
         var trip = await OperatorMaps.RideDetailQuery(db)
             .FirstOrDefaultAsync(x => x.OperatorId == op!.Id && x.Id == id && x.ScheduledAtUtc != null, cancellationToken);
-        return trip is null ? NotFound() : Ok(OperatorMaps.RideDetail(trip));
+        return trip is null ? NotFound() : Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
     }
 
     [HttpPost]
@@ -172,7 +172,7 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
 
         var loaded = await OperatorMaps.RideDetailQuery(db)
             .FirstAsync(x => x.Id == trip.Id, cancellationToken);
-        return Ok(OperatorMaps.RideDetail(loaded));
+        return Ok(await OperatorMaps.RideDetailAsync(loaded, db, cancellationToken));
     }
 
     [HttpPost("{id:guid}/cancel")]
@@ -202,7 +202,7 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
         trip.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         await broadcast.ExpireTripAsync(trip.Id, cancellationToken);
-        return Ok(OperatorMaps.RideDetail(trip));
+        return Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
     }
 
     private async Task<Barangay?> LoadBarangayAsync(Guid id, CancellationToken cancellationToken) =>

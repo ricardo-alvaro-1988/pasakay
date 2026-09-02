@@ -98,6 +98,7 @@ public class OperatorCustomersController(AppDbContext db) : ControllerBase
 
         return Ok(await OperatorMaps.BuildRidesAsync(
             db.Trips.Where(x => x.OperatorId == op.Id && x.CustomerId == id),
+            db,
             range,
             from,
             to,
@@ -121,7 +122,7 @@ public class OperatorCustomersController(AppDbContext db) : ControllerBase
             .FirstOrDefaultAsync(
                 x => x.OperatorId == op!.Id && x.CustomerId == id && x.Id == rideId,
                 cancellationToken);
-        return trip is null ? NotFound() : Ok(OperatorMaps.RideDetail(trip));
+        return trip is null ? NotFound() : Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
     }
 
     private Task<bool> RelatedAsync(Guid operatorId, Guid customerId, CancellationToken cancellationToken) =>

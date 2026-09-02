@@ -377,7 +377,8 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
                 x.Fare,
                 x.DistanceKm,
                 x.PaymentMethod,
-                x.PaymentMethodOther))
+                x.PaymentMethodOther,
+                null))
             .ToListAsync(cancellationToken);
         return Ok(trips);
     }
@@ -484,7 +485,7 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
 
         var trip = await OperatorMaps.RideDetailQuery(db)
             .FirstOrDefaultAsync(x => x.Id == id && x.RiderId == rider.Id, cancellationToken);
-        return trip is null ? NotFound() : Ok(OperatorMaps.RideDetail(trip));
+        return trip is null ? NotFound() : Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
     }
 
     [HttpPost("trips/{id:guid}/complete")]

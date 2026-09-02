@@ -165,6 +165,8 @@ export type WalletTransaction = {
   balanceAfter: number | null
   tripId: string | null
   tripReference: string | null
+  adminAmount: number | null
+  operatorAmount: number | null
   note: string | null
   rejectionReason: string | null
   createdAtUtc: string
@@ -255,6 +257,15 @@ export type RideStop = {
   fullAddress: string
 }
 
+export type RideCommissionBreakdown = {
+  systemPercent: number
+  systemAmount: number
+  operatorPercent: number
+  operatorAmount: number
+  driverPercent: number
+  driverAmount: number
+}
+
 export type RideListItem = {
   id: string
   reference: string
@@ -268,6 +279,7 @@ export type RideListItem = {
   distanceKm: number
   paymentMethod: PaymentMethod
   paymentMethodOther: string | null
+  commission: RideCommissionBreakdown | null
 }
 
 export type RideDetail = {
@@ -305,6 +317,7 @@ export type RideDetail = {
   vehicleModel: string | null
   riderPhotoUrl: string | null
   chat: RideChatMessage[]
+  commission: RideCommissionBreakdown | null
 }
 
 export type ChatSender = 'Customer' | 'Rider'
@@ -328,6 +341,9 @@ export type RiderRideSummary = {
   cancelled: number
   ongoing: number
   grossFare: number
+  systemAmount: number
+  operatorAmount: number
+  driverAmount: number
 }
 
 export type RiderRides = {
