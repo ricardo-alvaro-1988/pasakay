@@ -527,9 +527,17 @@ public class CustomerBookingsController(
         var passengers = vehicle == VehicleType.Motorcycle
             ? 1
             : Math.Max(1, request.PassengerCount);
-        var fareRow = await db.FareMatrices
-            .Include(x => x.PassengerTiers)
-            .FirstOrDefaultAsync(x => x.OperatorId == op.Id && x.VehicleType == vehicle && x.IsActive, cancellationToken);
+        var fareRow = await OperatorMaps.LoadFareMatrixAsync(
+            db,
+            op.Id,
+            vehicle,
+            pickup.MunicipalityId,
+            cancellationToken);
+        if (fareRow is null)
+        {
+            return new PreparedBooking { Error = "No fare matrix for this municipality. Ask the operator to set rates for this city." };
+        }
+
         var fare = FareQuote.ComputeForPassengers(fareRow, passengers, distance);
 
         var rider = hail.Rider ?? await PickRiderAsync(

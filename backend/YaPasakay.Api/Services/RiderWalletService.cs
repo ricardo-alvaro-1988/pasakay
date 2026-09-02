@@ -212,10 +212,7 @@ public class RiderWalletService(AppDbContext db)
             return (null, "Commission was already deducted for this trip.");
         }
 
-        var fareMatrix = await db.FareMatrices
-            .FirstOrDefaultAsync(
-                x => x.OperatorId == trip.OperatorId && x.VehicleType == trip.VehicleType && x.IsActive,
-                cancellationToken);
+        var fareMatrix = await OperatorMaps.LoadFareMatrixAsync(db, trip, cancellationToken);
         var op = trip.Operator
             ?? await db.Operators.FirstAsync(x => x.Id == trip.OperatorId, cancellationToken);
         var deduction = RideCommissionCalculator.WalletDeduction(trip, op, fareMatrix);
@@ -288,18 +285,20 @@ public class RiderWalletService(AppDbContext db)
         var tripIds = commissionRows.Select(x => x.TripId!.Value).Distinct().ToList();
         var trips = await db.Trips
             .Include(x => x.Operator)
+            .Include(x => x.PickupBarangay)
             .Where(x => tripIds.Contains(x.Id))
             .ToListAsync(cancellationToken);
-        var operatorIds = trips.Select(x => x.OperatorId).Distinct().ToList();
-        var fares = await db.FareMatrices
-            .Where(x => operatorIds.Contains(x.OperatorId) && x.IsActive)
-            .ToListAsync(cancellationToken);
-        var fareLookup = fares.ToDictionary(x => (x.OperatorId, x.VehicleType));
+        var fareLookup = await OperatorMaps.LoadFareMatrixLookupAsync(db, trips, cancellationToken);
 
         var splits = new Dictionary<Guid, (decimal Admin, decimal Operator)>();
         foreach (var trip in trips)
         {
-            fareLookup.TryGetValue((trip.OperatorId, trip.VehicleType), out var fare);
+            FareMatrix? fare = null;
+            if (trip.PickupBarangay is not null)
+            {
+                fareLookup.TryGetValue((trip.OperatorId, trip.VehicleType, trip.PickupBarangay.MunicipalityId), out fare);
+            }
+
             var breakdown = RideCommissionCalculator.ForTrip(trip, trip.Operator, fare);
             if (breakdown is null)
             {

@@ -7,6 +7,8 @@ public class FareMatrix : BaseEntity
 {
     public Guid OperatorId { get; set; }
     public Operator Operator { get; set; } = null!;
+    public Guid MunicipalityId { get; set; }
+    public Municipality Municipality { get; set; } = null!;
     public VehicleType VehicleType { get; set; }
     public decimal BaseFare { get; set; }
     public decimal PerKm { get; set; }

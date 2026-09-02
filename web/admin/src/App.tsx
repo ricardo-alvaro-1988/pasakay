@@ -38,6 +38,7 @@ import {
   RideQuery,
   TerritoryListItem,
   OperatorFareMatrix,
+  OperatorFareListItem,
   BillingOperator,
   BillingOperatorDetail,
   OperatorBill,
@@ -3235,49 +3236,48 @@ function CommissionSection({
     return null
   }
 
-  const estimated = status !== 'Completed'
-
   return (
     <section className="commission-section">
-      <div className="commission-fare">
+      <div className="panel-head" style={{ marginBottom: 8 }}>
         <div>
-          <span className="commission-fare-label">{estimated ? 'Estimated fare' : 'Trip fare'}</span>
-          <strong className="commission-fare-value">{peso(fare)}</strong>
+          <h3 style={{ margin: 0 }}>Commission</h3>
+          <p className="muted" style={{ margin: '4px 0 0' }}>
+            {status === 'Completed' ? 'Split of the trip fare' : 'Estimated split of the trip fare'} · Fare {peso(fare)}
+          </p>
         </div>
-        <p className="commission-fare-note">
-          {estimated ? 'Projected commission split' : 'Commission split of this fare'}
-        </p>
       </div>
       {view === 'rider' ? (
-        <div className="commission-cards two">
-          <article className="commission-card system">
-            <span className="commission-card-role">System</span>
-            <strong className="commission-card-amount">{peso(commission.systemAmount + commission.operatorAmount)}</strong>
-            <span className="commission-card-pct">{percent(commission.systemPercent + commission.operatorPercent)}</span>
-          </article>
-          <article className="commission-card rider">
-            <span className="commission-card-role">Rider</span>
-            <strong className="commission-card-amount">{peso(commission.driverAmount)}</strong>
-            <span className="commission-card-pct">{percent(commission.driverPercent)}</span>
-          </article>
+        <div className="fare-cards">
+          <div className="detail-card">
+            <span>System</span>
+            <p className="detail-name" style={{ marginTop: 8 }}>
+              {peso(commission.systemAmount + commission.operatorAmount)}
+            </p>
+            <p className="muted">{percent(commission.systemPercent + commission.operatorPercent)}</p>
+          </div>
+          <div className="detail-card">
+            <span>Rider</span>
+            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.driverAmount)}</p>
+            <p className="muted">{percent(commission.driverPercent)}</p>
+          </div>
         </div>
       ) : (
-        <div className="commission-cards three">
-          <article className="commission-card admin">
-            <span className="commission-card-role">Admin</span>
-            <strong className="commission-card-amount">{peso(commission.systemAmount)}</strong>
-            <span className="commission-card-pct">{percent(commission.systemPercent)}</span>
-          </article>
-          <article className="commission-card operator">
-            <span className="commission-card-role">Operator</span>
-            <strong className="commission-card-amount">{peso(commission.operatorAmount)}</strong>
-            <span className="commission-card-pct">{percent(commission.operatorPercent)}</span>
-          </article>
-          <article className="commission-card rider">
-            <span className="commission-card-role">Rider</span>
-            <strong className="commission-card-amount">{peso(commission.driverAmount)}</strong>
-            <span className="commission-card-pct">{percent(commission.driverPercent)}</span>
-          </article>
+        <div className="fare-cards three">
+          <div className="detail-card">
+            <span>Admin</span>
+            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.systemAmount)}</p>
+            <p className="muted">{percent(commission.systemPercent)}</p>
+          </div>
+          <div className="detail-card">
+            <span>Operator</span>
+            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.operatorAmount)}</p>
+            <p className="muted">{percent(commission.operatorPercent)}</p>
+          </div>
+          <div className="detail-card">
+            <span>Rider</span>
+            <p className="detail-name" style={{ marginTop: 8 }}>{peso(commission.driverAmount)}</p>
+            <p className="muted">{percent(commission.driverPercent)}</p>
+          </div>
         </div>
       )}
     </section>
@@ -4147,11 +4147,17 @@ function TerritoriesPage() {
 }
 
 function FaresPage() {
-  const [operatorId, setOperatorId] = useState<string | null>(null)
-  if (operatorId) {
-    return <FareDetailPage operatorId={operatorId} onBack={() => setOperatorId(null)} />
+  const [selection, setSelection] = useState<{ operatorId: string; municipalityId: string } | null>(null)
+  if (selection) {
+    return (
+      <FareDetailPage
+        operatorId={selection.operatorId}
+        municipalityId={selection.municipalityId}
+        onBack={() => setSelection(null)}
+      />
+    )
   }
-  return <FareListPage onOpen={setOperatorId} />
+  return <FareListPage onOpen={(operatorId, municipalityId) => setSelection({ operatorId, municipalityId })} />
 }
 
 function fareSummary(rates: FareRates | null) {
@@ -4186,10 +4192,10 @@ function sampleFare(rates: FareRates | null, km: number) {
   return row ? peso(row.fare) : '—'
 }
 
-function FareListPage({ onOpen }: { onOpen: (id: string) => void }) {
+function FareListPage({ onOpen }: { onOpen: (operatorId: string, municipalityId: string) => void }) {
   const [q, setQ] = useState('')
   const [vehicle, setVehicle] = useState<VehicleType | ''>('')
-  const [items, setItems] = useState<OperatorFareMatrix[]>([])
+  const [items, setItems] = useState<OperatorFareListItem[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [error, setError] = useState('')
@@ -4213,7 +4219,7 @@ function FareListPage({ onOpen }: { onOpen: (id: string) => void }) {
       <div className="toolbar">
         <div>
           <h2 style={{ margin: 0 }}>Fare matrix</h2>
-          <p className="muted" style={{ margin: '4px 0 0' }}>Related motorcycle and tricycle rates, commission split, and surcharges per Operator. Read-only here. Time windows use Philippine time.</p>
+          <p className="muted" style={{ margin: '4px 0 0' }}>Related motorcycle and tricycle rates per municipality. Read-only here. Operators create and edit rates for each city they serve. Time windows use Philippine time.</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="chips">
@@ -4225,7 +4231,7 @@ function FareListPage({ onOpen }: { onOpen: (id: string) => void }) {
             <input
               value={q}
               onChange={(e) => { setQ(e.target.value); setPage(1) }}
-              placeholder="Search operator"
+              placeholder="Search operator or municipality"
             />
           </div>
         </div>
@@ -4236,6 +4242,7 @@ function FareListPage({ onOpen }: { onOpen: (id: string) => void }) {
           <thead>
             <tr>
               <th>Operator</th>
+              <th>Municipality</th>
               <th>Commission</th>
               <th>Motorcycle</th>
               <th>Tricycle</th>
@@ -4244,16 +4251,17 @@ function FareListPage({ onOpen }: { onOpen: (id: string) => void }) {
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={4}>{q.trim() || vehicle ? 'No fare matrices match that filter.' : 'No fare matrices yet.'}</td>
+                <td colSpan={5}>{q.trim() || vehicle ? 'No fare matrices match that filter.' : 'No fare matrices yet.'}</td>
               </tr>
             ) : items.map((row) => (
-              <tr key={row.operatorId} className="clickable" onClick={() => onOpen(row.operatorId)}>
+              <tr key={`${row.operatorId}|${row.municipalityId}`} className="clickable" onClick={() => onOpen(row.operatorId, row.municipalityId)}>
                 <td>
                   <div className="person-cell">
                     <span>{row.operatorName}</span>
                     <StatusTag active={row.operatorActive} />
                   </div>
                 </td>
+                <td>{row.municipalityName}</td>
                 <td>{commissionRates(row.motorcycleCommissionPercent, row.tricycleCommissionPercent)}</td>
                 <td><FareRatesCell rates={row.motorcycle} /></td>
                 <td><FareRatesCell rates={row.tricycle} /></td>
@@ -4267,15 +4275,24 @@ function FareListPage({ onOpen }: { onOpen: (id: string) => void }) {
   )
 }
 
-function FareDetailPage({ operatorId, onBack }: { operatorId: string; onBack: () => void }) {
+function FareDetailPage({
+  operatorId,
+  municipalityId,
+  onBack,
+}: {
+  operatorId: string
+  municipalityId: string
+  onBack: () => void
+}) {
   const [data, setData] = useState<OperatorFareMatrix | null>(null)
+  const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(municipalityId)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api.operatorFares(operatorId)
+    api.operatorFares(operatorId, selectedMunicipalityId)
       .then(setData)
       .catch((err: Error) => setError(err.message))
-  }, [operatorId])
+  }, [operatorId, selectedMunicipalityId])
 
   if (error) {
     return <p className="error">{error}</p>
@@ -4290,7 +4307,20 @@ function FareDetailPage({ operatorId, onBack }: { operatorId: string; onBack: ()
         <div>
           <button className="btn tiny" type="button" onClick={onBack}>Back to fare matrix</button>
           <h2 style={{ marginTop: 12 }}>{data.operatorName}</h2>
-          <p>Read-only related fare matrix. Motorcycle, tricycle, commission split, and surcharges sit in one table. Time windows use Philippine time.</p>
+          <p>Read-only related fare matrix for {data.municipalityName ?? 'this municipality'}. Operators create and edit rates. Time windows use Philippine time.</p>
+          {(data.municipalities?.length ?? 0) > 1 ? (
+            <label style={{ display: 'block', marginTop: 10, maxWidth: 320 }}>
+              Municipality
+              <select
+                value={selectedMunicipalityId}
+                onChange={(e) => setSelectedMunicipalityId(e.target.value)}
+              >
+                {data.municipalities.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
         <StatusTag active={data.operatorActive} />
       </div>
@@ -7936,6 +7966,7 @@ function OperatorFaresPage() {
   const [motorcycle, setMotorcycle] = useState<FareDraft>(fareDraft(null))
   const [tricycle, setTricycle] = useState<FareDraft>(fareDraft(null))
   const [linked, setLinked] = useState(true)
+  const [municipalityId, setMunicipalityId] = useState<string>('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -7944,6 +7975,7 @@ function OperatorFaresPage() {
     const mc = fareDraft(next.motorcycle, next.motorcycleCommissionPercent)
     const trike = fareDraft(next.tricycle, next.tricycleCommissionPercent)
     setData(next)
+    setMunicipalityId(next.municipalityId ?? next.municipalities[0]?.id ?? '')
     setMotorcycle(mc)
     setTricycle(trike)
     setLinked(sameDraft(mc, trike) || !next.tricycle)
@@ -7952,6 +7984,17 @@ function OperatorFaresPage() {
   useEffect(() => {
     api.opFares().then(loadMatrix).catch((err: Error) => setError(err.message))
   }, [])
+
+  async function changeMunicipality(nextId: string) {
+    setMunicipalityId(nextId)
+    setError('')
+    setNotice('')
+    try {
+      loadMatrix(await api.opFares(nextId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load municipality fares.')
+    }
+  }
 
   function applyCommission(current: FareDraft, system: number, patch: Partial<FareDraft>): FareDraft {
     const next = { ...current, ...patch }
@@ -7979,6 +8022,11 @@ function OperatorFaresPage() {
   }
 
   async function saveRates() {
+    if (!municipalityId) {
+      setError('Choose a municipality in your service area first.')
+      setNotice('')
+      return
+    }
     const mcTotal = commissionSum(data?.motorcycleCommissionPercent ?? 0, motorcycle)
     const trikeDraft = linked ? { ...motorcycle, operatorCommissionPercent: tricycle.operatorCommissionPercent, driverCommissionPercent: tricycle.driverCommissionPercent } : tricycle
     const trikeTotal = commissionSum(data?.tricycleCommissionPercent ?? 0, trikeDraft)
@@ -7992,6 +8040,7 @@ function OperatorFaresPage() {
     setNotice('')
     try {
       loadMatrix(await api.saveOperatorFareMatrix({
+        municipalityId,
         motorcycle: parseDraft(motorcycle),
         tricycle: parseDraft(trikeDraft),
       }))
@@ -8012,11 +8061,23 @@ function OperatorFaresPage() {
       <div className="card">
         <h2 style={{ marginTop: 0 }}>{data.operatorName}</h2>
         <p className="muted">
-          One related matrix for motorcycle and tricycle. Use the same rates for both, or set each column.
-          Add passenger tiers so Tricycle (and Motorcycle) fare depends on number of persons: base km amount + succeeding km.
+          Create and edit one related matrix per municipality for motorcycle and tricycle.
+          Quotes use the pickup municipality. Add passenger tiers so Tricycle (and Motorcycle) fare depends on number of persons.
           System, operator, and driver commission must add up to 100% for each vehicle.
           Manage time-window and date-range surcharges in the Surcharges menu.
         </p>
+        {data.municipalities.length === 0 ? (
+          <p className="error">Add service-area barangays first, then create a fare matrix for each municipality.</p>
+        ) : (
+          <label style={{ display: 'block', marginBottom: 14, maxWidth: 360 }}>
+            Municipality
+            <select value={municipalityId} onChange={(e) => void changeMunicipality(e.target.value)}>
+              {data.municipalities.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          </label>
+        )}
         <RelatedFareRatesTable
           data={data}
           motorcycle={motorcycle}
@@ -8034,7 +8095,7 @@ function OperatorFaresPage() {
           }}
           onChange={changeRates}
         />
-        <button className="btn" type="button" disabled={busy} style={{ maxWidth: 240, marginTop: 14 }} onClick={() => void saveRates()}>
+        <button className="btn" type="button" disabled={busy || !municipalityId} style={{ maxWidth: 240, marginTop: 14 }} onClick={() => void saveRates()}>
           Save fare matrix
         </button>
       </div>
@@ -8048,6 +8109,7 @@ function OperatorFaresPage() {
 
 function OperatorSurchargesPage() {
   const [data, setData] = useState<OperatorFareMatrix | null>(null)
+  const [municipalityId, setMunicipalityId] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [open, setOpen] = useState(false)
@@ -8064,9 +8126,25 @@ function OperatorSurchargesPage() {
   const [formError, setFormError] = useState('')
   const [busy, setBusy] = useState(false)
 
+  function loadMatrix(next: OperatorFareMatrix) {
+    setData(next)
+    setMunicipalityId(next.municipalityId ?? next.municipalities[0]?.id ?? '')
+  }
+
   useEffect(() => {
-    api.opFares().then(setData).catch((err: Error) => setError(err.message))
+    api.opFares().then(loadMatrix).catch((err: Error) => setError(err.message))
   }, [])
+
+  async function changeMunicipality(nextId: string) {
+    setMunicipalityId(nextId)
+    setError('')
+    setNotice('')
+    try {
+      loadMatrix(await api.opFares(nextId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load municipality fares.')
+    }
+  }
 
   function openCreate() {
     setEditing(null)
@@ -8118,17 +8196,21 @@ function OperatorSurchargesPage() {
   }
 
   async function saveSurcharge() {
+    if (!municipalityId) {
+      setFormError('Choose a municipality first.')
+      return
+    }
     setBusy(true)
     setFormError('')
     try {
       const body = surchargeBody()
       if (editing) {
-        setData(await api.updateOperatorSurcharge(editing.id, body))
+        loadMatrix(await api.updateOperatorSurcharge(editing.id, body))
         setNotice(`${editing.name} updated.`)
       } else {
         const vehicleTypes: VehicleType[] = applyTo === 'Both' ? ['Motorcycle', 'Tricycle'] : [applyTo]
-        setData(await api.addOperatorSurcharges({ vehicleTypes, ...body }))
-        setNotice(applyTo === 'Both' ? 'Surcharge added to motorcycle and tricycle.' : `Surcharge added to ${applyTo.toLowerCase()}.`)
+        loadMatrix(await api.addOperatorSurcharges({ municipalityId, vehicleTypes, ...body }))
+        setNotice(`${name} added.`)
       }
       closeModal()
     } catch (err) {
@@ -8146,10 +8228,21 @@ function OperatorSurchargesPage() {
         <div>
           <h2 style={{ margin: 0 }}>Surcharges</h2>
           <p className="muted" style={{ margin: '6px 0 0' }}>
-            Add time windows or date ranges for {data.operatorName}. Each surcharge can be Active or Off.
+            Add time windows or date ranges for {data.operatorName}
+            {data.municipalityName ? ` in ${data.municipalityName}` : ''}. Each surcharge can be Active or Off.
           </p>
+          {data.municipalities.length > 0 ? (
+            <label style={{ display: 'block', marginTop: 10, maxWidth: 320 }}>
+              Municipality
+              <select value={municipalityId} onChange={(e) => void changeMunicipality(e.target.value)}>
+                {data.municipalities.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
         </div>
-        <button className="btn" type="button" style={{ width: 'auto', whiteSpace: 'nowrap' }} onClick={openCreate}>
+        <button className="btn" type="button" style={{ width: 'auto', whiteSpace: 'nowrap' }} disabled={!municipalityId} onClick={openCreate}>
           Add surcharge
         </button>
       </div>
@@ -8170,7 +8263,7 @@ function OperatorSurchargesPage() {
             isActive,
           })
             .then((next) => {
-              setData(next)
+              loadMatrix(next)
               setNotice(`${item.name} is now ${isActive ? 'active' : 'off'}.`)
             })
             .catch((err: Error) => setError(err.message))
@@ -8181,7 +8274,7 @@ function OperatorSurchargesPage() {
           }
           void api.deleteOperatorSurcharge(item.id)
             .then((next) => {
-              setData(next)
+              loadMatrix(next)
               setNotice(`${item.name} removed.`)
               if (editing?.id === item.id) {
                 closeModal()

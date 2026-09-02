@@ -274,6 +274,8 @@ public record FareSurchargeItem(
 
 public record FareRatesItem(
     VehicleType VehicleType,
+    Guid MunicipalityId,
+    string MunicipalityName,
     decimal BaseFare,
     decimal PerKm,
     decimal MinimumFare,
@@ -289,6 +291,8 @@ public record OperatorFareListItem(
     Guid OperatorId,
     string OperatorName,
     bool OperatorActive,
+    Guid MunicipalityId,
+    string MunicipalityName,
     decimal MotorcycleCommissionPercent,
     decimal TricycleCommissionPercent,
     FareRatesItem? Motorcycle,
@@ -300,6 +304,9 @@ public record OperatorFareDetailResponse(
     bool OperatorActive,
     decimal MotorcycleCommissionPercent,
     decimal TricycleCommissionPercent,
+    Guid? MunicipalityId,
+    string? MunicipalityName,
+    IReadOnlyList<IdName> Municipalities,
     FareRatesItem? Motorcycle,
     FareRatesItem? Tricycle);
 
@@ -616,6 +623,7 @@ public record OperatorInboxItem(
 
 public record SaveFareRatesRequest(
     VehicleType VehicleType,
+    Guid MunicipalityId,
     decimal BaseFare,
     decimal PerKm,
     decimal MinimumFare,
@@ -643,6 +651,7 @@ public record FareVehicleRatesBody(
     IReadOnlyList<FarePassengerTierBody>? PassengerTiers = null);
 
 public record SaveRelatedFareRatesRequest(
+    Guid MunicipalityId,
     FareVehicleRatesBody Motorcycle,
     FareVehicleRatesBody Tricycle);
 
@@ -657,6 +666,7 @@ public record SaveFareSurchargeRequest(
     bool IsActive);
 
 public record SaveRelatedFareSurchargeRequest(
+    Guid MunicipalityId,
     IReadOnlyList<VehicleType>? VehicleTypes,
     SurchargeKind Kind,
     string Name,

@@ -127,7 +127,11 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
         var passengers = rider.VehicleType == VehicleType.Motorcycle
             ? 1
             : Math.Max(1, request.PassengerCount);
-        var fare = await QuoteAsync(op.Id, rider.VehicleType, distance, passengers, cancellationToken);
+        var fare = await QuoteAsync(op.Id, rider.VehicleType, distance, passengers, pickup.MunicipalityId, cancellationToken);
+        if (fare is null)
+        {
+            return BadRequest(new { message = "No fare matrix for this municipality. Create rates for this city first." });
+        }
         var paymentError = RiderPaymentSync.ValidateTripPayment(request.PaymentMethod, request.PaymentMethodOther);
         if (paymentError is not null)
         {
@@ -160,7 +164,7 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
             CustomerPhone = phone,
             Reference = $"YP{scheduled:yyyyMMdd}-S{Random.Shared.Next(10, 99):00}{DateTime.UtcNow:ss}",
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-            Fare = fare,
+            Fare = fare.Value,
             DistanceKm = distance,
             PassengerCount = passengers,
             PaymentMethod = request.PaymentMethod,
@@ -215,16 +219,25 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
             .ThenInclude(x => x.Province)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
-    private async Task<decimal> QuoteAsync(
+    private async Task<decimal?> QuoteAsync(
         Guid operatorId,
         VehicleType vehicleType,
         decimal distanceKm,
         int passengerCount,
+        Guid municipalityId,
         CancellationToken cancellationToken)
     {
-        var fare = await db.FareMatrices
-            .Include(x => x.PassengerTiers)
-            .FirstOrDefaultAsync(x => x.OperatorId == operatorId && x.VehicleType == vehicleType && x.IsActive, cancellationToken);
+        var fare = await OperatorMaps.LoadFareMatrixAsync(
+            db,
+            operatorId,
+            vehicleType,
+            municipalityId,
+            cancellationToken);
+        if (fare is null)
+        {
+            return null;
+        }
+
         return FareQuote.ComputeForPassengers(fare, passengerCount, distanceKm);
     }
 

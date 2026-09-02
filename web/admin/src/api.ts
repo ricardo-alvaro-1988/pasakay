@@ -475,6 +475,8 @@ export type FarePassengerTier = {
 
 export type FareRates = {
   vehicleType: VehicleType
+  municipalityId: string
+  municipalityName: string
   baseFare: number
   perKm: number
   minimumFare: number
@@ -539,6 +541,21 @@ export type OperatorFareMatrix = {
   operatorId: string
   operatorName: string
   operatorActive: boolean
+  motorcycleCommissionPercent: number
+  tricycleCommissionPercent: number
+  municipalityId: string | null
+  municipalityName: string | null
+  municipalities: IdName[]
+  motorcycle: FareRates | null
+  tricycle: FareRates | null
+}
+
+export type OperatorFareListItem = {
+  operatorId: string
+  operatorName: string
+  operatorActive: boolean
+  municipalityId: string
+  municipalityName: string
   motorcycleCommissionPercent: number
   tricycleCommissionPercent: number
   motorcycle: FareRates | null
@@ -1000,10 +1017,14 @@ export const api = {
     if (vehicleType) {
       params.set('vehicleType', vehicleType)
     }
-    return request<Paged<OperatorFareMatrix>>(`/api/admin/fares?${params}`)
+    return request<Paged<OperatorFareListItem>>(`/api/admin/fares?${params}`)
   },
-  operatorFares: (operatorId: string) =>
-    request<OperatorFareMatrix>(`/api/admin/operators/${operatorId}/fares`),
+  operatorFares: (operatorId: string, municipalityId?: string) => {
+    const params = new URLSearchParams()
+    if (municipalityId) params.set('municipalityId', municipalityId)
+    const qs = params.toString()
+    return request<OperatorFareMatrix>(`/api/admin/operators/${operatorId}/fares${qs ? `?${qs}` : ''}`)
+  },
   billingOperators: (q = '', page = 1, pageSize = 10) =>
     request<Paged<BillingOperator>>(`/api/admin/billing?q=${encodeURIComponent(q)}&page=${page}&pageSize=${pageSize}`),
   billingOperator: (operatorId: string) =>
@@ -1282,9 +1303,15 @@ export const api = {
     }),
   completeOperatorBooking: (id: string) =>
     request<RideDetail>(`/api/operator/bookings/${id}/complete`, { method: 'POST' }),
-  opFares: () => request<OperatorFareMatrix>('/api/operator/fares'),
+  opFares: (municipalityId?: string) => {
+    const params = new URLSearchParams()
+    if (municipalityId) params.set('municipalityId', municipalityId)
+    const qs = params.toString()
+    return request<OperatorFareMatrix>(`/api/operator/fares${qs ? `?${qs}` : ''}`)
+  },
   saveOperatorFares: (body: {
     vehicleType: VehicleType
+    municipalityId: string
     baseFare: number
     perKm: number
     minimumFare: number
@@ -1294,6 +1321,7 @@ export const api = {
     isActive: boolean
   }) => request<OperatorFareMatrix>('/api/operator/fares', { method: 'PUT', body: JSON.stringify(body) }),
   saveOperatorFareMatrix: (body: {
+    municipalityId: string
     motorcycle: {
       baseFare: number
       perKm: number
@@ -1316,6 +1344,7 @@ export const api = {
     }
   }) => request<OperatorFareMatrix>('/api/operator/fares/matrix', { method: 'PUT', body: JSON.stringify(body) }),
   addOperatorSurcharges: (body: {
+    municipalityId: string
     vehicleTypes: VehicleType[]
     kind: SurchargeKind
     name: string
@@ -1326,7 +1355,7 @@ export const api = {
     rangeEndUtc?: string | null
     isActive: boolean
   }) => request<OperatorFareMatrix>('/api/operator/fares/surcharges', { method: 'POST', body: JSON.stringify(body) }),
-  addOperatorSurcharge: (vehicleType: VehicleType, body: {
+  addOperatorSurcharge: (vehicleType: VehicleType, municipalityId: string, body: {
     kind: SurchargeKind
     name: string
     amount: number
@@ -1335,7 +1364,7 @@ export const api = {
     rangeStartUtc?: string | null
     rangeEndUtc?: string | null
     isActive: boolean
-  }) => request<OperatorFareMatrix>(`/api/operator/fares/${vehicleType}/surcharges`, {
+  }) => request<OperatorFareMatrix>(`/api/operator/fares/${vehicleType}/surcharges?municipalityId=${encodeURIComponent(municipalityId)}`, {
     method: 'POST',
     body: JSON.stringify(body),
   }),

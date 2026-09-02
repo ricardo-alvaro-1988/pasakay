@@ -297,53 +297,75 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
     {
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 50);
-        var query = db.Operators.AsQueryable();
+
+        var fareQuery = db.FareMatrices
+            .AsNoTracking()
+            .Include(x => x.Operator)
+            .Include(x => x.Municipality)
+            .Include(x => x.Surcharges)
+            .Include(x => x.PassengerTiers)
+            .AsQueryable();
+
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = q.Trim();
-            query = query.Where(x => x.CompanyName.Contains(term) || x.ContactName.Contains(term));
+            fareQuery = fareQuery.Where(x =>
+                x.Operator.CompanyName.Contains(term)
+                || x.Operator.ContactName.Contains(term)
+                || x.Municipality.Name.Contains(term));
         }
 
         if (vehicleType.HasValue)
         {
-            query = query.Where(x => x.FareMatrices.Any(f => f.VehicleType == vehicleType.Value));
+            fareQuery = fareQuery.Where(x => x.VehicleType == vehicleType.Value);
         }
 
-        var total = await query.CountAsync(cancellationToken);
-        var operators = await query
-            .OrderBy(x => x.CompanyName)
+        var fares = await fareQuery.ToListAsync(cancellationToken);
+        var groups = fares
+            .GroupBy(x => (x.OperatorId, x.MunicipalityId))
+            .Select(g =>
+            {
+                var sample = g.First();
+                return new
+                {
+                    sample.OperatorId,
+                    sample.MunicipalityId,
+                    OperatorName = sample.Operator.CompanyName,
+                    OperatorActive = sample.Operator.IsActive,
+                    MotorcycleCommissionPercent = sample.Operator.MotorcycleCommissionPercent,
+                    TricycleCommissionPercent = sample.Operator.TricycleCommissionPercent,
+                    MunicipalityName = sample.Municipality.Name,
+                    Rows = g.ToList()
+                };
+            })
+            .OrderBy(x => x.OperatorName)
+            .ThenBy(x => x.MunicipalityName)
+            .ToList();
+
+        var total = groups.Count;
+        var items = groups
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .Select(x => new { x.Id, x.CompanyName, x.IsActive, x.MotorcycleCommissionPercent, x.TricycleCommissionPercent })
-            .ToListAsync(cancellationToken);
-
-        var ids = operators.Select(x => x.Id).ToList();
-        var fares = ids.Count == 0
-            ? []
-            : await db.FareMatrices
-                .Include(x => x.Surcharges)
-                .Include(x => x.PassengerTiers)
-                .Where(x => ids.Contains(x.OperatorId))
-                .ToListAsync(cancellationToken);
-
-        var items = operators.Select(op =>
-        {
-            var rows = fares.Where(x => x.OperatorId == op.Id).ToList();
-            return new OperatorFareListItem(
-                op.Id,
-                op.CompanyName,
-                op.IsActive,
-                op.MotorcycleCommissionPercent,
-                op.TricycleCommissionPercent,
-                MapFareRates(rows.FirstOrDefault(x => x.VehicleType == VehicleType.Motorcycle), includeSamples: false),
-                MapFareRates(rows.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle), includeSamples: false));
-        }).ToList();
+            .Select(group => new OperatorFareListItem(
+                group.OperatorId,
+                group.OperatorName,
+                group.OperatorActive,
+                group.MunicipalityId,
+                group.MunicipalityName,
+                group.MotorcycleCommissionPercent,
+                group.TricycleCommissionPercent,
+                MapFareRates(group.Rows.FirstOrDefault(x => x.VehicleType == VehicleType.Motorcycle), includeSamples: false),
+                MapFareRates(group.Rows.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle), includeSamples: false)))
+            .ToList();
 
         return Ok(new PagedResult<OperatorFareListItem>(items, page, pageSize, total));
     }
 
     [HttpGet("operators/{id:guid}/fares")]
-    public async Task<ActionResult<OperatorFareDetailResponse>> GetOperatorFares(Guid id, CancellationToken cancellationToken)
+    public async Task<ActionResult<OperatorFareDetailResponse>> GetOperatorFares(
+        Guid id,
+        [FromQuery] Guid? municipalityId,
+        CancellationToken cancellationToken)
     {
         var op = await db.Operators.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (op is null)
@@ -351,17 +373,42 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             return NotFound();
         }
 
-        var fares = await db.FareMatrices
-            .Include(x => x.Surcharges)
-            .Include(x => x.PassengerTiers)
-            .Where(x => x.OperatorId == id)
-            .ToListAsync(cancellationToken);
+        var municipalities = await OperatorMaps.OperatorMunicipalitiesAsync(db, id, cancellationToken);
+        var selectedId = municipalityId
+            ?? municipalities.FirstOrDefault()?.Id
+            ?? await db.FareMatrices
+                .Where(x => x.OperatorId == id)
+                .OrderBy(x => x.Municipality.Name)
+                .Select(x => (Guid?)x.MunicipalityId)
+                .FirstOrDefaultAsync(cancellationToken);
+
+        var fares = selectedId is null
+            ? []
+            : await db.FareMatrices
+                .Include(x => x.Municipality)
+                .Include(x => x.Surcharges)
+                .Include(x => x.PassengerTiers)
+                .Where(x => x.OperatorId == id && x.MunicipalityId == selectedId)
+                .ToListAsync(cancellationToken);
+
+        var selectedName = selectedId is null
+            ? null
+            : municipalities.FirstOrDefault(x => x.Id == selectedId)?.Name
+                ?? fares.FirstOrDefault()?.Municipality.Name
+                ?? await db.Municipalities
+                    .Where(x => x.Id == selectedId)
+                    .Select(x => x.Name)
+                    .FirstOrDefaultAsync(cancellationToken);
+
         return Ok(new OperatorFareDetailResponse(
             op.Id,
             op.CompanyName,
             op.IsActive,
             op.MotorcycleCommissionPercent,
             op.TricycleCommissionPercent,
+            selectedId,
+            selectedName,
+            municipalities,
             MapFareRates(fares.FirstOrDefault(x => x.VehicleType == VehicleType.Motorcycle), includeSamples: true),
             MapFareRates(fares.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle), includeSamples: true)));
     }
@@ -1261,8 +1308,9 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         var completedTrips = await query
             .Where(x => x.Status == TripStatus.Completed)
             .Include(x => x.Operator)
+            .Include(x => x.PickupBarangay)
             .ToListAsync(cancellationToken);
-        var fares = await LoadFareMatrixLookupAsync(completedTrips, cancellationToken);
+        var fares = await OperatorMaps.LoadFareMatrixLookupAsync(db, completedTrips, cancellationToken);
         var (systemAmount, operatorAmount, driverAmount) = RideCommissionCalculator.Sum(completedTrips, fares);
 
         var summary = new RiderRideSummary(
@@ -1293,15 +1341,21 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         var total = await query.CountAsync(cancellationToken);
         var tripRows = await query
             .Include(x => x.Operator)
+            .Include(x => x.PickupBarangay)
             .OrderByDescending(x => x.RequestedAtUtc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
-        var pageFares = await LoadFareMatrixLookupAsync(tripRows, cancellationToken);
+        var pageFares = await OperatorMaps.LoadFareMatrixLookupAsync(db, tripRows, cancellationToken);
         var rides = tripRows
             .Select(x =>
             {
-                pageFares.TryGetValue((x.OperatorId, x.VehicleType), out var fare);
+                FareMatrix? fare = null;
+                if (x.PickupBarangay is not null)
+                {
+                    pageFares.TryGetValue((x.OperatorId, x.VehicleType, x.PickupBarangay.MunicipalityId), out fare);
+                }
+
                 return new RideListItem(
                     x.Id,
                     x.Reference,
@@ -1321,22 +1375,6 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             .ToList();
 
         return Ok(new RiderRidesResponse(summary, series, new PagedResult<RideListItem>(rides, page, pageSize, total)));
-    }
-
-    private async Task<Dictionary<(Guid OperatorId, VehicleType VehicleType), FareMatrix>> LoadFareMatrixLookupAsync(
-        IReadOnlyList<Trip> trips,
-        CancellationToken cancellationToken)
-    {
-        if (trips.Count == 0)
-        {
-            return [];
-        }
-
-        var operatorIds = trips.Select(x => x.OperatorId).Distinct().ToList();
-        var fares = await db.FareMatrices
-            .Where(x => operatorIds.Contains(x.OperatorId) && x.IsActive)
-            .ToListAsync(cancellationToken);
-        return fares.ToDictionary(x => (x.OperatorId, x.VehicleType));
     }
 
     private static CustomerListItem MapCustomer(CustomerProfile customer) =>

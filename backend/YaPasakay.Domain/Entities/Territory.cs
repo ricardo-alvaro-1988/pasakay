@@ -14,6 +14,7 @@ public class Municipality : BaseEntity
     public Province Province { get; set; } = null!;
     public string Name { get; set; } = string.Empty;
     public ICollection<Barangay> Barangays { get; set; } = new List<Barangay>();
+    public ICollection<FareMatrix> FareMatrices { get; set; } = new List<FareMatrix>();
 }
 
 public class Barangay : BaseEntity

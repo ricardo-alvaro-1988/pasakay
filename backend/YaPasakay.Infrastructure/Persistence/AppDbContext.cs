@@ -287,7 +287,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<FareMatrix>(entity =>
         {
-            entity.HasIndex(x => new { x.OperatorId, x.VehicleType }).IsUnique();
+            entity.HasIndex(x => new { x.OperatorId, x.VehicleType, x.MunicipalityId }).IsUnique();
             entity.Property(x => x.BaseFare).HasColumnType("decimal(18,2)");
             entity.Property(x => x.PerKm).HasColumnType("decimal(18,2)");
             entity.Property(x => x.MinimumFare).HasColumnType("decimal(18,2)");
@@ -297,6 +297,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.Operator)
                 .WithMany(x => x.FareMatrices)
                 .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Municipality)
+                .WithMany(x => x.FareMatrices)
+                .HasForeignKey(x => x.MunicipalityId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

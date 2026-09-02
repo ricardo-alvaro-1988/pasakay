@@ -188,7 +188,20 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         var fromName = trip.Rider.AppUser.FullName;
         trip.RiderId = rider.Id;
         trip.VehicleType = rider.VehicleType;
-        trip.Fare = await QuoteAsync(op.Id, rider.VehicleType, trip.DistanceKm, trip.PassengerCount, cancellationToken);
+        try
+        {
+            trip.Fare = await QuoteAsync(
+                op.Id,
+                rider.VehicleType,
+                trip.DistanceKm,
+                trip.PassengerCount,
+                trip.PickupBarangayId,
+                cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
         trip.UpdatedAtUtc = DateTime.UtcNow;
         var note = $"Reassigned from {fromName} to {rider.AppUser.FullName}.";
         trip.Notes = string.IsNullOrWhiteSpace(trip.Notes)
@@ -242,11 +255,34 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         VehicleType vehicleType,
         decimal distanceKm,
         int passengerCount,
+        Guid? pickupBarangayId,
         CancellationToken cancellationToken)
     {
-        var fare = await db.FareMatrices
-            .Include(x => x.PassengerTiers)
-            .FirstOrDefaultAsync(x => x.OperatorId == operatorId && x.VehicleType == vehicleType && x.IsActive, cancellationToken);
+        if (pickupBarangayId is null)
+        {
+            throw new InvalidOperationException("Pickup barangay is required to quote a fare.");
+        }
+
+        var municipalityId = await db.Barangays
+            .Where(x => x.Id == pickupBarangayId)
+            .Select(x => (Guid?)x.MunicipalityId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (municipalityId is null)
+        {
+            throw new InvalidOperationException("Pickup municipality was not found.");
+        }
+
+        var fare = await OperatorMaps.LoadFareMatrixAsync(
+            db,
+            operatorId,
+            vehicleType,
+            municipalityId.Value,
+            cancellationToken);
+        if (fare is null)
+        {
+            throw new InvalidOperationException("No fare matrix for this municipality.");
+        }
+
         return FareQuote.ComputeForPassengers(fare, passengerCount, distanceKm <= 0 ? 4 : distanceKm);
     }
 

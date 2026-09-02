@@ -1634,74 +1634,202 @@ public static class DbSeeder
 
     private static async Task SeedFareMatricesAsync(AppDbContext db, Operator op, CancellationToken cancellationToken)
     {
-        if (await db.FareMatrices.AnyAsync(x => x.OperatorId == op.Id, cancellationToken))
+        var municipalityIds = await db.OperatorBarangays
+            .Where(x => x.OperatorId == op.Id)
+            .Select(x => x.Barangay.MunicipalityId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (municipalityIds.Count == 0 && op.AddressBarangayId is Guid hqBarangayId)
+        {
+            var hqMunicipalityId = await db.Barangays
+                .Where(x => x.Id == hqBarangayId)
+                .Select(x => (Guid?)x.MunicipalityId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (hqMunicipalityId is Guid mid)
+            {
+                municipalityIds.Add(mid);
+            }
+        }
+
+        if (municipalityIds.Count == 0)
+        {
+            var anyMunicipalityId = await db.Municipalities
+                .OrderBy(x => x.Name)
+                .Select(x => (Guid?)x.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (anyMunicipalityId is Guid mid)
+            {
+                municipalityIds.Add(mid);
+            }
+        }
+
+        foreach (var municipalityId in municipalityIds)
+        {
+            if (!await db.FareMatrices.AnyAsync(
+                    x => x.OperatorId == op.Id && x.VehicleType == VehicleType.Motorcycle && x.MunicipalityId == municipalityId,
+                    cancellationToken))
+            {
+                db.FareMatrices.Add(new FareMatrix
+                {
+                    OperatorId = op.Id,
+                    MunicipalityId = municipalityId,
+                    VehicleType = VehicleType.Motorcycle,
+                    BaseFare = 40m,
+                    PerKm = 12m,
+                    MinimumFare = 40m,
+                    IncludedKm = 1m,
+                    OperatorCommissionPercent = FareCommissionSplit.Defaults(op.MotorcycleCommissionPercent).Operator,
+                    DriverCommissionPercent = FareCommissionSplit.Defaults(op.MotorcycleCommissionPercent).Driver,
+                    IsActive = true,
+                    PassengerTiers =
+                    {
+                        new FarePassengerTier
+                        {
+                            PassengerCount = 1,
+                            BaseFare = 40m,
+                            PerKm = 12m,
+                            MinimumFare = 40m,
+                            IncludedKm = 1m
+                        }
+                    }
+                });
+            }
+
+            if (!await db.FareMatrices.AnyAsync(
+                    x => x.OperatorId == op.Id && x.VehicleType == VehicleType.Tricycle && x.MunicipalityId == municipalityId,
+                    cancellationToken))
+            {
+                db.FareMatrices.Add(new FareMatrix
+                {
+                    OperatorId = op.Id,
+                    MunicipalityId = municipalityId,
+                    VehicleType = VehicleType.Tricycle,
+                    BaseFare = 50m,
+                    PerKm = 15m,
+                    MinimumFare = 50m,
+                    IncludedKm = 1m,
+                    OperatorCommissionPercent = FareCommissionSplit.Defaults(op.TricycleCommissionPercent).Operator,
+                    DriverCommissionPercent = FareCommissionSplit.Defaults(op.TricycleCommissionPercent).Driver,
+                    IsActive = true,
+                    PassengerTiers =
+                    {
+                        new FarePassengerTier
+                        {
+                            PassengerCount = 1,
+                            BaseFare = 50m,
+                            PerKm = 15m,
+                            MinimumFare = 50m,
+                            IncludedKm = 1m
+                        },
+                        new FarePassengerTier
+                        {
+                            PassengerCount = 2,
+                            BaseFare = 60m,
+                            PerKm = 18m,
+                            MinimumFare = 60m,
+                            IncludedKm = 1m
+                        },
+                        new FarePassengerTier
+                        {
+                            PassengerCount = 3,
+                            BaseFare = 70m,
+                            PerKm = 20m,
+                            MinimumFare = 70m,
+                            IncludedKm = 1m
+                        }
+                    }
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await CloneFareMatricesToCoveredMunicipalitiesAsync(db, op.Id, cancellationToken);
+    }
+
+    private static async Task CloneFareMatricesToCoveredMunicipalitiesAsync(
+        AppDbContext db,
+        Guid operatorId,
+        CancellationToken cancellationToken)
+    {
+        var municipalityIds = await db.OperatorBarangays
+            .Where(x => x.OperatorId == operatorId)
+            .Select(x => x.Barangay.MunicipalityId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        if (municipalityIds.Count == 0)
         {
             return;
         }
 
-        db.FareMatrices.AddRange(
-            new FareMatrix
+        var existing = await db.FareMatrices
+            .Include(x => x.PassengerTiers)
+            .Include(x => x.Surcharges)
+            .Where(x => x.OperatorId == operatorId)
+            .ToListAsync(cancellationToken);
+        if (existing.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var vehicleType in new[] { VehicleType.Motorcycle, VehicleType.Tricycle })
+        {
+            var template = existing
+                .Where(x => x.VehicleType == vehicleType)
+                .OrderBy(x => x.CreatedAtUtc)
+                .FirstOrDefault();
+            if (template is null)
             {
-                OperatorId = op.Id,
-                VehicleType = VehicleType.Motorcycle,
-                BaseFare = 40m,
-                PerKm = 12m,
-                MinimumFare = 40m,
-                IncludedKm = 1m,
-                OperatorCommissionPercent = FareCommissionSplit.Defaults(op.MotorcycleCommissionPercent).Operator,
-                DriverCommissionPercent = FareCommissionSplit.Defaults(op.MotorcycleCommissionPercent).Driver,
-                IsActive = true,
-                PassengerTiers =
-                {
-                    new FarePassengerTier
-                    {
-                        PassengerCount = 1,
-                        BaseFare = 40m,
-                        PerKm = 12m,
-                        MinimumFare = 40m,
-                        IncludedKm = 1m
-                    }
-                }
-            },
-            new FareMatrix
+                continue;
+            }
+
+            foreach (var municipalityId in municipalityIds)
             {
-                OperatorId = op.Id,
-                VehicleType = VehicleType.Tricycle,
-                BaseFare = 50m,
-                PerKm = 15m,
-                MinimumFare = 50m,
-                IncludedKm = 1m,
-                OperatorCommissionPercent = FareCommissionSplit.Defaults(op.TricycleCommissionPercent).Operator,
-                DriverCommissionPercent = FareCommissionSplit.Defaults(op.TricycleCommissionPercent).Driver,
-                IsActive = true,
-                PassengerTiers =
+                if (existing.Any(x => x.VehicleType == vehicleType && x.MunicipalityId == municipalityId))
                 {
-                    new FarePassengerTier
-                    {
-                        PassengerCount = 1,
-                        BaseFare = 50m,
-                        PerKm = 15m,
-                        MinimumFare = 50m,
-                        IncludedKm = 1m
-                    },
-                    new FarePassengerTier
-                    {
-                        PassengerCount = 2,
-                        BaseFare = 60m,
-                        PerKm = 18m,
-                        MinimumFare = 60m,
-                        IncludedKm = 1m
-                    },
-                    new FarePassengerTier
-                    {
-                        PassengerCount = 3,
-                        BaseFare = 70m,
-                        PerKm = 20m,
-                        MinimumFare = 70m,
-                        IncludedKm = 1m
-                    }
+                    continue;
                 }
-            });
+
+                var clone = new FareMatrix
+                {
+                    OperatorId = operatorId,
+                    MunicipalityId = municipalityId,
+                    VehicleType = vehicleType,
+                    BaseFare = template.BaseFare,
+                    PerKm = template.PerKm,
+                    MinimumFare = template.MinimumFare,
+                    IncludedKm = template.IncludedKm,
+                    OperatorCommissionPercent = template.OperatorCommissionPercent,
+                    DriverCommissionPercent = template.DriverCommissionPercent,
+                    IsActive = template.IsActive,
+                    PassengerTiers = template.PassengerTiers
+                        .Select(t => new FarePassengerTier
+                        {
+                            PassengerCount = t.PassengerCount,
+                            BaseFare = t.BaseFare,
+                            PerKm = t.PerKm,
+                            MinimumFare = t.MinimumFare,
+                            IncludedKm = t.IncludedKm
+                        })
+                        .ToList(),
+                    Surcharges = template.Surcharges
+                        .Select(s => new FareSurcharge
+                        {
+                            Kind = s.Kind,
+                            Name = s.Name,
+                            Amount = s.Amount,
+                            WindowStart = s.WindowStart,
+                            WindowEnd = s.WindowEnd,
+                            RangeStartUtc = s.RangeStartUtc,
+                            RangeEndUtc = s.RangeEndUtc,
+                            IsActive = s.IsActive
+                        })
+                        .ToList()
+                };
+                db.FareMatrices.Add(clone);
+                existing.Add(clone);
+            }
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 

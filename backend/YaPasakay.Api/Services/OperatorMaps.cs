@@ -158,11 +158,82 @@ public static class OperatorMaps
     public static async Task<FareMatrix?> LoadFareMatrixAsync(
         AppDbContext db,
         Trip trip,
+        CancellationToken cancellationToken)
+    {
+        var municipalityId = await ResolvePickupMunicipalityIdAsync(db, trip, cancellationToken);
+        if (municipalityId is null)
+        {
+            return null;
+        }
+
+        return await db.FareMatrices
+            .FirstOrDefaultAsync(
+                x => x.OperatorId == trip.OperatorId
+                    && x.VehicleType == trip.VehicleType
+                    && x.MunicipalityId == municipalityId
+                    && x.IsActive,
+                cancellationToken);
+    }
+
+    public static async Task<FareMatrix?> LoadFareMatrixAsync(
+        AppDbContext db,
+        Guid operatorId,
+        VehicleType vehicleType,
+        Guid municipalityId,
         CancellationToken cancellationToken) =>
         await db.FareMatrices
+            .Include(x => x.PassengerTiers)
             .FirstOrDefaultAsync(
-                x => x.OperatorId == trip.OperatorId && x.VehicleType == trip.VehicleType && x.IsActive,
+                x => x.OperatorId == operatorId
+                    && x.VehicleType == vehicleType
+                    && x.MunicipalityId == municipalityId
+                    && x.IsActive,
                 cancellationToken);
+
+    public static async Task<Guid?> ResolvePickupMunicipalityIdAsync(
+        AppDbContext db,
+        Trip trip,
+        CancellationToken cancellationToken)
+    {
+        if (trip.PickupBarangay is not null)
+        {
+            return trip.PickupBarangay.MunicipalityId;
+        }
+
+        if (trip.PickupBarangayId is Guid barangayId)
+        {
+            return await db.Barangays
+                .Where(x => x.Id == barangayId)
+                .Select(x => (Guid?)x.MunicipalityId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        return null;
+    }
+
+    public static async Task<IReadOnlyList<IdName>> OperatorMunicipalitiesAsync(
+        AppDbContext db,
+        Guid operatorId,
+        CancellationToken cancellationToken)
+    {
+        var covered = await db.OperatorBarangays
+            .Where(x => x.OperatorId == operatorId)
+            .Select(x => new { x.Barangay.MunicipalityId, x.Barangay.Municipality.Name })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var fromFares = await db.FareMatrices
+            .Where(x => x.OperatorId == operatorId)
+            .Select(x => new { MunicipalityId = x.MunicipalityId, x.Municipality.Name })
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return covered
+            .Concat(fromFares)
+            .GroupBy(x => x.MunicipalityId)
+            .Select(g => new IdName(g.Key, g.First().Name))
+            .OrderBy(x => x.Name)
+            .ToList();
+    }
 
     public static RideStopItem RideStop(string details, string fullAddress, Barangay? barangay)
     {
@@ -271,6 +342,7 @@ public static class OperatorMaps
         var completedTrips = await query
             .Where(x => x.Status == TripStatus.Completed)
             .Include(x => x.Operator)
+            .Include(x => x.PickupBarangay)
             .ToListAsync(cancellationToken);
         var fares = await LoadFareMatrixLookupAsync(db, completedTrips, cancellationToken);
         var (systemAmount, operatorAmount, driverAmount) = RideCommissionCalculator.Sum(completedTrips, fares);
@@ -303,6 +375,7 @@ public static class OperatorMaps
         var total = await query.CountAsync(cancellationToken);
         var tripRows = await query
             .Include(x => x.Operator)
+            .Include(x => x.PickupBarangay)
             .OrderByDescending(x => x.RequestedAtUtc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -311,7 +384,12 @@ public static class OperatorMaps
         var rides = tripRows
             .Select(x =>
             {
-                pageFares.TryGetValue((x.OperatorId, x.VehicleType), out var fare);
+                FareMatrix? fare = null;
+                if (x.PickupBarangay is not null)
+                {
+                    pageFares.TryGetValue((x.OperatorId, x.VehicleType, x.PickupBarangay.MunicipalityId), out fare);
+                }
+
                 return new RideListItem(
                     x.Id,
                     x.Reference,
@@ -333,7 +411,7 @@ public static class OperatorMaps
         return new RiderRidesResponse(summary, series, new PagedResult<RideListItem>(rides, page, pageSize, total));
     }
 
-    private static async Task<Dictionary<(Guid OperatorId, VehicleType VehicleType), FareMatrix>> LoadFareMatrixLookupAsync(
+    public static async Task<Dictionary<(Guid OperatorId, VehicleType VehicleType, Guid MunicipalityId), FareMatrix>> LoadFareMatrixLookupAsync(
         AppDbContext db,
         IReadOnlyList<Trip> trips,
         CancellationToken cancellationToken)
@@ -347,7 +425,9 @@ public static class OperatorMaps
         var fares = await db.FareMatrices
             .Where(x => operatorIds.Contains(x.OperatorId) && x.IsActive)
             .ToListAsync(cancellationToken);
-        return fares.ToDictionary(x => (x.OperatorId, x.VehicleType));
+        return fares
+            .GroupBy(x => (x.OperatorId, x.VehicleType, x.MunicipalityId))
+            .ToDictionary(g => g.Key, g => g.First());
     }
 
     public static FareRatesItem? FareRates(FareMatrix? fare, bool includeSamples)
@@ -359,8 +439,11 @@ public static class OperatorMaps
 
         var tiers = MapPassengerTiers(fare);
         var sampleTier = FareQuote.ResolveTier(fare, 1);
+        var municipalityName = fare.Municipality?.Name ?? string.Empty;
         return new FareRatesItem(
             fare.VehicleType,
+            fare.MunicipalityId,
+            municipalityName,
             sampleTier?.BaseFare ?? fare.BaseFare,
             sampleTier?.PerKm ?? fare.PerKm,
             sampleTier?.MinimumFare ?? fare.MinimumFare,
