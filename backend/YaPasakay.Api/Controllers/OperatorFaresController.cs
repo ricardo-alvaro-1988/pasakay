@@ -444,6 +444,11 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
 
     private static string DescribeDbError(DbUpdateException ex)
     {
+        if (ex is DbUpdateConcurrencyException)
+        {
+            return "Fare rates changed while saving. Refresh the page and try again.";
+        }
+
         var root = ex.InnerException?.Message ?? ex.Message;
         if (root.Contains("IX_FarePassengerTiers_FareMatrixId_PassengerCount", StringComparison.OrdinalIgnoreCase)
             || root.Contains("UNIQUE KEY", StringComparison.OrdinalIgnoreCase)
@@ -482,16 +487,13 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         fare.IsActive = rates.IsActive;
         fare.UpdatedAtUtc = DateTime.UtcNow;
 
-        // Flush deletes before inserts so the unique (FareMatrixId, PassengerCount) index never conflicts.
         if (db.Entry(fare).State != EntityState.Added)
         {
-            await db.Entry(fare).Collection(x => x.PassengerTiers).LoadAsync(cancellationToken);
-            if (fare.PassengerTiers.Count > 0)
-            {
-                db.FarePassengerTiers.RemoveRange(fare.PassengerTiers.ToList());
-                await db.SaveChangesAsync(cancellationToken);
-                fare.PassengerTiers.Clear();
-            }
+            // Database-side delete avoids change-tracker concurrency conflicts with unique passenger counts.
+            await db.FarePassengerTiers
+                .Where(x => x.FareMatrixId == fare.Id)
+                .ExecuteDeleteAsync(cancellationToken);
+            DetachPassengerTiers(fare);
         }
         else
         {
@@ -511,6 +513,18 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         }
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private void DetachPassengerTiers(FareMatrix fare)
+    {
+        foreach (var entry in db.ChangeTracker.Entries<FarePassengerTier>()
+            .Where(e => e.Entity.FareMatrixId == fare.Id || ReferenceEquals(e.Entity.FareMatrix, fare))
+            .ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
+
+        fare.PassengerTiers.Clear();
     }
 
     private static IReadOnlyList<FarePassengerTierBody> NormalizeTiers(
