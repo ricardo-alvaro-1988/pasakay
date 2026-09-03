@@ -22,19 +22,50 @@ public class LiveNotify(IHubContext<DeskHub> desk, IHubContext<OpsHub> ops, IPus
     public async Task RiderOfferAsync(Guid riderId, string reference, CancellationToken cancellationToken = default)
     {
         await RiderChangedAsync(riderId, "offer", cancellationToken);
+        await PushRiderAsync(
+            riderId,
+            "New job offer",
+            string.IsNullOrWhiteSpace(reference) ? "Open Ya! Pasakay to accept." : $"Trip {reference} is waiting.",
+            "offer",
+            cancellationToken);
+    }
+
+    public async Task RiderAssignedAsync(Guid riderId, string reference, bool hail, CancellationToken cancellationToken = default)
+    {
+        var reason = hail ? "hail-booked" : "assigned";
+        await RiderChangedAsync(riderId, reason, cancellationToken);
+        await PushRiderAsync(
+            riderId,
+            hail ? "Customer booked you" : "New booking assigned",
+            string.IsNullOrWhiteSpace(reference)
+                ? "A customer booked you. Open the app to start the trip."
+                : $"Trip {reference} is waiting. Open the app to start.",
+            reason,
+            cancellationToken);
+    }
+
+    private async Task PushRiderAsync(
+        Guid riderId,
+        string title,
+        string body,
+        string reason,
+        CancellationToken cancellationToken)
+    {
         var userId = await db.RiderProfiles.AsNoTracking()
             .Where(x => x.Id == riderId)
             .Select(x => x.AppUserId)
             .FirstOrDefaultAsync(cancellationToken);
-        if (userId != Guid.Empty)
+        if (userId == Guid.Empty)
         {
-            await push.SendToUserAsync(
-                userId,
-                "New job offer",
-                string.IsNullOrWhiteSpace(reference) ? "Open Ya! Pasakay to accept." : $"Trip {reference} is waiting.",
-                new Dictionary<string, string> { ["reason"] = "offer" },
-                cancellationToken);
+            return;
         }
+
+        await push.SendToUserAsync(
+            userId,
+            title,
+            body,
+            new Dictionary<string, string> { ["reason"] = reason },
+            cancellationToken);
     }
 
     public async Task CustomerTripAsync(Guid customerId, string reason, string title, string body, CancellationToken cancellationToken = default)

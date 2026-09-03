@@ -305,6 +305,7 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
         }
 
         var offer = await db.TripOffers
+            .Include(x => x.Trip)
             .FirstOrDefaultAsync(x => x.Id == id && x.RiderId == rider.Id, cancellationToken);
         if (offer is null)
         {
@@ -313,10 +314,26 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
 
         if (offer.Status == OfferStatus.Offered)
         {
+            var now = DateTime.UtcNow;
             offer.Status = OfferStatus.Declined;
-            offer.RespondedAtUtc = DateTime.UtcNow;
-            offer.UpdatedAtUtc = DateTime.UtcNow;
+            offer.RespondedAtUtc = now;
+            offer.UpdatedAtUtc = now;
+            if (TripBroadcastService.IsCustomerPick(offer.Trip.Notes) && offer.Trip.Status == TripStatus.Pending)
+            {
+                offer.Trip.Status = TripStatus.Cancelled;
+                offer.Trip.UpdatedAtUtc = now;
+            }
+
             await db.SaveChangesAsync(cancellationToken);
+            if (offer.Trip.Status == TripStatus.Cancelled && offer.Trip.CustomerId is Guid customerId)
+            {
+                await live.CustomerTripAsync(
+                    customerId,
+                    "cancelled",
+                    "Rider declined",
+                    $"No rider accepted {offer.Trip.Reference}. Book again to pick another rider.",
+                    cancellationToken);
+            }
         }
 
         return Ok(await BuildDeskAsync(rider.Id, cancellationToken));

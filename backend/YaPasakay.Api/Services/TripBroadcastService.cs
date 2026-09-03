@@ -13,10 +13,14 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
     public const double RadiusKm = 8;
     public const int MaxRiders = 20;
     public const string DirectHailNote = "Direct hail";
+    public const string CustomerPickNote = "Customer selected rider";
     public static readonly TimeSpan HailTtl = TimeSpan.FromMinutes(10);
 
     public static bool HailIsLive(DateTime? at) =>
         at is DateTime stamped && DateTime.UtcNow - stamped <= HailTtl;
+
+    public static bool IsCustomerPick(string? notes) =>
+        string.Equals(notes, CustomerPickNote, StringComparison.OrdinalIgnoreCase);
     public static readonly TimeSpan LiveOfferTtl = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan ScheduledOfferTtl = TimeSpan.FromHours(2);
 
@@ -62,7 +66,9 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             ? now.Add(ScheduledOfferTtl)
             : now.Add(LiveOfferTtl);
 
-        var chosen = ranked.Take(MaxRiders).ToList();
+        var chosen = IsCustomerPick(trip.Notes)
+            ? ranked.Where(x => x.Rider.Id == trip.RiderId).Take(1).ToList()
+            : ranked.Take(MaxRiders).ToList();
 
         var notifyRiderIds = new HashSet<Guid>();
         foreach (var (rider, distance, preferred) in chosen)

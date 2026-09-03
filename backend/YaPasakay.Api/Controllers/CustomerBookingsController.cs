@@ -406,7 +406,7 @@ public class CustomerBookingsController(
             }
         }
 
-        var assignImmediately = isDirectHail || customerPicksRider;
+        var assignImmediately = isDirectHail;
         var now = DateTime.UtcNow;
         var trip = new Trip
         {
@@ -432,7 +432,9 @@ public class CustomerBookingsController(
                 : $"YP{now:yyyyMMdd}-C{Random.Shared.Next(10, 99):00}{now:ss}",
             Notes = isDirectHail
                 ? TripBroadcastService.DirectHailNote
-                : string.IsNullOrWhiteSpace(body.Notes) ? null : body.Notes.Trim(),
+                : customerPicksRider
+                    ? TripBroadcastService.CustomerPickNote
+                    : string.IsNullOrWhiteSpace(body.Notes) ? null : body.Notes.Trim(),
             Fare = prepared.Fare,
             DistanceKm = prepared.DistanceKm,
             PassengerCount = prepared.PassengerCount,
@@ -465,7 +467,7 @@ public class CustomerBookingsController(
                 RespondedAtUtc = now
             });
             await db.SaveChangesAsync(cancellationToken);
-            await live.RiderChangedAsync(prepared.Rider.Id, isDirectHail ? "hail-booked" : "assigned", cancellationToken);
+            await live.RiderAssignedAsync(prepared.Rider.Id, trip.Reference, isDirectHail, cancellationToken);
             await live.CustomerChangedAsync(customer.Id, isDirectHail ? "hail-booked" : "assigned", cancellationToken);
             return Ok(await CustomerDeskBuilder.BuildAsync(db, customer, cancellationToken));
         }
