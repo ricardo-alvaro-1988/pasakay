@@ -378,6 +378,7 @@ export const api = {
     paymentMethod: PaymentMethod
     pickupLat: number
     pickupLng: number
+    pickupDetails: string
     pickupBarangayId?: string
   }) => {
     const params = new URLSearchParams({
@@ -385,6 +386,7 @@ export const api = {
       paymentMethod: opts.paymentMethod,
       pickupLat: String(opts.pickupLat),
       pickupLng: String(opts.pickupLng),
+      pickupDetails: opts.pickupDetails,
     })
     if (opts.pickupBarangayId) params.set('pickupBarangayId', opts.pickupBarangayId)
     return request<HailRider[]>(`/api/customer/riders/available?${params}`)

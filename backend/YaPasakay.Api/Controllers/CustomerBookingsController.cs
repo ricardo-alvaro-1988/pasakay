@@ -90,6 +90,7 @@ public class CustomerBookingsController(
         [FromQuery] double pickupLat,
         [FromQuery] double pickupLng,
         [FromQuery] Guid? pickupBarangayId,
+        [FromQuery] string? pickupDetails,
         CancellationToken cancellationToken)
     {
         var (customer, status, message) = await CustomerContext.RequireAsync(db, User, cancellationToken);
@@ -108,7 +109,13 @@ public class CustomerBookingsController(
             return BadRequest(new { message = "Choose Motorcycle or Tricycle." });
         }
 
-        var op = await ResolveOperatorForPickupAsync(pickupBarangayId, pickupLat, pickupLng, cancellationToken);
+        var pickup = await ResolveBarangayAsync(pickupBarangayId, pickupDetails ?? string.Empty, cancellationToken);
+        if (pickup is null)
+        {
+            return BadRequest(new { message = "Pickup must match a Philippine barangay." });
+        }
+
+        var op = await ResolveOperatorForBarangayAsync(pickup, cancellationToken);
         if (op is null)
         {
             return BadRequest(new { message = "No operator covers this pickup area yet." });
@@ -120,7 +127,7 @@ public class CustomerBookingsController(
             paymentMethod,
             pickupLat,
             pickupLng,
-            pickupBarangayId,
+            pickup.Id,
             cancellationToken);
         return Ok(riders);
     }
@@ -791,35 +798,13 @@ public class CustomerBookingsController(
         CancellationToken cancellationToken) =>
         TerritoryLookup.MatchFromAddressAsync(db, id, details, cancellationToken);
 
-    private async Task<Operator?> ResolveOperatorForPickupAsync(
-        Guid? pickupBarangayId,
-        double pickupLat,
-        double pickupLng,
-        CancellationToken cancellationToken)
-    {
-        Barangay? pickup = null;
-        if (pickupBarangayId is Guid id)
-        {
-            pickup = await db.Barangays
-                .Include(x => x.Municipality)
-                .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-        }
-
-        if (pickup is null)
-        {
-            return await db.Operators
-                .Where(x => x.IsActive)
-                .OrderBy(x => x.CompanyName)
-                .FirstOrDefaultAsync(cancellationToken);
-        }
-
-        return await db.Operators
+    private Task<Operator?> ResolveOperatorForBarangayAsync(Barangay pickup, CancellationToken cancellationToken) =>
+        db.Operators
             .Where(x => x.IsActive && (
                 x.Areas.Any(a => a.BarangayId == pickup.Id)
                 || x.Areas.Any(a => a.Barangay.MunicipalityId == pickup.MunicipalityId)))
             .OrderBy(x => x.CompanyName)
             .FirstOrDefaultAsync(cancellationToken);
-    }
 
     private sealed class PreparedBooking
     {

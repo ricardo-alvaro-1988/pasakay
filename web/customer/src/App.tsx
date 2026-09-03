@@ -543,6 +543,7 @@ function Home({
       paymentMethod: payment,
       pickupLat: pickup.lat,
       pickupLng: pickup.lng,
+      pickupDetails: pickup.details || pickup.label,
       pickupBarangayId: pickup.barangayId,
     })
       .then((rows) => {
@@ -557,7 +558,7 @@ function Home({
         if (!cancelled) setLoadingRiders(false)
       })
     return () => { cancelled = true }
-  }, [needsRiderPick, pickup, dropoff, vehicle, payment, trip, hail?.riderId])
+  }, [needsRiderPick, pickup, dropoff, vehicle, payment, trip, hail?.riderId, pickup?.details, pickup?.label])
 
   useEffect(() => {
     if (hail) setShowQr(false)
