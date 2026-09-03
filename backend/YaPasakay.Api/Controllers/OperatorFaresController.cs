@@ -487,32 +487,31 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         fare.IsActive = rates.IsActive;
         fare.UpdatedAtUtc = DateTime.UtcNow;
 
-        if (db.Entry(fare).State != EntityState.Added)
+        // 1. Save FareMatrix scalar changes (and insert new matrix row when State == Added).
+        //    Do NOT touch PassengerTiers through EF — we manage them via raw SQL below
+        //    to avoid unique-index conflicts from the change-tracker.
+        var isNew = db.Entry(fare).State == EntityState.Added;
+        DetachPassengerTiers(fare);
+        await db.SaveChangesAsync(cancellationToken);
+
+        // 2. Delete all existing tiers directly (no-op on insert).
+        if (!isNew)
         {
-            // Database-side delete avoids change-tracker concurrency conflicts with unique passenger counts.
-            await db.FarePassengerTiers
-                .Where(x => x.FareMatrixId == fare.Id)
-                .ExecuteDeleteAsync(cancellationToken);
-            DetachPassengerTiers(fare);
-        }
-        else
-        {
-            fare.PassengerTiers.Clear();
+            await db.Database.ExecuteSqlRawAsync(
+                "DELETE FROM FarePassengerTiers WHERE FareMatrixId = {0}",
+                [fare.Id],
+                cancellationToken);
         }
 
+        // 3. Insert new tiers directly.
+        var now = DateTime.UtcNow;
         foreach (var tier in tiers)
         {
-            fare.PassengerTiers.Add(new FarePassengerTier
-            {
-                PassengerCount = tier.PassengerCount,
-                BaseFare = tier.BaseFare,
-                PerKm = tier.PerKm,
-                MinimumFare = tier.MinimumFare,
-                IncludedKm = tier.IncludedKm,
-            });
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO FarePassengerTiers (Id, FareMatrixId, PassengerCount, BaseFare, PerKm, MinimumFare, IncludedKm, CreatedAtUtc) VALUES ({0},{1},{2},{3},{4},{5},{6},{7})",
+                [Guid.NewGuid(), fare.Id, tier.PassengerCount, tier.BaseFare, tier.PerKm, tier.MinimumFare, tier.IncludedKm, now],
+                cancellationToken);
         }
-
-        await db.SaveChangesAsync(cancellationToken);
     }
 
     private void DetachPassengerTiers(FareMatrix fare)
