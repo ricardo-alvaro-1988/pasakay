@@ -750,7 +750,7 @@ function defaultTierDraft(): FareTierDraft {
   }
 }
 
-function tierDraftsFromRates(rates: FareRates | null): FareTierDraft[] {
+function tierDraftsFromRates(rates: FareRates | null, singlePassenger = false): FareTierDraft[] {
   const tiers = rates?.passengerTiers?.length
     ? rates.passengerTiers
     : rates
@@ -765,23 +765,26 @@ function tierDraftsFromRates(rates: FareRates | null): FareTierDraft[] {
   if (!tiers) {
     return [defaultTierDraft()]
   }
-  return tiers
+  const sorted = tiers
     .slice()
     .sort((a, b) => a.passengerCount - b.passengerCount)
-    .map((tier) => ({
-      passengerCount: String(tier.passengerCount),
-      baseFare: String(tier.baseFare),
-      perKm: String(tier.perKm),
-      minimumFare: String(tier.minimumFare),
-      includedKm: String(tier.includedKm),
-    }))
+  const picked = singlePassenger
+    ? [sorted.find((tier) => tier.passengerCount === 1) ?? sorted[0]]
+    : sorted
+  return picked.map((tier) => ({
+    passengerCount: singlePassenger ? '1' : String(tier.passengerCount),
+    baseFare: String(tier.baseFare),
+    perKm: String(tier.perKm),
+    minimumFare: String(tier.minimumFare),
+    includedKm: String(tier.includedKm),
+  }))
 }
 
-function fareDraft(rates: FareRates | null, system = 10): FareDraft {
+function fareDraft(rates: FareRates | null, system = 10, singlePassenger = false): FareDraft {
   const operatorShare = rates?.operatorCommissionPercent ?? Math.min(20, Math.max(0, roundPercent(100 - system)))
   const driverShare = rates?.driverCommissionPercent ?? roundPercent(Math.max(0, 100 - system - operatorShare))
   return {
-    passengerTiers: tierDraftsFromRates(rates),
+    passengerTiers: tierDraftsFromRates(rates, singlePassenger),
     operatorCommissionPercent: String(operatorShare),
     driverCommissionPercent: String(driverShare),
     isActive: rates?.isActive ?? true,
@@ -802,8 +805,8 @@ function sameDraft(a: FareDraft, b: FareDraft) {
   return sameTiers(a.passengerTiers, b.passengerTiers) && a.isActive === b.isActive
 }
 
-function parseDraft(draft: FareDraft) {
-  const passengerTiers = draft.passengerTiers
+function parseDraft(draft: FareDraft, singlePassenger = false) {
+  let passengerTiers = draft.passengerTiers
     .map((tier) => ({
       passengerCount: Math.max(1, Math.floor(Number(tier.passengerCount) || 1)),
       baseFare: Number(tier.baseFare),
@@ -812,6 +815,16 @@ function parseDraft(draft: FareDraft) {
       includedKm: Number(tier.includedKm),
     }))
     .sort((a, b) => a.passengerCount - b.passengerCount)
+  if (singlePassenger) {
+    const primary = passengerTiers.find((tier) => tier.passengerCount === 1) ?? passengerTiers[0]
+    passengerTiers = [{
+      passengerCount: 1,
+      baseFare: primary?.baseFare ?? 50,
+      perKm: primary?.perKm ?? 12,
+      minimumFare: primary?.minimumFare ?? 50,
+      includedKm: primary?.includedKm ?? 1,
+    }]
+  }
   const primary = passengerTiers[0] ?? {
     passengerCount: 1,
     baseFare: 50,
@@ -4349,8 +4362,8 @@ function RelatedFareRatesTable({
   onChange?: (vehicle: VehicleType, patch: Partial<FareDraft>) => void
 }) {
   const editable = !!onChange && !!motorcycle && !!tricycle
-  const mc = motorcycle ?? fareDraft(data.motorcycle, data.motorcycleCommissionPercent)
-  const trike = tricycle ?? fareDraft(data.tricycle, data.tricycleCommissionPercent)
+  const mc = motorcycle ?? fareDraft(data.motorcycle, data.motorcycleCommissionPercent, true)
+  const trike = tricycle ?? fareDraft(data.tricycle, data.tricycleCommissionPercent, false)
 
   function patchTier(vehicle: VehicleType, tiers: FareTierDraft[]) {
     onChange?.(vehicle, { passengerTiers: tiers })
@@ -4384,6 +4397,66 @@ function RelatedFareRatesTable({
   function removeTier(vehicle: VehicleType, current: FareTierDraft[], index: number) {
     if (current.length <= 1) return
     patchTier(vehicle, current.filter((_, i) => i !== index))
+  }
+
+  function motorcycleRateEditor(draft: FareDraft, locked: boolean) {
+    const tier = draft.passengerTiers[0] ?? defaultTierDraft()
+    function patchRate(key: keyof FareTierDraft, value: string) {
+      onChange?.('Motorcycle', {
+        passengerTiers: [{ ...tier, passengerCount: '1', [key]: value }],
+      })
+    }
+    return (
+      <div className="fare-tier-editor">
+        <table className="fare-tier-table">
+          <thead>
+            <tr>
+              <th>Base</th>
+              <th>Incl. km</th>
+              <th>Per km</th>
+              <th>Min</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <input value={tier.baseFare} disabled={locked} onChange={(e) => patchRate('baseFare', e.target.value)} />
+              </td>
+              <td>
+                <input value={tier.includedKm} disabled={locked} onChange={(e) => patchRate('includedKm', e.target.value)} />
+              </td>
+              <td>
+                <input value={tier.perKm} disabled={locked} onChange={(e) => patchRate('perKm', e.target.value)} />
+              </td>
+              <td>
+                <input value={tier.minimumFare} disabled={locked} onChange={(e) => patchRate('minimumFare', e.target.value)} />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p className="muted" style={{ margin: '8px 0 0', fontSize: 12 }}>Motorcycle is always 1 passenger.</p>
+      </div>
+    )
+  }
+
+  function motorcycleRateReadonly(rates: FareRates | null) {
+    if (!rates) return '—'
+    const tier = rates.passengerTiers?.find((item) => item.passengerCount === 1)
+      ?? rates.passengerTiers?.[0]
+      ?? {
+        baseFare: rates.baseFare,
+        perKm: rates.perKm,
+        minimumFare: rates.minimumFare,
+        includedKm: rates.includedKm,
+      }
+    return (
+      <div className="fare-tier-readonly">
+        <div>
+          {peso(tier.baseFare)} / {tier.includedKm} km + {peso(tier.perKm)}/km
+          {tier.minimumFare > 0 ? ` · min ${peso(tier.minimumFare)}` : ''}
+        </div>
+      </div>
+    )
   }
 
   function tiersEditor(vehicle: VehicleType, draft: FareDraft, locked: boolean) {
@@ -4497,6 +4570,7 @@ function RelatedFareRatesTable({
     locked: boolean,
   ) {
     const total = commissionSum(systemPercent, draft)
+    const motorcycle = vehicle === 'Motorcycle'
     return (
       <section className="fare-vehicle-panel">
         <header className="fare-vehicle-panel-head">
@@ -4512,8 +4586,10 @@ function RelatedFareRatesTable({
         </header>
 
         <div className="fare-vehicle-block">
-          <div className="fare-vehicle-label">Passenger tiers</div>
-          {editable ? tiersEditor(vehicle, draft, locked) : tiersReadonly(rates)}
+          <div className="fare-vehicle-label">{motorcycle ? 'Rates' : 'Passenger tiers'}</div>
+          {editable
+            ? (motorcycle ? motorcycleRateEditor(draft, locked) : tiersEditor(vehicle, draft, locked))
+            : (motorcycle ? motorcycleRateReadonly(rates) : tiersReadonly(rates))}
         </div>
 
         <div className="fare-vehicle-block">
@@ -7957,8 +8033,8 @@ function OperatorFaresPage() {
   const [busy, setBusy] = useState(false)
 
   function loadMatrix(next: OperatorFareMatrix) {
-    const mc = fareDraft(next.motorcycle, next.motorcycleCommissionPercent)
-    const trike = fareDraft(next.tricycle, next.tricycleCommissionPercent)
+    const mc = fareDraft(next.motorcycle, next.motorcycleCommissionPercent, true)
+    const trike = fareDraft(next.tricycle, next.tricycleCommissionPercent, false)
     setData(next)
     setMunicipalityId(next.municipalityId ?? next.municipalities[0]?.id ?? '')
     setMotorcycle(mc)
@@ -8026,8 +8102,8 @@ function OperatorFaresPage() {
     try {
       loadMatrix(await api.saveOperatorFareMatrix({
         municipalityId,
-        motorcycle: parseDraft(motorcycle),
-        tricycle: parseDraft(trikeDraft),
+        motorcycle: parseDraft(motorcycle, true),
+        tricycle: parseDraft(trikeDraft, false),
       }))
       setNotice(linked ? 'Motorcycle and tricycle rates saved together.' : 'Fare matrix saved.')
     } catch (err) {

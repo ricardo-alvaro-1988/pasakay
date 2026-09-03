@@ -71,7 +71,14 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             request.VehicleType,
             FareCommissionSplit.SystemPercent(op, request.VehicleType),
             cancellationToken);
-        ApplyRates(fare!, request);
+        if (request.VehicleType == VehicleType.Motorcycle)
+        {
+            ApplyRates(fare!, SinglePassengerRates(request));
+        }
+        else
+        {
+            ApplyRates(fare!, request);
+        }
         await db.SaveChangesAsync(cancellationToken);
         return Ok(await BuildDetailAsync(op, request.MunicipalityId, cancellationToken));
     }
@@ -128,7 +135,7 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             VehicleType.Tricycle,
             op.TricycleCommissionPercent,
             cancellationToken);
-        ApplyRates(motorcycle!, request.Motorcycle);
+        ApplyRates(motorcycle!, SinglePassengerRates(request.Motorcycle));
         ApplyRates(tricycle!, request.Tricycle);
         await db.SaveChangesAsync(cancellationToken);
         return Ok(await BuildDetailAsync(op, request.MunicipalityId, cancellationToken));
@@ -378,6 +385,52 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         return tiers.Select(x => x.PassengerCount).Distinct().Count() != tiers.Count;
     }
 
+    private static FareVehicleRatesBody SinglePassengerRates(FareVehicleRatesBody rates)
+    {
+        var primary = rates.PassengerTiers?
+            .OrderBy(x => x.PassengerCount == 1 ? 0 : 1)
+            .ThenBy(x => x.PassengerCount)
+            .FirstOrDefault();
+        var baseFare = primary?.BaseFare ?? rates.BaseFare;
+        var perKm = primary?.PerKm ?? rates.PerKm;
+        var minimumFare = primary?.MinimumFare ?? rates.MinimumFare;
+        var includedKm = primary?.IncludedKm ?? rates.IncludedKm;
+        return rates with
+        {
+            BaseFare = baseFare,
+            PerKm = perKm,
+            MinimumFare = minimumFare,
+            IncludedKm = includedKm,
+            PassengerTiers =
+            [
+                new FarePassengerTierBody(1, baseFare, perKm, minimumFare, includedKm)
+            ]
+        };
+    }
+
+    private static SaveFareRatesRequest SinglePassengerRates(SaveFareRatesRequest request)
+    {
+        var primary = request.PassengerTiers?
+            .OrderBy(x => x.PassengerCount == 1 ? 0 : 1)
+            .ThenBy(x => x.PassengerCount)
+            .FirstOrDefault();
+        var baseFare = primary?.BaseFare ?? request.BaseFare;
+        var perKm = primary?.PerKm ?? request.PerKm;
+        var minimumFare = primary?.MinimumFare ?? request.MinimumFare;
+        var includedKm = primary?.IncludedKm ?? request.IncludedKm;
+        return request with
+        {
+            BaseFare = baseFare,
+            PerKm = perKm,
+            MinimumFare = minimumFare,
+            IncludedKm = includedKm,
+            PassengerTiers =
+            [
+                new FarePassengerTierBody(1, baseFare, perKm, minimumFare, includedKm)
+            ]
+        };
+    }
+
     private static void ApplyRates(FareMatrix fare, FareVehicleRatesBody rates) =>
         ApplyRates(
             fare,
@@ -456,17 +509,33 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
 
     private static void ReplacePassengerTiers(FareMatrix fare, IReadOnlyList<FarePassengerTierBody> tiers)
     {
-        fare.PassengerTiers.Clear();
+        var wantedCounts = tiers.Select(x => x.PassengerCount).ToHashSet();
+        foreach (var existing in fare.PassengerTiers.Where(x => !wantedCounts.Contains(x.PassengerCount)).ToList())
+        {
+            fare.PassengerTiers.Remove(existing);
+        }
+
         foreach (var tier in tiers)
         {
-            fare.PassengerTiers.Add(new FarePassengerTier
+            var row = fare.PassengerTiers.FirstOrDefault(x => x.PassengerCount == tier.PassengerCount);
+            if (row is null)
             {
-                PassengerCount = tier.PassengerCount,
-                BaseFare = tier.BaseFare,
-                PerKm = tier.PerKm,
-                MinimumFare = tier.MinimumFare,
-                IncludedKm = tier.IncludedKm
-            });
+                fare.PassengerTiers.Add(new FarePassengerTier
+                {
+                    PassengerCount = tier.PassengerCount,
+                    BaseFare = tier.BaseFare,
+                    PerKm = tier.PerKm,
+                    MinimumFare = tier.MinimumFare,
+                    IncludedKm = tier.IncludedKm,
+                });
+                continue;
+            }
+
+            row.BaseFare = tier.BaseFare;
+            row.PerKm = tier.PerKm;
+            row.MinimumFare = tier.MinimumFare;
+            row.IncludedKm = tier.IncludedKm;
+            row.UpdatedAtUtc = DateTime.UtcNow;
         }
     }
 

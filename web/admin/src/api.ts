@@ -915,9 +915,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok) {
     let message = 'Request failed.'
     try {
-      const body = (await res.json()) as { message?: string }
+      const body = (await res.json()) as {
+        message?: string
+        title?: string
+        detail?: string
+        errors?: Record<string, string[] | string>
+      }
       if (body.message) {
         message = body.message
+      } else if (body.detail) {
+        message = body.detail
+      } else if (body.title) {
+        message = body.title
+      } else if (body.errors) {
+        const first = Object.values(body.errors).flat()[0]
+        if (first) message = first
       }
     } catch {
       /* ignore */
