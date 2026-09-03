@@ -21,6 +21,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<YaPasakay.Api.Services.UploadStore>();
+builder.Services.AddSingleton<YaPasakay.Api.Services.BrandShell>();
 builder.Services.AddScoped<YaPasakay.Api.Services.RiderWalletService>();
 builder.Services.AddScoped<YaPasakay.Api.Services.TripBroadcastService>();
 builder.Services.AddSingleton<YaPasakay.Api.Services.TripChatRealtime>();

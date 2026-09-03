@@ -97,5 +97,20 @@ export function applyBrand(brand: Pick<BrandingConfig, 'accent' | 'good' | 'bran
   if (themeMeta) themeMeta.setAttribute('content', brand.accent)
   const apple = document.querySelector('meta[name="apple-mobile-web-app-title"]')
   if (apple) apple.setAttribute('content', brand.shortName || brand.brandName)
+  setMeta('name', 'description', `Book a motorcycle or tricycle ride with ${brand.brandName}.`)
+  setMeta('property', 'og:site_name', brand.brandName)
+  setMeta('property', 'og:title', brand.brandName)
+  setMeta('property', 'og:description', `Book a motorcycle or tricycle ride with ${brand.brandName}.`)
+  setMeta('name', 'twitter:title', brand.brandName)
   applyFavicon(brand.faviconUrl)
+}
+
+function setMeta(attr: 'name' | 'property', key: string, content: string) {
+  let el = document.head.querySelector<HTMLMetaElement>(`meta[${attr}="${key}"]`)
+  if (!el) {
+    el = document.createElement('meta')
+    el.setAttribute(attr, key)
+    document.head.appendChild(el)
+  }
+  el.content = content
 }

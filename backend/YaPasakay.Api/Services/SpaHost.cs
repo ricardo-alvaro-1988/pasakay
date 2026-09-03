@@ -22,6 +22,12 @@ public static class SpaHost
                 return;
             }
 
+            var shell = context.RequestServices.GetRequiredService<BrandShell>();
+            if (await shell.TryHandleAsync(context))
+            {
+                return;
+            }
+
             await next();
         });
 
@@ -54,7 +60,8 @@ public static class SpaHost
                 return;
             }
 
-            await SendHtmlAsync(context, Path.Combine(opsRoot, "index.html"), "Operator portal is not published. Run deploy/sync-wwwroot.ps1.");
+            var shell = context.RequestServices.GetRequiredService<BrandShell>();
+            await shell.SendOpsHtmlAsync(context, Path.Combine(opsRoot, "index.html"), "Operator portal is not published. Run deploy/sync-wwwroot.ps1.");
         });
 
         app.MapFallback(async context =>
@@ -65,7 +72,8 @@ public static class SpaHost
                 return;
             }
 
-            await SendHtmlAsync(context, Path.Combine(webRoot, "index.html"), "Customer app is not published. Run deploy/sync-wwwroot.ps1.");
+            var shell = context.RequestServices.GetRequiredService<BrandShell>();
+            await shell.SendCustomerHtmlAsync(context, Path.Combine(webRoot, "index.html"), "Customer app is not published. Run deploy/sync-wwwroot.ps1.");
         });
     }
 
@@ -75,19 +83,6 @@ public static class SpaHost
         || path.StartsWithSegments("/uploads")
         || path.StartsWithSegments("/health")
         || path.StartsWithSegments("/openapi");
-
-    private static async Task SendHtmlAsync(HttpContext context, string file, string missing)
-    {
-        if (!File.Exists(file))
-        {
-            context.Response.StatusCode = 404;
-            await context.Response.WriteAsync(missing);
-            return;
-        }
-
-        context.Response.ContentType = "text/html; charset=utf-8";
-        await context.Response.SendFileAsync(file);
-    }
 
     private static async Task<bool> TrySendFileAsync(HttpContext context, string root, string requestPrefix)
     {

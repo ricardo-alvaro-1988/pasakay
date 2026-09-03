@@ -11,7 +11,7 @@ namespace YaPasakay.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "Admin")]
 [Route("api/admin/branding")]
-public class BrandingController(AppDbContext db, UploadStore uploads) : ControllerBase
+public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell brandShell) : ControllerBase
 {
     public record BrandingDto(
         string BrandName,
@@ -75,6 +75,7 @@ public class BrandingController(AppDbContext db, UploadStore uploads) : Controll
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        brandShell.Invalidate();
         return Ok(ToDto(settings));
     }
 
@@ -99,6 +100,7 @@ public class BrandingController(AppDbContext db, UploadStore uploads) : Controll
             settings.LogoPath = path;
             settings.UpdatedAtUtc = DateTime.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
+            brandShell.Invalidate();
             return Ok(ToDto(settings));
         }
         catch (InvalidOperationException ex)
@@ -128,6 +130,7 @@ public class BrandingController(AppDbContext db, UploadStore uploads) : Controll
             settings.FaviconPath = path;
             settings.UpdatedAtUtc = DateTime.UtcNow;
             await db.SaveChangesAsync(cancellationToken);
+            brandShell.Invalidate();
             return Ok(ToDto(settings));
         }
         catch (InvalidOperationException ex)
