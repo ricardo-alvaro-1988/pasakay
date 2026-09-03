@@ -452,7 +452,7 @@ public static class OperatorMaps
             fare.DriverCommissionPercent,
             fare.IsActive,
             tiers,
-            fare.Surcharges
+            (fare.Surcharges ?? [])
                 .OrderBy(x => x.Kind)
                 .ThenBy(x => x.Name)
                 .Select(x => new FareSurchargeItem(
