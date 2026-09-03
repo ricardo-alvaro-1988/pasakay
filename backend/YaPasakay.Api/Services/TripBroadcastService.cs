@@ -127,7 +127,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         Guid? pickupBarangayId,
         Guid? preferredRiderId,
         bool includePreferredEvenIfIneligible,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool enforceRadius = true)
     {
         var outsideCoverage = await OperatorAreaSync.CoverageErrorAsync(
                 db,
@@ -178,7 +179,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             }
 
             var balance = rider.Wallet?.Balance ?? 0;
-            if (!preferred && !CanReceiveBookings(balance))
+            // Wallet balance minimum should apply consistently (including preferred rider overrides).
+            if (!CanReceiveBookings(balance))
             {
                 continue;
             }
@@ -188,6 +190,7 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
                 && pickupLat is not null
                 && pickupLng is not null
                 && distance is double km
+                && enforceRadius
                 && km > RadiusKm)
             {
                 continue;
@@ -240,7 +243,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             pickupBarangayId,
             preferredRiderId: null,
             includePreferredEvenIfIneligible: false,
-            cancellationToken);
+            cancellationToken,
+            enforceRadius: false);
 
         return ranked
             .Take(MaxRiders)

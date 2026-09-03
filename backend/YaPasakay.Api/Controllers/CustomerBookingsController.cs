@@ -391,7 +391,8 @@ public class CustomerBookingsController(
                 prepared.Pickup.Id,
                 preferredRiderId: null,
                 includePreferredEvenIfIneligible: false,
-                cancellationToken);
+                cancellationToken,
+                enforceRadius: false);
             if (eligible.All(x => x.Rider.Id != prepared.Rider.Id))
             {
                 return BadRequest(new { message = "That rider is not available for this pickup right now." });
