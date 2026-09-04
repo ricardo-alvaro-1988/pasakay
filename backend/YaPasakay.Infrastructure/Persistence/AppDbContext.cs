@@ -33,6 +33,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AccessGroupPage> AccessGroupPages => Set<AccessGroupPage>();
     public DbSet<DeviceRegistration> DeviceRegistrations => Set<DeviceRegistration>();
     public DbSet<PlatformBrandSettings> PlatformBrandSettings => Set<PlatformBrandSettings>();
+    public DbSet<RiderInviteLink> RiderInviteLinks => Set<RiderInviteLink>();
+    public DbSet<RiderApplication> RiderApplications => Set<RiderApplication>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -462,6 +464,49 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.LogoPath).HasMaxLength(260);
             entity.Property(x => x.FaviconPath).HasMaxLength(260);
             entity.Property(x => x.ThemeId).HasMaxLength(40).IsRequired();
+        });
+
+        modelBuilder.Entity<RiderInviteLink>(entity =>
+        {
+            entity.HasIndex(x => x.Token).IsUnique();
+            entity.HasIndex(x => x.OperatorId);
+            entity.Property(x => x.Token).HasMaxLength(64).IsRequired();
+            entity.HasOne(x => x.Operator)
+                .WithMany()
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RiderApplication>(entity =>
+        {
+            entity.HasIndex(x => x.OperatorId);
+            entity.HasIndex(x => x.PhoneNumber);
+            entity.HasIndex(x => new { x.OperatorId, x.Status });
+            entity.Property(x => x.FullName).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.PasswordHash).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.PlateNumber).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.VehicleModel).HasMaxLength(80);
+            entity.Property(x => x.LicenseType).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.LicenseNumber).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.AddressDetails).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.FullAddress).HasMaxLength(400).IsRequired();
+            entity.Property(x => x.ProfilePhotoPath).HasMaxLength(260);
+            entity.Property(x => x.LicensePhotoPath).HasMaxLength(260);
+            entity.Property(x => x.AcceptedPaymentMethods).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.ReviewNote).HasMaxLength(400);
+            entity.HasOne(x => x.Operator)
+                .WithMany()
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.InviteLink)
+                .WithMany()
+                .HasForeignKey(x => x.InviteLinkId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.AddressBarangay)
+                .WithMany()
+                .HasForeignKey(x => x.AddressBarangayId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

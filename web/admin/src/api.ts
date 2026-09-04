@@ -115,6 +115,57 @@ export type RiderDetail = RiderListItem & {
   address: OperatorAddress
 }
 
+export type RiderInviteLink = {
+  token: string
+  joinPath: string
+  statusPath: string
+  createdAtUtc: string
+}
+
+export type RiderInvitePublicInfo = {
+  token: string
+  companyName: string
+  statusPath: string
+}
+
+export type RiderApplicationListItem = {
+  id: string
+  fullName: string
+  phoneNumber: string
+  vehicleType: string
+  plateNumber: string
+  status: string
+  createdAtUtc: string
+}
+
+export type RiderApplicationDetail = {
+  id: string
+  fullName: string
+  phoneNumber: string
+  vehicleType: string
+  plateNumber: string
+  vehicleModel: string | null
+  licenseType: string
+  licenseNumber: string
+  status: string
+  fullAddress: string
+  address: OperatorAddress
+  acceptedPaymentMethods: string[]
+  profilePhotoUrl: string | null
+  licensePhotoUrl: string | null
+  reviewNote: string | null
+  createdAtUtc: string
+  reviewedAtUtc: string | null
+  riderProfileId: string | null
+}
+
+export type RiderApplicationStatusResult = {
+  status: string
+  label: string
+  companyName: string | null
+  message: string | null
+}
+
 export type TripStatus = 'Completed' | 'Cancelled' | 'Ongoing' | 'Pending' | 'Waiting'
 
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Other'
@@ -1175,6 +1226,23 @@ export const api = {
     request<IdName[]>(`/api/admin/territories/municipalities?provinceId=${encodeURIComponent(provinceId)}`),
   barangays: (municipalityId: string) =>
     request<BarangayOption[]>(`/api/admin/territories/barangays?municipalityId=${encodeURIComponent(municipalityId)}`),
+  publicProvinces: () => request<IdName[]>('/api/territories/provinces'),
+  publicMunicipalities: (provinceId: string) =>
+    request<IdName[]>(`/api/territories/municipalities?provinceId=${encodeURIComponent(provinceId)}`),
+  publicBarangays: (municipalityId: string) =>
+    request<BarangayOption[]>(`/api/territories/barangays?municipalityId=${encodeURIComponent(municipalityId)}`),
+  publicRiderInvite: (token: string) =>
+    request<RiderInvitePublicInfo>(`/api/public/rider-invite/${encodeURIComponent(token)}`),
+  publicRiderApply: (token: string, body: FormData) =>
+    request<{ message: string; status: string; statusPath: string }>(
+      `/api/public/rider-invite/${encodeURIComponent(token)}/apply`,
+      { method: 'POST', body },
+    ),
+  publicRiderApplicationStatus: (phone: string) =>
+    request<RiderApplicationStatusResult>('/api/public/rider-application/status', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    }),
   governmentIdTypes: () => request<string[]>('/api/admin/government-id-types'),
   operatorOverview: () => request<OperatorOverview>('/api/operator/overview'),
   operatorBookings: (from?: string, to?: string) => {
@@ -1339,6 +1407,27 @@ export const api = {
     request<RiderRides>(`/api/operator/riders/${id}/rides?${rideQuery(opts)}`),
   opRiderRide: (id: string, rideId: string) =>
     request<RideDetail>(`/api/operator/riders/${id}/rides/${rideId}`),
+  operatorRiderInvite: () => request<RiderInviteLink>('/api/operator/rider-invite'),
+  regenerateOperatorRiderInvite: () =>
+    request<RiderInviteLink>('/api/operator/rider-invite/regenerate', { method: 'POST' }),
+  operatorRiderApplications: (opts: { status?: string; q?: string; page?: number; pageSize?: number } = {}) => {
+    const params = new URLSearchParams({
+      page: String(opts.page ?? 1),
+      pageSize: String(opts.pageSize ?? 10),
+    })
+    if (opts.status) params.set('status', opts.status)
+    if (opts.q?.trim()) params.set('q', opts.q.trim())
+    return request<Paged<RiderApplicationListItem>>(`/api/operator/rider-applications?${params}`)
+  },
+  operatorRiderApplication: (id: string) =>
+    request<RiderApplicationDetail>(`/api/operator/rider-applications/${id}`),
+  approveOperatorRiderApplication: (id: string) =>
+    request<RiderApplicationDetail>(`/api/operator/rider-applications/${id}/approve`, { method: 'POST' }),
+  rejectOperatorRiderApplication: (id: string, note?: string) =>
+    request<RiderApplicationDetail>(`/api/operator/rider-applications/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ note }),
+    }),
   operatorWalletOverview: () => request<OperatorWalletOverview>('/api/operator/wallet'),
   operatorCommissionReport: (opts: {
     bookingNo?: string

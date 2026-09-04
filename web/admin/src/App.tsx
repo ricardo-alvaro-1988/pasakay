@@ -87,6 +87,9 @@ import {
   ScheduledBooking,
   CommissionReportItem,
   CommissionReportResponse,
+  RiderInviteLink,
+  RiderApplicationListItem,
+  RiderApplicationDetail,
   SurchargeKind,
   fleetDuty,
   fleetDutyLabel,
@@ -124,6 +127,13 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null)
   const [booting, setBooting] = useState(!!getToken())
   const [branding, setBranding] = useState<BrandingConfig | null>(null)
+  const [hash, setHash] = useState(() => window.location.hash)
+
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
 
   useEffect(() => {
     api
@@ -156,6 +166,14 @@ export default function App() {
 
   const brandName = branding?.brandName || DEFAULT_BRAND_NAME
   const brandLogo = branding?.logoUrl || logoCircle
+  const publicRoute = parsePublicRiderHash(hash)
+
+  if (publicRoute?.kind === 'join') {
+    return <PublicRiderJoinPage token={publicRoute.token} brandName={brandName} brandLogo={brandLogo} />
+  }
+  if (publicRoute?.kind === 'status') {
+    return <PublicRiderStatusPage brandName={brandName} brandLogo={brandLogo} />
+  }
 
   if (booting) {
     return (
@@ -173,7 +191,7 @@ export default function App() {
   }
 
   if (me.role === 'Operator') {
-    const tab = parseCommissionHash()
+    const tab = parseCommissionHash(hash)
     if (tab?.mode === 'operator') {
       return (
         <CommissionBookingTab
@@ -196,7 +214,7 @@ export default function App() {
     )
   }
 
-  const adminTab = parseCommissionHash()
+  const adminTab = parseCommissionHash(hash)
   if (adminTab?.mode === 'admin') {
     return (
       <CommissionBookingTab
@@ -222,8 +240,20 @@ export default function App() {
   )
 }
 
-function parseCommissionHash() {
-  const raw = window.location.hash.replace(/^#/, '')
+function parsePublicRiderHash(rawHash = window.location.hash) {
+  const raw = rawHash.replace(/^#/, '')
+  const join = /^rider-join\/([^/]+)$/.exec(raw)
+  if (join) {
+    return { kind: 'join' as const, token: decodeURIComponent(join[1]) }
+  }
+  if (raw === 'rider-status' || raw.startsWith('rider-status?')) {
+    return { kind: 'status' as const }
+  }
+  return null
+}
+
+function parseCommissionHash(rawHash = window.location.hash) {
+  const raw = rawHash.replace(/^#/, '')
   const match = /^commission\/(admin|operator)\/([^/]+)\/([^/]+)$/.exec(raw)
   if (!match) {
     return null
@@ -7917,8 +7947,9 @@ function OperatorCustomerDetailPage({ customerId, onBack }: { customerId: string
 }
 
 function OperatorRidersPage() {
-  const [view, setView] = useState<'list' | 'create' | 'detail' | 'edit'>('list')
+  const [view, setView] = useState<'list' | 'create' | 'detail' | 'edit' | 'invite' | 'applications' | 'application'>('list')
   const [riderId, setRiderId] = useState<string | null>(null)
+  const [applicationId, setApplicationId] = useState<string | null>(null)
   if (view === 'create') {
     return <OperatorRiderForm onDone={(id) => { setRiderId(id); setView('detail') }} onCancel={() => setView('list')} />
   }
@@ -7934,20 +7965,56 @@ function OperatorRidersPage() {
       />
     )
   }
+  if (view === 'invite') {
+    return <OperatorRiderInvitePage onBack={() => setView('list')} />
+  }
+  if (view === 'application' && applicationId) {
+    return (
+      <OperatorRiderApplicationDetail
+        applicationId={applicationId}
+        onBack={() => { setApplicationId(null); setView('applications') }}
+        onApproved={(riderProfileId) => {
+          setRiderId(riderProfileId)
+          setView('detail')
+        }}
+      />
+    )
+  }
+  if (view === 'applications') {
+    return (
+      <OperatorRiderApplicationsPage
+        onBack={() => setView('list')}
+        onOpen={(id) => { setApplicationId(id); setView('application') }}
+      />
+    )
+  }
   return (
     <OperatorRiderList
       onCreate={() => setView('create')}
+      onInvite={() => setView('invite')}
+      onApplications={() => setView('applications')}
       onOpen={(id) => { setRiderId(id); setView('detail') }}
     />
   )
 }
 
-function OperatorRiderList({ onCreate, onOpen }: { onCreate: () => void; onOpen: (id: string) => void }) {
+function OperatorRiderList({
+  onCreate,
+  onInvite,
+  onApplications,
+  onOpen,
+}: {
+  onCreate: () => void
+  onInvite: () => void
+  onApplications: () => void
+  onOpen: (id: string) => void
+}) {
   const [q, setQ] = useState('')
   const [items, setItems] = useState<RiderListItem[]>([])
   const [suggest, setSuggest] = useState<RiderListItem[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
+  const [pendingCount, setPendingCount] = useState(0)
   const [error, setError] = useState('')
   const pageSize = 10
 
@@ -7961,11 +8028,17 @@ function OperatorRiderList({ onCreate, onOpen }: { onCreate: () => void; onOpen:
     return () => window.clearTimeout(handle)
   }, [q, page])
 
+  useEffect(() => {
+    api.operatorRiderApplications({ status: 'Pending', page: 1, pageSize: 1 })
+      .then((data) => setPendingCount(data.total))
+      .catch(() => setPendingCount(0))
+  }, [])
+
   return (
     <div className="card">
       <div className="toolbar">
         <h2 style={{ margin: 0 }}>Riders</h2>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <PersonSuggest
             value={q}
             onChange={(value) => { setQ(value); setPage(1) }}
@@ -7979,6 +8052,12 @@ function OperatorRiderList({ onCreate, onOpen }: { onCreate: () => void; onOpen:
             }))}
             onPick={(item) => { setQ(item.name); setPage(1); onOpen(item.id) }}
           />
+          <button className="btn tiny" type="button" onClick={onApplications} style={{ width: 'auto', whiteSpace: 'nowrap' }}>
+            Applications{pendingCount > 0 ? ` (${pendingCount})` : ''}
+          </button>
+          <button className="btn tiny" type="button" onClick={onInvite} style={{ width: 'auto', whiteSpace: 'nowrap' }}>
+            Invite link
+          </button>
           <button className="btn" type="button" onClick={onCreate} style={{ width: 'auto', whiteSpace: 'nowrap' }}>
             Create rider
           </button>
@@ -8017,6 +8096,492 @@ function OperatorRiderList({ onCreate, onOpen }: { onCreate: () => void; onOpen:
         </table>
       </div>
       <Pager page={page} pageSize={pageSize} total={total} onPage={setPage} />
+    </div>
+  )
+}
+
+function OperatorRiderInvitePage({ onBack }: { onBack: () => void }) {
+  const [invite, setInvite] = useState<RiderInviteLink | null>(null)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    api.operatorRiderInvite()
+      .then(setInvite)
+      .catch((err: Error) => setError(err.message))
+  }, [])
+
+  const joinUrl = invite ? `${window.location.origin}${invite.joinPath}` : ''
+  const statusUrl = invite ? `${window.location.origin}${invite.statusPath}` : ''
+
+  async function copy(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text)
+      setNotice(`${label} copied.`)
+    } catch {
+      setNotice('Could not copy. Select the link and copy it manually.')
+    }
+  }
+
+  async function regenerate() {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const next = await api.regenerateOperatorRiderInvite()
+      setInvite(next)
+      setNotice('Invite link regenerated. Old links no longer work.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not regenerate invite.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="panel-head">
+        <div>
+          <button className="btn tiny" type="button" onClick={onBack}>Back</button>
+          <h2 style={{ marginTop: 12 }}>Rider invite link</h2>
+          <p className="muted">Share this link so riders can register themselves. Applications stay pending until you approve them.</p>
+        </div>
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      {notice ? <p className="muted">{notice}</p> : null}
+      {!invite ? <p>Loading invite…</p> : (
+        <>
+          <label className="field wide">
+            <span>Registration link</span>
+            <input readOnly value={joinUrl} onFocus={(e) => e.target.select()} />
+          </label>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+            <button className="btn" type="button" onClick={() => copy(joinUrl, 'Registration link')} style={{ width: 'auto' }}>Copy link</button>
+            <button className="btn tiny" type="button" disabled={busy} onClick={regenerate} style={{ width: 'auto' }}>
+              {busy ? 'Working…' : 'Regenerate link'}
+            </button>
+          </div>
+          <label className="field wide" style={{ marginTop: 18 }}>
+            <span>Status check link</span>
+            <input readOnly value={statusUrl} onFocus={(e) => e.target.select()} />
+          </label>
+          <div style={{ marginTop: 10 }}>
+            <button className="btn tiny" type="button" onClick={() => copy(statusUrl, 'Status link')} style={{ width: 'auto' }}>Copy status link</button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function OperatorRiderApplicationsPage({
+  onBack,
+  onOpen,
+}: {
+  onBack: () => void
+  onOpen: (id: string) => void
+}) {
+  const [status, setStatus] = useState('Pending')
+  const [q, setQ] = useState('')
+  const [items, setItems] = useState<RiderApplicationListItem[]>([])
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [error, setError] = useState('')
+  const pageSize = 10
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      api.operatorRiderApplications({ status, q, page, pageSize })
+        .then((data) => { setItems(data.items); setTotal(data.total); setError('') })
+        .catch((err: Error) => setError(err.message))
+    }, 200)
+    return () => window.clearTimeout(handle)
+  }, [status, q, page])
+
+  return (
+    <div className="card">
+      <div className="toolbar">
+        <div>
+          <button className="btn tiny" type="button" onClick={onBack}>Back to riders</button>
+          <h2 style={{ marginTop: 12, marginBottom: 0 }}>Rider applications</h2>
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }}>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+            <option value="">All</option>
+          </select>
+          <input
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setPage(1) }}
+            placeholder="Search name, phone, or plate"
+            style={{ minWidth: 220 }}
+          />
+        </div>
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Vehicle</th>
+              <th>Plate</th>
+              <th>Status</th>
+              <th>Submitted</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 ? (
+              <tr><td colSpan={6}>No applications in this filter.</td></tr>
+            ) : items.map((row) => (
+              <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
+                <td><strong>{row.fullName}</strong></td>
+                <td>{row.phoneNumber}</td>
+                <td><VehicleTag type={row.vehicleType} /></td>
+                <td>{row.plateNumber}</td>
+                <td>{row.status}</td>
+                <td>{new Date(row.createdAtUtc).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <Pager page={page} pageSize={pageSize} total={total} onPage={setPage} />
+    </div>
+  )
+}
+
+function OperatorRiderApplicationDetail({
+  applicationId,
+  onBack,
+  onApproved,
+}: {
+  applicationId: string
+  onBack: () => void
+  onApproved: (riderProfileId: string) => void
+}) {
+  const [row, setRow] = useState<RiderApplicationDetail | null>(null)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [rejectNote, setRejectNote] = useState('')
+
+  useEffect(() => {
+    api.operatorRiderApplication(applicationId)
+      .then(setRow)
+      .catch((err: Error) => setError(err.message))
+  }, [applicationId])
+
+  async function approve() {
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await api.approveOperatorRiderApplication(applicationId)
+      setRow(saved)
+      if (saved.riderProfileId) {
+        onApproved(saved.riderProfileId)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not approve.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function reject() {
+    setBusy(true)
+    setError('')
+    try {
+      const saved = await api.rejectOperatorRiderApplication(applicationId, rejectNote.trim() || undefined)
+      setRow(saved)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not reject.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (!row) return error ? <p className="error">{error}</p> : <p>Loading application…</p>
+
+  return (
+    <div className="card">
+      <div className="panel-head">
+        <div className="person-cell" style={{ alignItems: 'flex-start' }}>
+          <ClickableAvatar name={row.fullName} photoUrl={row.profilePhotoUrl} size={72} />
+          <div>
+            <button className="btn tiny" type="button" onClick={onBack}>Back</button>
+            <h2 style={{ marginTop: 12 }}>{row.fullName}</h2>
+            <p>{row.phoneNumber}</p>
+            <p className="muted">Status: {row.status}</p>
+          </div>
+        </div>
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      <div className="detail-grid">
+        <div><span className="muted">Vehicle</span><p><VehicleTag type={row.vehicleType} /> {row.plateNumber}</p></div>
+        <div><span className="muted">Model</span><p>{row.vehicleModel || '—'}</p></div>
+        <div><span className="muted">License</span><p>{row.licenseType} · {row.licenseNumber}</p></div>
+        <div><span className="muted">Address</span><p>{row.fullAddress}</p></div>
+        <div><span className="muted">Payment methods</span><p>{row.acceptedPaymentMethods.join(', ') || '—'}</p></div>
+        <div><span className="muted">Submitted</span><p>{new Date(row.createdAtUtc).toLocaleString()}</p></div>
+        {row.reviewNote ? <div><span className="muted">Review note</span><p>{row.reviewNote}</p></div> : null}
+      </div>
+      {(row.profilePhotoUrl || row.licensePhotoUrl) ? (
+        <div className="form-grid" style={{ marginTop: 16 }}>
+          {row.profilePhotoUrl ? (
+            <div className="field">
+              <span>Profile photo</span>
+              <a href={row.profilePhotoUrl} target="_blank" rel="noreferrer">
+                <img src={row.profilePhotoUrl} alt="Profile" style={{ maxWidth: 180, borderRadius: 8 }} />
+              </a>
+            </div>
+          ) : null}
+          {row.licensePhotoUrl ? (
+            <div className="field">
+              <span>License photo</span>
+              <a href={row.licensePhotoUrl} target="_blank" rel="noreferrer">
+                <img src={row.licensePhotoUrl} alt="License" style={{ maxWidth: 180, borderRadius: 8 }} />
+              </a>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {row.status === 'Pending' ? (
+        <div style={{ marginTop: 18, display: 'grid', gap: 12, maxWidth: 480 }}>
+          <label className="field">
+            <span>Reject note (optional)</span>
+            <input value={rejectNote} onChange={(e) => setRejectNote(e.target.value)} placeholder="Shown on status check if rejected" />
+          </label>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn" type="button" disabled={busy} onClick={approve}>{busy ? 'Working…' : 'Approve'}</button>
+            <button className="btn tiny" type="button" disabled={busy} onClick={reject}>Reject</button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function PublicRiderJoinPage({
+  token,
+  brandName,
+  brandLogo,
+}: {
+  token: string
+  brandName: string
+  brandLogo: string
+}) {
+  const [companyName, setCompanyName] = useState('')
+  const [statusPath, setStatusPath] = useState('/ops/#/rider-status')
+  const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [vehicleType, setVehicleType] = useState<VehicleType>('Motorcycle')
+  const [plateNumber, setPlateNumber] = useState('')
+  const [vehicleModel, setVehicleModel] = useState('')
+  const [licenseType, setLicenseType] = useState('')
+  const [licenseNumber, setLicenseNumber] = useState('')
+  const [address, setAddress] = useState<AddressValue>({ province: null, municipality: null, barangay: null, details: '' })
+  const [profilePhoto, setProfilePhoto] = useState<File | null>(null)
+  const [licensePhoto, setLicensePhoto] = useState<File | null>(null)
+  const [acceptedPaymentMethods, setAcceptedPaymentMethods] = useState<PaymentMethod[]>(['Cash', 'GCash'])
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
+  const licenses: IdName[] = [
+    { id: 'Student Permit', name: 'Student Permit' },
+    { id: 'Non-Professional', name: 'Non-Professional' },
+    { id: 'Professional', name: 'Professional' },
+  ]
+
+  useEffect(() => {
+    api.publicRiderInvite(token)
+      .then((info) => {
+        setCompanyName(info.companyName)
+        setStatusPath(info.statusPath)
+        setError('')
+      })
+      .catch((err: Error) => setError(err.message))
+  }, [token])
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!address.barangay) {
+      setError('Choose a full address.')
+      return
+    }
+    if (acceptedPaymentMethods.length === 0) {
+      setError('Select at least one payment method you accept.')
+      return
+    }
+    if (password.trim().length < 6) {
+      setError('Set a password of at least 6 characters.')
+      return
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const data = new FormData()
+      data.append('fullName', fullName)
+      data.append('phone', phone)
+      data.append('password', password.trim())
+      data.append('vehicleType', vehicleType)
+      data.append('plateNumber', plateNumber)
+      data.append('vehicleModel', vehicleModel)
+      data.append('licenseType', licenseType)
+      data.append('licenseNumber', licenseNumber)
+      data.append('addressBarangayId', address.barangay.id)
+      data.append('addressDetails', address.details)
+      acceptedPaymentMethods.forEach((method) => data.append('acceptedPaymentMethods', method))
+      if (profilePhoto) data.append('profilePhoto', profilePhoto)
+      if (licensePhoto) data.append('licensePhoto', licensePhoto)
+      await api.publicRiderApply(token, data)
+      setDone(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not submit registration.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="login">
+        <div className="login-card" style={{ maxWidth: 520 }}>
+          <img className="brand-mark" src={brandLogo} alt={brandName} />
+          <h1>Registration submitted</h1>
+          <p>Your application for <strong>{companyName || 'this operator'}</strong> is pending review.</p>
+          <p className="muted">Keep your mobile number and password. You will use them to sign in to the rider app after approval.</p>
+          <p><strong>Mobile:</strong> {phone}</p>
+          <a className="btn" href={statusPath} style={{ display: 'inline-block', marginTop: 12, textAlign: 'center' }}>
+            Check registration status
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="login" style={{ alignItems: 'flex-start', padding: '32px 16px' }}>
+      <form className="login-card" style={{ maxWidth: 720, width: '100%' }} onSubmit={submit}>
+        <img className="brand-mark" src={brandLogo} alt={brandName} />
+        <h1>Rider registration</h1>
+        <p className="muted">{companyName ? `Join ${companyName}` : 'Loading invite…'}</p>
+        {error ? <p className="error">{error}</p> : null}
+        <div className="form-grid">
+          <label className="field"><span>Full name</span><input value={fullName} onChange={(e) => setFullName(e.target.value)} required /></label>
+          <label className="field"><span>Mobile number</span><input value={phone} onChange={(e) => setPhone(e.target.value)} required /></label>
+          <label className="field">
+            <span>Password</span>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" required />
+          </label>
+          <label className="field">
+            <span>Confirm password</span>
+            <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" required />
+          </label>
+          <label className="field"><span>Plate</span><input value={plateNumber} onChange={(e) => setPlateNumber(e.target.value)} required /></label>
+          <label className="field"><span>Vehicle model</span><input value={vehicleModel} onChange={(e) => setVehicleModel(e.target.value)} /></label>
+          <label className="field">
+            <span>License type</span>
+            <LookupSuggest
+              query={licenseType}
+              onQuery={setLicenseType}
+              items={licenses}
+              placeholder="Select license type"
+              onPick={(item) => setLicenseType(item.name)}
+            />
+          </label>
+          <label className="field"><span>License number</span><input value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} required /></label>
+          <div className="field wide">
+            <span>Vehicle</span>
+            <div className="chips" style={{ marginTop: 8 }}>
+              <button type="button" className={vehicleType === 'Motorcycle' ? 'on' : ''} onClick={() => setVehicleType('Motorcycle')}>Motorcycle</button>
+              <button type="button" className={vehicleType === 'Tricycle' ? 'on' : ''} onClick={() => setVehicleType('Tricycle')}>Tricycle</button>
+            </div>
+          </div>
+        </div>
+        <PaymentMethodPicker value={acceptedPaymentMethods} onChange={setAcceptedPaymentMethods} />
+        <AddressPicker
+          value={address}
+          onChange={setAddress}
+          loadProvinces={() => api.publicProvinces()}
+          loadMunicipalities={(id) => api.publicMunicipalities(id)}
+          loadBarangays={(id) => api.publicBarangays(id)}
+        />
+        <div className="form-grid">
+          <label className="field">
+            <span>Profile photo</span>
+            <input type="file" accept="image/*" onChange={(e) => setProfilePhoto(e.target.files?.[0] ?? null)} />
+          </label>
+          <label className="field">
+            <span>License photo</span>
+            <input type="file" accept="image/*" onChange={(e) => setLicensePhoto(e.target.files?.[0] ?? null)} />
+          </label>
+        </div>
+        <button className="btn" type="submit" disabled={busy || !companyName} style={{ marginTop: 16 }}>
+          {busy ? 'Submitting…' : 'Submit registration'}
+        </button>
+        <p className="muted" style={{ marginTop: 12 }}>
+          Already applied? <a href={statusPath}>Check status</a>
+        </p>
+      </form>
+    </div>
+  )
+}
+
+function PublicRiderStatusPage({
+  brandName,
+  brandLogo,
+}: {
+  brandName: string
+  brandLogo: string
+}) {
+  const [phone, setPhone] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ status: string; label: string; companyName: string | null; message: string | null } | null>(null)
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    setResult(null)
+    try {
+      setResult(await api.publicRiderApplicationStatus(phone))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not check status.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="login">
+      <form className="login-card" onSubmit={submit}>
+        <img className="brand-mark" src={brandLogo} alt={brandName} />
+        <h1>Registration status</h1>
+        <p className="muted">Enter the mobile number you used when you registered.</p>
+        {error ? <p className="error">{error}</p> : null}
+        <label className="field">
+          <span>Mobile number</span>
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} required />
+        </label>
+        <button className="btn" type="submit" disabled={busy}>{busy ? 'Checking…' : 'Check status'}</button>
+        {result ? (
+          <div style={{ marginTop: 18 }}>
+            <p><strong>{result.label}</strong>{result.companyName ? ` · ${result.companyName}` : ''}</p>
+            {result.message ? <p className="muted">{result.message}</p> : null}
+          </div>
+        ) : null}
+      </form>
     </div>
   )
 }

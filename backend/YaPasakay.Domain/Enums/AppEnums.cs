@@ -44,6 +44,13 @@ public enum DeleteAccountStatus
     Rejected = 3
 }
 
+public enum RiderApplicationStatus
+{
+    Pending = 1,
+    Approved = 2,
+    Rejected = 3
+}
+
 public enum BillStatus
 {
     Issued = 1
