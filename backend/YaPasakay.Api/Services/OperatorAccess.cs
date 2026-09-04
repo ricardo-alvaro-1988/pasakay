@@ -96,6 +96,11 @@ public static class OperatorAccess
             return "wallet";
         }
 
+        if (value.StartsWith("/api/operator/reports/commission"))
+        {
+            return "commission";
+        }
+
         if (value.StartsWith("/api/operator/fares"))
         {
             return value.Contains("/surcharge", StringComparison.Ordinal) ? "surcharges" : "fares";

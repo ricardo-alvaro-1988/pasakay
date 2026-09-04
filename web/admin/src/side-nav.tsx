@@ -178,6 +178,13 @@ export const ADMIN_MENU_GROUPS: SideNavGroup[] = [
     ],
   },
   {
+    id: 'report',
+    label: 'Report',
+    items: [
+      { id: 'commission', label: 'Commission', icon: '％', live: true },
+    ],
+  },
+  {
     id: 'comms',
     label: 'Comms',
     items: [
@@ -251,6 +258,13 @@ export const OPERATOR_MENU_GROUPS: SideNavGroup[] = [
     items: [
       { id: 'billing', label: 'Billing', icon: '▤' },
       { id: 'wallet', label: 'Wallet', icon: '◈' },
+    ],
+  },
+  {
+    id: 'report',
+    label: 'Report',
+    items: [
+      { id: 'commission', label: 'Commission', icon: '％' },
     ],
   },
   {

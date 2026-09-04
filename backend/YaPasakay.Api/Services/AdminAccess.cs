@@ -118,6 +118,11 @@ public static class AdminAccess
             return "billing";
         }
 
+        if (value.StartsWith("/api/admin/reports/commission"))
+        {
+            return "commission";
+        }
+
         if (value.StartsWith("/api/admin/announcements"))
         {
             return "announcements";

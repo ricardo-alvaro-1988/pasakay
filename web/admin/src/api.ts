@@ -11,6 +11,7 @@ export type PageId =
   | 'fares'
   | 'surcharges'
   | 'billing'
+  | 'commission'
   | 'announcements'
   | 'support'
   | 'audit'
@@ -629,6 +630,32 @@ export type Paged<T> = {
   page: number
   pageSize: number
   total: number
+}
+
+export type CommissionReportItem = {
+  id: string
+  reference: string
+  riderName: string
+  riderId: string
+  operatorName: string
+  operatorId: string
+  riderCommission: number
+  systemCommission: number
+  adminCommission: number
+  bookingAmount: number
+  dateUtc: string
+  status: TripStatus
+}
+
+export type CommissionReportResponse = {
+  page: Paged<CommissionReportItem>
+  summary: {
+    bookingAmount: number
+    riderCommission: number
+    systemCommission: number
+    adminCommission: number
+    count: number
+  }
 }
 
 export type Announcement = {
@@ -1313,6 +1340,44 @@ export const api = {
   opRiderRide: (id: string, rideId: string) =>
     request<RideDetail>(`/api/operator/riders/${id}/rides/${rideId}`),
   operatorWalletOverview: () => request<OperatorWalletOverview>('/api/operator/wallet'),
+  operatorCommissionReport: (opts: {
+    bookingNo?: string
+    rider?: string
+    from?: string
+    to?: string
+    page?: number
+    pageSize?: number
+  }) => {
+    const params = new URLSearchParams({
+      page: String(opts.page ?? 1),
+      pageSize: String(opts.pageSize ?? 10),
+    })
+    if (opts.bookingNo?.trim()) params.set('bookingNo', opts.bookingNo.trim())
+    if (opts.rider?.trim()) params.set('rider', opts.rider.trim())
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    return request<CommissionReportResponse>(`/api/operator/reports/commission?${params}`)
+  },
+  adminCommissionReport: (opts: {
+    operatorId?: string
+    bookingNo?: string
+    rider?: string
+    from?: string
+    to?: string
+    page?: number
+    pageSize?: number
+  }) => {
+    const params = new URLSearchParams({
+      page: String(opts.page ?? 1),
+      pageSize: String(opts.pageSize ?? 10),
+    })
+    if (opts.operatorId) params.set('operatorId', opts.operatorId)
+    if (opts.bookingNo?.trim()) params.set('bookingNo', opts.bookingNo.trim())
+    if (opts.rider?.trim()) params.set('rider', opts.rider.trim())
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    return request<CommissionReportResponse>(`/api/admin/reports/commission?${params}`)
+  },
   operatorWalletHistory: (opts: {
     q?: string
     kind?: WalletTransactionKind | ''

@@ -85,6 +85,8 @@ import {
   OperatorBookingBoard,
   OperatorBookingListItem,
   ScheduledBooking,
+  CommissionReportItem,
+  CommissionReportResponse,
   SurchargeKind,
   fleetDuty,
   fleetDutyLabel,
@@ -171,12 +173,39 @@ export default function App() {
   }
 
   if (me.role === 'Operator') {
+    const tab = parseCommissionHash()
+    if (tab?.mode === 'operator') {
+      return (
+        <CommissionBookingTab
+          mode="operator"
+          operatorId={tab.operatorId}
+          bookingId={tab.bookingId}
+          onClose={() => {
+            window.location.hash = ''
+          }}
+        />
+      )
+    }
     return (
       <OperatorShell
         me={me}
         onLogout={() => { clearAuth(); setMe(null) }}
         brandName={brandName}
         brandLogo={brandLogo}
+      />
+    )
+  }
+
+  const adminTab = parseCommissionHash()
+  if (adminTab?.mode === 'admin') {
+    return (
+      <CommissionBookingTab
+        mode="admin"
+        operatorId={adminTab.operatorId}
+        bookingId={adminTab.bookingId}
+        onClose={() => {
+          window.location.hash = ''
+        }}
       />
     )
   }
@@ -190,6 +219,55 @@ export default function App() {
       brandName={brandName}
       brandLogo={brandLogo}
     />
+  )
+}
+
+function parseCommissionHash() {
+  const raw = window.location.hash.replace(/^#/, '')
+  const match = /^commission\/(admin|operator)\/([^/]+)\/([^/]+)$/.exec(raw)
+  if (!match) {
+    return null
+  }
+  return {
+    mode: match[1] as 'admin' | 'operator',
+    operatorId: match[2],
+    bookingId: match[3],
+  }
+}
+
+function CommissionBookingTab({
+  mode,
+  operatorId,
+  bookingId,
+  onClose,
+}: {
+  mode: 'admin' | 'operator'
+  operatorId: string
+  bookingId: string
+  onClose: () => void
+}) {
+  return (
+    <div className="shell" style={{ display: 'block' }}>
+      <main className="main" style={{ padding: 24 }}>
+        <BookingDetailPage
+          loadKey={bookingId}
+          load={() => mode === 'admin'
+            ? api.adminOperatorBooking(operatorId, bookingId)
+            : api.operatorBooking(bookingId)}
+          onBack={() => {
+            if (window.opener) {
+              window.close()
+              return
+            }
+            onClose()
+            window.location.hash = ''
+            window.location.reload()
+          }}
+          backLabel="Close"
+          allowReassign={mode === 'operator'}
+        />
+      </main>
+    </div>
   )
 }
 
@@ -530,6 +608,7 @@ function Shell({
         {page === 'territories' && <TerritoriesPage />}
         {page === 'fares' && <FaresPage />}
         {page === 'billing' && <BillingPage />}
+        {page === 'commission' && <CommissionReportPage mode="admin" />}
         {page === 'announcements' && <AnnouncementsPage />}
         {page === 'support' && <SupportPage />}
         {page === 'audit' && <AuditPage />}
@@ -6511,6 +6590,7 @@ function OperatorShell({
         )}
         {page === 'billing' && <OperatorBillingPage />}
         {page === 'wallet' && <OperatorWalletPage />}
+        {page === 'commission' && <CommissionReportPage mode="operator" />}
         {page === 'company' && <OperatorCompanyPage />}
         {page === 'roles' && me.isMainOperator ? (
           <div className="form-sections">
@@ -6538,6 +6618,189 @@ function OperatorBookingsPage() {
       onOpen={setBookingId}
       hint="All bookings for your company: live, scheduled, completed, and cancelled."
     />
+  )
+}
+
+function CommissionReportPage({ mode }: { mode: 'admin' | 'operator' }) {
+  const today = isoDate(new Date())
+  const [dateMode, setDateMode] = useState<'date' | 'range'>('date')
+  const [from, setFrom] = useState(today)
+  const [to, setTo] = useState(today)
+  const [bookingNo, setBookingNo] = useState('')
+  const [rider, setRider] = useState('')
+  const [operatorId, setOperatorId] = useState('')
+  const [operators, setOperators] = useState<OperatorListItem[]>([])
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState<CommissionReportResponse | null>(null)
+  const [error, setError] = useState('')
+  const pageSize = 10
+  const start = from > to ? to : from
+  const end = from > to ? from : to
+  const fromParam = dateMode === 'date' ? end : start
+  const toParam = end
+
+  useEffect(() => {
+    if (mode !== 'admin') return
+    api.operators('', 1, 200)
+      .then((rows) => setOperators(rows.items))
+      .catch(() => setOperators([]))
+  }, [mode])
+
+  useEffect(() => {
+    setPage(1)
+  }, [dateMode, from, to, bookingNo, rider, operatorId])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      const opts = {
+        bookingNo: bookingNo.trim() || undefined,
+        rider: rider.trim() || undefined,
+        from: fromParam,
+        to: toParam,
+        page,
+        pageSize,
+        operatorId: mode === 'admin' && operatorId ? operatorId : undefined,
+      }
+      const load = mode === 'admin'
+        ? api.adminCommissionReport(opts)
+        : api.operatorCommissionReport(opts)
+      load
+        .then(setData)
+        .catch((err: Error) => setError(err.message))
+    }, bookingNo || rider ? 220 : 0)
+    return () => window.clearTimeout(handle)
+  }, [mode, dateMode, fromParam, toParam, bookingNo, rider, operatorId, page])
+
+  const rows = data?.page.items ?? []
+  const total = data?.page.total ?? 0
+  const pages = Math.max(1, Math.ceil(total / pageSize))
+
+  function openBooking(row: CommissionReportItem) {
+    const url = `${window.location.pathname}${window.location.search}#commission/${mode}/${row.operatorId}/${row.id}`
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  return (
+    <div className="form-sections">
+      <div className="card">
+        <div className="toolbar">
+          <div>
+            <h2 style={{ margin: 0 }}>Commission</h2>
+            <p className="muted" style={{ margin: '4px 0 0' }}>
+              Completed bookings with rider, system (operator), and admin commission.
+            </p>
+          </div>
+        </div>
+        <div className="ride-filters" style={{ marginTop: 12 }}>
+          <div className="chips">
+            <button type="button" className={dateMode === 'date' ? 'on' : ''} onClick={() => { setDateMode('date'); setFrom(today); setTo(today) }}>By date</button>
+            <button type="button" className={dateMode === 'range' ? 'on' : ''} onClick={() => { setDateMode('range'); setFrom(isoDate(addDays(new Date(), -6))); setTo(today) }}>By range</button>
+          </div>
+          {dateMode === 'date' ? (
+            <label className="field" style={{ margin: 0, minWidth: 160 }}>
+              <span>Date</span>
+              <input type="date" value={to} onChange={(e) => { setFrom(e.target.value); setTo(e.target.value) }} />
+            </label>
+          ) : (
+            <>
+              <label className="field" style={{ margin: 0, minWidth: 150 }}>
+                <span>From</span>
+                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+              </label>
+              <label className="field" style={{ margin: 0, minWidth: 150 }}>
+                <span>To</span>
+                <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+              </label>
+            </>
+          )}
+          <label className="field" style={{ margin: 0, minWidth: 180 }}>
+            <span>Booking no</span>
+            <input value={bookingNo} onChange={(e) => setBookingNo(e.target.value)} placeholder="YP…" />
+          </label>
+          <label className="field" style={{ margin: 0, minWidth: 180 }}>
+            <span>Rider</span>
+            <input value={rider} onChange={(e) => setRider(e.target.value)} placeholder="Name or plate" />
+          </label>
+          {mode === 'admin' ? (
+            <label className="field" style={{ margin: 0, minWidth: 200 }}>
+              <span>Operator</span>
+              <select value={operatorId} onChange={(e) => setOperatorId(e.target.value)}>
+                <option value="">All operators</option>
+                {operators.map((op) => (
+                  <option key={op.id} value={op.id}>{op.companyName}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        {error ? <p className="error">{error}</p> : null}
+        {data ? (
+          <div className="fare-cards" style={{ marginTop: 14 }}>
+            <div className="detail-card">
+              <span>Bookings</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{data.summary.count}</p>
+            </div>
+            <div className="detail-card">
+              <span>Booking amount</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{peso(data.summary.bookingAmount)}</p>
+            </div>
+            <div className="detail-card">
+              <span>Rider</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{peso(data.summary.riderCommission)}</p>
+            </div>
+            <div className="detail-card">
+              <span>System</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{peso(data.summary.systemCommission)}</p>
+            </div>
+            <div className="detail-card">
+              <span>Admin</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{peso(data.summary.adminCommission)}</p>
+            </div>
+          </div>
+        ) : null}
+        <div className="table-wrap" style={{ marginTop: 16 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Book no</th>
+                {mode === 'admin' ? <th>Operator</th> : null}
+                <th>Rider</th>
+                <th>Rider comm</th>
+                <th>System comm</th>
+                <th>Admin comm</th>
+                <th>Booking amount</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr><td colSpan={mode === 'admin' ? 8 : 7}>No commission rows for this filter.</td></tr>
+              ) : rows.map((row) => (
+                <tr
+                  key={row.id}
+                  className="clickable"
+                  onClick={() => openBooking(row)}
+                >
+                  <td><strong>{row.reference}</strong></td>
+                  {mode === 'admin' ? <td>{row.operatorName}</td> : null}
+                  <td>{row.riderName}</td>
+                  <td>{peso(row.riderCommission)}</td>
+                  <td>{peso(row.systemCommission)}</td>
+                  <td>{peso(row.adminCommission)}</td>
+                  <td><strong>{peso(row.bookingAmount)}</strong></td>
+                  <td>{phDateTime(row.dateUtc)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="pager" style={{ marginTop: 12 }}>
+          <button className="btn tiny" type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</button>
+          <span className="muted">Page {page} of {pages}</span>
+          <button className="btn tiny" type="button" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next</button>
+        </div>
+      </div>
+    </div>
   )
 }
 

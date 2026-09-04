@@ -582,6 +582,31 @@ public record OperatorBookingListItem(
     PaymentMethod PaymentMethod,
     string? PaymentMethodOther);
 
+public record CommissionReportItem(
+    Guid Id,
+    string Reference,
+    string RiderName,
+    Guid RiderId,
+    string OperatorName,
+    Guid OperatorId,
+    decimal RiderCommission,
+    decimal SystemCommission,
+    decimal AdminCommission,
+    decimal BookingAmount,
+    DateTime DateUtc,
+    TripStatus Status);
+
+public record CommissionReportSummary(
+    decimal BookingAmount,
+    decimal RiderCommission,
+    decimal SystemCommission,
+    decimal AdminCommission,
+    int Count);
+
+public record CommissionReportResponse(
+    PagedResult<CommissionReportItem> Page,
+    CommissionReportSummary Summary);
+
 public record OperatorBookingColumn(
     int Total,
     IReadOnlyList<RideListItem> Items);

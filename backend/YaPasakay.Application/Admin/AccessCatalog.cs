@@ -10,6 +10,7 @@ public static class AccessCatalog
         new("territories", "Territories"),
         new("fares", "Fare matrix"),
         new("billing", "Billing"),
+        new("commission", "Commission"),
         new("announcements", "Announcements"),
         new("support", "Support"),
         new("audit", "Audit"),
