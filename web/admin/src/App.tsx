@@ -241,19 +241,19 @@ export default function App() {
 }
 
 function parsePublicRiderHash(rawHash = window.location.hash) {
-  const raw = rawHash.replace(/^#/, '')
-  const join = /^rider-join\/([^/]+)$/.exec(raw)
+  const raw = rawHash.replace(/^#\/?/, '').replace(/^\//, '')
+  const join = /^rider-join\/([^/?#]+)/.exec(raw)
   if (join) {
     return { kind: 'join' as const, token: decodeURIComponent(join[1]) }
   }
-  if (raw === 'rider-status' || raw.startsWith('rider-status?')) {
+  if (raw === 'rider-status' || raw.startsWith('rider-status?') || raw.startsWith('rider-status/')) {
     return { kind: 'status' as const }
   }
   return null
 }
 
 function parseCommissionHash(rawHash = window.location.hash) {
-  const raw = rawHash.replace(/^#/, '')
+  const raw = rawHash.replace(/^#\/?/, '').replace(/^\//, '')
   const match = /^commission\/(admin|operator)\/([^/]+)\/([^/]+)$/.exec(raw)
   if (!match) {
     return null
