@@ -14,7 +14,7 @@ export type SideNavGroup = {
   items: SideNavItem[]
 }
 
-const GROUP_STATE_KEY = 'yapasakay-nav-groups'
+const GROUP_STATE_KEY = 'yapasakay-nav-groups-v2'
 
 function readGroupState(scope: string): Record<string, boolean> {
   try {
