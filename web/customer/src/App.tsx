@@ -87,7 +87,13 @@ export default function App() {
       setBoot(false)
       return
     }
-    api.desk().then(setDesk).catch(() => clearToken()).finally(() => setBoot(false))
+    api.desk()
+      .then(setDesk)
+      .catch(() => {
+        // Keep Google session unless access+refresh were cleared (true auth failure).
+        if (!getToken()) setDesk(null)
+      })
+      .finally(() => setBoot(false))
   }, [])
 
   useEffect(() => {

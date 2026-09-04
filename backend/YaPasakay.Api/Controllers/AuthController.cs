@@ -286,7 +286,7 @@ public class AuthController(
         {
             AppUserId = user.Id,
             Token = refresh,
-            ExpiresAtUtc = DateTime.UtcNow.AddDays(30)
+            ExpiresAtUtc = DateTime.UtcNow.AddDays(180)
         });
         await db.SaveChangesAsync(cancellationToken);
         return new AuthResponse(access, refresh, expires, me);

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import logo from './logo-circle.png'
 import { LoginBrandPanel, LoginTrustBar, LoginVehicleCards } from './login-brand-panel'
-import { api, Desk, saveToken } from './api'
+import { api, Desk, saveAuth } from './api'
 
 function loadGoogleScript() {
   return new Promise<void>((resolve, reject) => {
@@ -81,7 +81,7 @@ export function AuthScreen({
             try {
               const auth = await api.googleSignIn(response.credential)
               if (auth.user.role !== 'Customer') throw new Error('Use a customer Google account.')
-              saveToken(auth.accessToken)
+              saveAuth(auth)
               onReadyRef.current(await api.desk())
             } catch (err) {
               setError(err instanceof Error ? err.message : 'Google sign-in failed.')

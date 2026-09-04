@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'yapasakay-customer-access'
+const REFRESH_KEY = 'yapasakay-customer-refresh'
 
 export type VehicleType = 'Motorcycle' | 'Tricycle'
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Other'
@@ -8,6 +9,8 @@ export type DeleteAccountStatus = 'None' | 'Pending' | 'Approved' | 'Rejected'
 
 export type AuthResponse = {
   accessToken: string
+  refreshToken: string
+  expiresAtUtc: string
   user: { role: string; fullName: string; phoneNumber: string }
 }
 
@@ -255,10 +258,6 @@ export function phWhen(value: string) {
   return new Date(value).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })
 }
 
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
 export function mediaUrl(path?: string | null) {
   const raw = String(path ?? '').trim()
   if (!raw) return ''
@@ -298,21 +297,81 @@ export async function toChatJpeg(file: File) {
   return new File([blob], 'chat.jpg', { type: 'image/jpeg' })
 }
 
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+function getRefreshToken() {
+  return localStorage.getItem(REFRESH_KEY)
+}
+
+export function saveAuth(auth: AuthResponse) {
+  localStorage.setItem(TOKEN_KEY, auth.accessToken)
+  localStorage.setItem(REFRESH_KEY, auth.refreshToken)
+}
+
+/** @deprecated prefer saveAuth — kept for call sites during transition */
 export function saveToken(token: string) {
   localStorage.setItem(TOKEN_KEY, token)
 }
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(REFRESH_KEY)
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+let refreshInFlight: Promise<boolean> | null = null
+
+async function refreshSession(): Promise<boolean> {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) {
+    return false
+  }
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        })
+        if (!res.ok) {
+          clearToken()
+          return false
+        }
+        const auth = (await res.json()) as AuthResponse
+        if (!auth.accessToken || !auth.refreshToken) {
+          clearToken()
+          return false
+        }
+        saveAuth(auth)
+        return true
+      } catch {
+        return false
+      } finally {
+        refreshInFlight = null
+      }
+    })()
+  }
+  return refreshInFlight
+}
+
+function shouldAttemptRefresh(path: string) {
+  return !path.startsWith('/api/auth/refresh')
+    && !path.startsWith('/api/auth/google')
+    && !path.startsWith('/api/auth/login')
+}
+
+async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
   const headers = new Headers(init?.headers)
   if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const res = await fetch(path, { ...init, headers })
   if (res.status === 401) {
+    if (!retried && shouldAttemptRefresh(path) && (await refreshSession())) {
+      return request<T>(path, init, true)
+    }
     clearToken()
     throw new Error('Session expired. Sign in again.')
   }
@@ -334,12 +393,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T
 }
 
-async function requestForm<T>(path: string, body: FormData): Promise<T> {
+async function requestForm<T>(path: string, body: FormData, retried = false): Promise<T> {
   const headers = new Headers()
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const res = await fetch(path, { method: 'POST', headers, body })
   if (res.status === 401) {
+    if (!retried && shouldAttemptRefresh(path) && (await refreshSession())) {
+      return requestForm<T>(path, body, true)
+    }
     clearToken()
     throw new Error('Session expired. Sign in again.')
   }
