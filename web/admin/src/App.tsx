@@ -97,6 +97,13 @@ import { stopSosAlarm } from './sos-alert'
 import logoCircle from './asset/logo-circle.png'
 import FleetMap from './FleetMap'
 import TripLiveMap from './TripLiveMap'
+import {
+  ADMIN_MENU_GROUPS,
+  OPERATOR_MENU_GROUPS,
+  SideNav,
+  filterMenuGroups,
+  flattenMenuGroups,
+} from './side-nav'
 import { BrandingSettingsPage } from './BrandingSettings'
 import {
   applyBrand,
@@ -104,39 +111,8 @@ import {
   type BrandingConfig,
 } from './brand-themes'
 
-const MENUS: { id: PageId; label: string; icon: string; live: boolean }[] = [
-  { id: 'overview', label: 'Overview', icon: '⌂', live: true },
-  { id: 'operators', label: 'Operators', icon: '▦', live: true },
-  { id: 'customers', label: 'Customers', icon: '☺', live: true },
-  { id: 'territories', label: 'Territories', icon: '◎', live: true },
-  { id: 'fares', label: 'Fare matrix', icon: '₱', live: true },
-  { id: 'billing', label: 'Billing', icon: '▤', live: true },
-  { id: 'announcements', label: 'Announcements', icon: '✺', live: true },
-  { id: 'support', label: 'Support', icon: '☎', live: true },
-  { id: 'audit', label: 'Audit', icon: '☰', live: true },
-  { id: 'roles', label: 'Roles', icon: '◉', live: true },
-  { id: 'admins', label: 'Admin users', icon: '★', live: true },
-  { id: 'settings', label: 'Settings', icon: '⚙', live: true },
-]
-
-const OPERATOR_MENUS: { id: PageId; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '◎' },
-  { id: 'bookings', label: 'Booking', icon: '▢' },
-  { id: 'overview', label: 'Overview', icon: '⌂' },
-  { id: 'schedule', label: 'Schedule booking', icon: '◷' },
-  { id: 'riders', label: 'Riders', icon: '▣' },
-  { id: 'customers', label: 'Customers', icon: '☺' },
-  { id: 'fleet', label: 'Fleet', icon: '⌖' },
-  { id: 'fares', label: 'Fare matrix', icon: '₱' },
-  { id: 'surcharges', label: 'Surcharges', icon: '+' },
-  { id: 'support', label: 'Support', icon: '☎' },
-  { id: 'inbox', label: 'Inbox', icon: '✉' },
-  { id: 'billing', label: 'Billing', icon: '▤' },
-  { id: 'wallet', label: 'Wallet', icon: '◈' },
-  { id: 'company', label: 'Company', icon: '▦' },
-  { id: 'roles', label: 'Roles', icon: '◉' },
-  { id: 'employees', label: 'Employees', icon: '♟' },
-]
+const MENUS = flattenMenuGroups(ADMIN_MENU_GROUPS)
+const OPERATOR_MENUS = flattenMenuGroups(OPERATOR_MENU_GROUPS)
 
 const COMING_SOON: Record<string, string> = {}
 
@@ -341,10 +317,25 @@ function Shell({
   brandName: string
   brandLogo: string
 }) {
-  const allowedMenus = (me.isMainAdmin
-    ? MENUS
-    : MENUS.filter((item) => (me.accessPages ?? []).includes(item.id))
-  ).filter((item) => (item.id !== 'roles' && item.id !== 'admins') || me.isMainAdmin || (me.accessPages ?? []).includes(item.id))
+  const allowedGroups = useMemo(() => {
+    if (me.isMainAdmin) {
+      return ADMIN_MENU_GROUPS
+    }
+    const pages = new Set(me.accessPages ?? [])
+    return filterMenuGroups(
+      ADMIN_MENU_GROUPS,
+      new Set(
+        flattenMenuGroups(ADMIN_MENU_GROUPS)
+          .map((item) => item.id)
+          .filter((id) =>
+            (id === 'roles' || id === 'admins')
+              ? pages.has(id)
+              : pages.has(id),
+          ),
+      ),
+    )
+  }, [me.isMainAdmin, me.accessPages])
+  const allowedMenus = useMemo(() => flattenMenuGroups(allowedGroups), [allowedGroups])
   const firstPage = allowedMenus[0]?.id ?? 'overview'
   const [page, setPage] = useState<PageId>(
     allowedMenus.some((item) => item.id === 'overview') ? 'overview' : firstPage,
@@ -452,23 +443,19 @@ function Shell({
             <span>{me.isMainAdmin ? 'Administrator' : me.accessGroupName || 'Admin'}</span>
           </div>
         </div>
-        <nav className="nav">
-          {allowedMenus.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={page === item.id ? 'active' : ''}
-              title={item.label}
-              onClick={() => go(item.id)}
-            >
-              <span className="ico">{item.icon}</span>
-              <span className="label">{item.label}</span>
-              {item.id === 'support' ? <NavBadge count={sosAlerts} tone="sos" /> : null}
-              {item.id === 'billing' ? <NavBadge count={billingAlerts} tone="billing" /> : null}
-              {item.id === 'customers' ? <NavBadge count={deleteAlerts} tone="delete" /> : null}
-            </button>
-          ))}
-        </nav>
+        <SideNav
+          scope="admin"
+          groups={allowedGroups}
+          page={page}
+          shellCollapsed={collapsed}
+          onNavigate={(id) => go(id)}
+          badge={(id) => {
+            if (id === 'support') return <NavBadge count={sosAlerts} tone="sos" />
+            if (id === 'billing') return <NavBadge count={billingAlerts} tone="billing" />
+            if (id === 'customers') return <NavBadge count={deleteAlerts} tone="delete" />
+            return null
+          }}
+        />
         <div className="side-foot">
           <button className="collapse-btn" type="button" onClick={toggleSidebar}>
             {collapsed ? '»' : '« Collapse'}
@@ -6368,13 +6355,24 @@ function OperatorShell({
   brandName: string
   brandLogo: string
 }) {
-  const allowedMenus = useMemo(
+  const allowedGroups = useMemo(
     () => (me.isMainOperator
-      ? OPERATOR_MENUS
-      : OPERATOR_MENUS.filter((item) => (me.accessPages ?? []).includes(item.id))
-    ).filter((item) => (item.id !== 'roles' && item.id !== 'employees') || me.isMainOperator),
+      ? OPERATOR_MENU_GROUPS
+      : filterMenuGroups(
+          OPERATOR_MENU_GROUPS,
+          new Set(
+            flattenMenuGroups(OPERATOR_MENU_GROUPS)
+              .map((item) => item.id)
+              .filter((id) =>
+                (id === 'roles' || id === 'employees')
+                  ? !!me.isMainOperator
+                  : (me.accessPages ?? []).includes(id),
+              ),
+          ),
+        )),
     [me.isMainOperator, me.accessPages],
   )
+  const allowedMenus = useMemo(() => flattenMenuGroups(allowedGroups), [allowedGroups])
   const firstPage = allowedMenus[0]?.id ?? 'dashboard'
   const [page, setPage] = useState<PageId>(firstPage)
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed)
@@ -6442,24 +6440,20 @@ function OperatorShell({
             <span>{me.companyName || 'Operator'}</span>
           </div>
         </div>
-        <nav className="nav">
-          {allowedMenus.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={page === item.id ? 'active' : ''}
-              title={item.label}
-              onClick={() => setPage(item.id)}
-            >
-              <span className="ico">{item.icon}</span>
-              <span className="label">{item.label}</span>
-              {item.id === 'wallet' ? <NavBadge count={alerts.pendingWalletRequests} tone="wallet" /> : null}
-              {item.id === 'support' ? <NavBadge count={alerts.openSos} tone="sos" /> : null}
-              {item.id === 'billing' ? <NavBadge count={alerts.unreadBilling} tone="billing" /> : null}
-              {item.id === 'customers' ? <NavBadge count={alerts.pendingAccountDeletes} tone="delete" /> : null}
-            </button>
-          ))}
-        </nav>
+        <SideNav
+          scope="operator"
+          groups={allowedGroups}
+          page={page}
+          shellCollapsed={collapsed}
+          onNavigate={setPage}
+          badge={(id) => {
+            if (id === 'wallet') return <NavBadge count={alerts.pendingWalletRequests} tone="wallet" />
+            if (id === 'support') return <NavBadge count={alerts.openSos} tone="sos" />
+            if (id === 'billing') return <NavBadge count={alerts.unreadBilling} tone="billing" />
+            if (id === 'customers') return <NavBadge count={alerts.pendingAccountDeletes} tone="delete" />
+            return null
+          }}
+        />
         <div className="side-foot">
           <button className="collapse-btn" type="button" onClick={() => {
             const next = !collapsed
