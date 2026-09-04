@@ -134,6 +134,8 @@ const OPERATOR_MENUS: { id: PageId; label: string; icon: string }[] = [
   { id: 'billing', label: 'Billing', icon: '▤' },
   { id: 'wallet', label: 'Wallet', icon: '◈' },
   { id: 'company', label: 'Company', icon: '▦' },
+  { id: 'roles', label: 'Roles', icon: '◉' },
+  { id: 'employees', label: 'Employees', icon: '♟' },
 ]
 
 const COMING_SOON: Record<string, string> = {}
@@ -5467,7 +5469,11 @@ function AdminProfilePage({ me }: { me: Me }) {
   )
 }
 
-function AccessSettings({ section }: { section: 'roles' | 'users' }) {
+function AccessSettings({ section, mode = 'admin' }: { section: 'roles' | 'users'; mode?: 'admin' | 'operator' }) {
+  const operatorMode = mode === 'operator'
+  const peopleLabel = operatorMode ? 'Employees' : 'Admin users'
+  const personLabel = operatorMode ? 'employee' : 'user'
+  const isMain = (row: AccessStaff) => (operatorMode ? !!row.isMainOperator : row.isMainAdmin)
   const [pages, setPages] = useState<AccessPage[]>([])
   const [groups, setGroups] = useState<AccessGroup[]>([])
   const [users, setUsers] = useState<AccessStaff[]>([])
@@ -5483,11 +5489,11 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
   const [busy, setBusy] = useState(false)
 
   async function load() {
-    const [pageRows, groupRows, userRows] = await Promise.all([
-      api.accessPages(),
-      api.accessGroups(),
-      api.accessUsers(),
-    ])
+    const [pageRows, groupRows, userRows] = await Promise.all(
+      operatorMode
+        ? [api.operatorAccessPages(), api.operatorAccessGroups(), api.operatorAccessUsers()]
+        : [api.accessPages(), api.accessGroups(), api.accessUsers()],
+    )
     setPages(pageRows)
     setGroups(groupRows)
     setUsers(userRows)
@@ -5527,10 +5533,12 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
         pages: groupForm.pages,
       }
       if (groupId) {
-        await api.updateAccessGroup(groupId, body)
+        if (operatorMode) await api.updateOperatorAccessGroup(groupId, body)
+        else await api.updateAccessGroup(groupId, body)
         setNotice('Role updated.')
       } else {
-        await api.createAccessGroup(body)
+        if (operatorMode) await api.createOperatorAccessGroup(body)
+        else await api.createAccessGroup(body)
         setNotice('Role created.')
       }
       resetGroup()
@@ -5547,7 +5555,8 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
     setError('')
     setNotice('')
     try {
-      await api.deleteAccessGroup(id)
+      if (operatorMode) await api.deleteOperatorAccessGroup(id)
+      else await api.deleteAccessGroup(id)
       if (groupId === id) {
         resetGroup()
       }
@@ -5588,16 +5597,21 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
         password: userForm.password.trim(),
       }
       if (userId) {
-        await api.updateAccessUser(userId, {
+        const payload = {
           fullName: body.fullName,
           phone: body.phone,
           accessGroupId: body.accessGroupId,
           ...(body.password ? { password: body.password } : {}),
-        })
-        setNotice('User updated.')
+        }
+        if (operatorMode) await api.updateOperatorAccessUser(userId, payload)
+        else await api.updateAccessUser(userId, payload)
+        setNotice(operatorMode ? 'Employee updated.' : 'User updated.')
       } else {
-        await api.createAccessUser(body)
-        setNotice('User created. They sign in with phone and password.')
+        if (operatorMode) await api.createOperatorAccessUser(body)
+        else await api.createAccessUser(body)
+        setNotice(operatorMode
+          ? 'Employee created. They sign in with phone and password.'
+          : 'User created. They sign in with phone and password.')
       }
       resetUser()
       await load()
@@ -5609,10 +5623,11 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
   }
 
   async function toggleUser(row: AccessStaff) {
-    if (row.isMainAdmin) {
+    if (isMain(row)) {
       return
     }
-    await api.setAccessUserActive(row.id, !row.isActive)
+    if (operatorMode) await api.setOperatorAccessUserActive(row.id, !row.isActive)
+    else await api.setAccessUserActive(row.id, !row.isActive)
     await load()
   }
 
@@ -5629,7 +5644,9 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
     setError('')
     setNotice('')
     try {
-      const result = await api.resetAccessUserPassword(row.id, resetPassword.trim())
+      const result = operatorMode
+        ? await api.resetOperatorAccessUserPassword(row.id, resetPassword.trim())
+        : await api.resetAccessUserPassword(row.id, resetPassword.trim())
       setNotice(result.message)
       setResetUserId(null)
       setResetPassword('')
@@ -5639,17 +5656,19 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
   }
 
   async function changeUserRole(row: AccessStaff, accessGroupId: string) {
-    if (row.isMainAdmin || !accessGroupId || accessGroupId === row.accessGroupId) {
+    if (isMain(row) || !accessGroupId || accessGroupId === row.accessGroupId) {
       return
     }
     setError('')
     setNotice('')
     try {
-      await api.updateAccessUser(row.id, {
+      const payload = {
         fullName: row.fullName,
         phone: row.phoneNumber,
         accessGroupId,
-      })
+      }
+      if (operatorMode) await api.updateOperatorAccessUser(row.id, payload)
+      else await api.updateAccessUser(row.id, payload)
       const roleName = groups.find((item) => item.id === accessGroupId)?.name ?? 'the selected role'
       setNotice(`${row.fullName} is now ${roleName}.`)
       await load()
@@ -5694,7 +5713,7 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
           <div>
             <h2 style={{ margin: 0 }}>{groupId ? 'Edit role' : 'Roles'}</h2>
             <p className="muted" style={{ margin: '4px 0 0' }}>
-              Create a role and tick the modules it can open. Then assign it in Admin users.
+              Create a role and tick the modules it can open. Then assign it in {peopleLabel}.
             </p>
           </div>
           {groupId ? (
@@ -5745,7 +5764,7 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
               <tr>
                 <th>Role</th>
                 <th>Modules</th>
-                <th>Users</th>
+                <th>{operatorMode ? 'Staff' : 'Users'}</th>
                 <th></th>
               </tr>
             </thead>
@@ -5784,13 +5803,13 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
       >
         <div className="panel-head">
           <div>
-            <h2 style={{ margin: 0 }}>{userId ? 'Edit admin user' : 'Admin users'}</h2>
+            <h2 style={{ margin: 0 }}>{userId ? `Edit ${personLabel}` : peopleLabel}</h2>
             <p className="muted" style={{ margin: '4px 0 0' }}>
               Create staff accounts with a phone number and password. They use both to sign in.
             </p>
           </div>
           {userId ? (
-            <button className="btn tiny" type="button" onClick={resetUser}>New user</button>
+            <button className="btn tiny" type="button" onClick={resetUser}>{operatorMode ? 'New employee' : 'New user'}</button>
           ) : null}
         </div>
         {groups.length === 0 ? (
@@ -5835,13 +5854,13 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
           </p>
         ) : null}
         <div style={{ display: 'flex', gap: 10, maxWidth: 280 }}>
-          <button className="btn" type="submit" disabled={busy}>{busy ? 'Saving…' : userId ? 'Save user' : 'Create user'}</button>
+          <button className="btn" type="submit" disabled={busy}>{busy ? 'Saving…' : userId ? `Save ${personLabel}` : `Create ${personLabel}`}</button>
         </div>
         <div className="table-wrap role-table" style={{ marginTop: 16 }}>
           <table>
             <thead>
               <tr>
-                <th>User</th>
+                <th>{operatorMode ? 'Employee' : 'User'}</th>
                 <th>Role</th>
                 <th>Status</th>
                 <th></th>
@@ -5849,10 +5868,10 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
             </thead>
             <tbody>
               {users.length === 0 ? (
-                <tr><td colSpan={4}>No staff users yet.</td></tr>
+                <tr><td colSpan={4}>{operatorMode ? 'No employees yet.' : 'No staff users yet.'}</td></tr>
               ) : users.map((row) => (
-                <tr key={row.id} className={row.isMainAdmin ? '' : 'clickable'} onClick={() => {
-                  if (row.isMainAdmin) {
+                <tr key={row.id} className={isMain(row) ? '' : 'clickable'} onClick={() => {
+                  if (isMain(row)) {
                     return
                   }
                   setUserId(row.id)
@@ -5870,9 +5889,9 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
                     <div className="muted">{row.phoneNumber}</div>
                   </td>
                   <td>
-                    {row.isMainAdmin ? (
+                    {isMain(row) ? (
                       <div className="role-pick">
-                        <strong>Administrator</strong>
+                        <strong>{operatorMode ? 'Main operator' : 'Administrator'}</strong>
                         <small>All modules</small>
                       </div>
                     ) : (
@@ -5928,7 +5947,7 @@ function AccessSettings({ section }: { section: 'roles' | 'users' }) {
                           Reset password
                         </button>
                       )}
-                      {row.isMainAdmin ? null : (
+                      {isMain(row) ? null : (
                       <button className={`btn tiny${row.isActive ? ' danger' : ''}`} type="button" onClick={(e) => { e.stopPropagation(); void toggleUser(row) }}>
                         {row.isActive ? 'Deactivate' : 'Activate'}
                       </button>
@@ -6349,7 +6368,15 @@ function OperatorShell({
   brandName: string
   brandLogo: string
 }) {
-  const [page, setPage] = useState<PageId>('dashboard')
+  const allowedMenus = useMemo(
+    () => (me.isMainOperator
+      ? OPERATOR_MENUS
+      : OPERATOR_MENUS.filter((item) => (me.accessPages ?? []).includes(item.id))
+    ).filter((item) => (item.id !== 'roles' && item.id !== 'employees') || me.isMainOperator),
+    [me.isMainOperator, me.accessPages],
+  )
+  const firstPage = allowedMenus[0]?.id ?? 'dashboard'
+  const [page, setPage] = useState<PageId>(firstPage)
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed)
   const [theme, setThemeState] = useState<Theme>(readTheme)
   const [alerts, setAlerts] = useState<OperatorNavAlerts>({
@@ -6359,6 +6386,12 @@ function OperatorShell({
     pendingAccountDeletes: 0,
   })
   const [sosFlash, setSosFlash] = useState<OpsAlert | null>(null)
+
+  useEffect(() => {
+    if (!allowedMenus.some((item) => item.id === page)) {
+      setPage(firstPage)
+    }
+  }, [page, firstPage, allowedMenus])
 
   const loadAlerts = useCallback(() => {
     api.operatorAlerts()
@@ -6395,7 +6428,9 @@ function OperatorShell({
     setThemeState(next)
   }
 
-  const title = OPERATOR_MENUS.find((item) => item.id === page)?.label ?? 'Dashboard'
+  const title = allowedMenus.find((item) => item.id === page)?.label
+    ?? OPERATOR_MENUS.find((item) => item.id === page)?.label
+    ?? 'Dashboard'
 
   return (
     <div className={`shell${collapsed ? ' collapsed' : ''}`}>
@@ -6408,7 +6443,7 @@ function OperatorShell({
           </div>
         </div>
         <nav className="nav">
-          {OPERATOR_MENUS.map((item) => (
+          {allowedMenus.map((item) => (
             <button
               key={item.id}
               type="button"
@@ -6452,7 +6487,7 @@ function OperatorShell({
             <div className="avatar">{me.fullName.slice(0, 1)}</div>
             <div>
               <strong>{me.fullName}</strong>
-              <span>{me.phoneNumber}</span>
+              <span>{me.isMainOperator ? 'Main operator' : (me.accessGroupName || me.phoneNumber)}</span>
             </div>
           </div>
         </header>
@@ -6483,6 +6518,16 @@ function OperatorShell({
         {page === 'billing' && <OperatorBillingPage />}
         {page === 'wallet' && <OperatorWalletPage />}
         {page === 'company' && <OperatorCompanyPage />}
+        {page === 'roles' && me.isMainOperator ? (
+          <div className="form-sections">
+            <AccessSettings section="roles" mode="operator" />
+          </div>
+        ) : null}
+        {page === 'employees' && me.isMainOperator ? (
+          <div className="form-sections">
+            <AccessSettings section="users" mode="operator" />
+          </div>
+        ) : null}
       </main>
     </div>
   )

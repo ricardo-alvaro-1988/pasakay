@@ -24,4 +24,5 @@ public record MeResponse(
     bool IsMainAdmin,
     string? AccessGroupName,
     string? CompanyName,
-    IReadOnlyList<string> AccessPages);
+    IReadOnlyList<string> AccessPages,
+    bool IsMainOperator);

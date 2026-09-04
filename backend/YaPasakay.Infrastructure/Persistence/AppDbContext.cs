@@ -419,9 +419,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<AccessGroup>(entity =>
         {
-            entity.HasIndex(x => x.Name).IsUnique();
             entity.Property(x => x.Name).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(200);
+            entity.HasIndex(x => x.Name)
+                .IsUnique()
+                .HasFilter("[OperatorId] IS NULL");
+            entity.HasIndex(x => new { x.OperatorId, x.Name })
+                .IsUnique()
+                .HasFilter("[OperatorId] IS NOT NULL");
+            entity.HasOne(x => x.Operator)
+                .WithMany()
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<AccessGroupPage>(entity =>

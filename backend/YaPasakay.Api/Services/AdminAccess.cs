@@ -68,10 +68,14 @@ public static class AdminAccess
                 .ThenInclude(x => x!.Pages)
                 .FirstAsync(x => x.Id == user.Id, cancellationToken);
 
-        var pages = PagesFor(loaded).ToList();
-        var groupName = loaded.IsMainAdmin
-            ? "Administrator"
-            : loaded.AccessGroup?.Name;
+        var pages = loaded.Role == UserRole.Operator
+            ? OperatorAccess.PagesFor(loaded).ToList()
+            : PagesFor(loaded).ToList();
+        var groupName = loaded.Role == UserRole.Operator
+            ? (loaded.IsMainOperator ? "Main operator" : loaded.AccessGroup?.Name)
+            : loaded.IsMainAdmin
+                ? "Administrator"
+                : loaded.AccessGroup?.Name;
         string? companyName = null;
         if (loaded.OperatorId is Guid operatorId)
         {
@@ -92,7 +96,8 @@ public static class AdminAccess
             loaded.IsMainAdmin,
             groupName,
             companyName,
-            pages);
+            pages,
+            loaded.IsMainOperator);
     }
 
     public static string? RequiredPage(string path)

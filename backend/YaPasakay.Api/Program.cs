@@ -28,9 +28,11 @@ builder.Services.AddSingleton<YaPasakay.Api.Services.TripChatRealtime>();
 builder.Services.AddScoped<YaPasakay.Api.Services.LiveNotify>();
 builder.Services.AddSingleton<YaPasakay.Api.Services.GoogleDrivingDistance>();
 builder.Services.AddScoped<YaPasakay.Api.Services.AdminAccessFilter>();
+builder.Services.AddScoped<YaPasakay.Api.Services.OperatorAccessFilter>();
 builder.Services.AddControllers(options =>
 {
     options.Filters.AddService<YaPasakay.Api.Services.AdminAccessFilter>();
+    options.Filters.AddService<YaPasakay.Api.Services.OperatorAccessFilter>();
 }).AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());

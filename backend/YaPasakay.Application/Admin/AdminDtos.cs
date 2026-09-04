@@ -494,7 +494,8 @@ public record AccessStaffItem(
     string AccessGroupName,
     bool IsActive,
     bool IsMainAdmin,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    bool IsMainOperator);
 
 public record SaveAccessStaffRequest(
     string FullName,

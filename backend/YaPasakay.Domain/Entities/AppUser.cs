@@ -14,6 +14,7 @@ public class AppUser : BaseEntity
     public Guid? OperatorId { get; set; }
     public Operator? Operator { get; set; }
     public bool IsMainAdmin { get; set; }
+    public bool IsMainOperator { get; set; }
     public Guid? AccessGroupId { get; set; }
     public AccessGroup? AccessGroup { get; set; }
     public bool IsActive { get; set; } = true;

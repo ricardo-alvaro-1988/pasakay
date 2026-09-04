@@ -17,6 +17,7 @@ export type PageId =
   | 'settings'
   | 'roles'
   | 'admins'
+  | 'employees'
   | 'profile'
   | 'riders'
   | 'fleet'
@@ -35,6 +36,7 @@ export type Me = {
   operatorId: string | null
   isActive: boolean
   isMainAdmin: boolean
+  isMainOperator?: boolean
   accessGroupName: string | null
   companyName: string | null
   accessPages: PageId[]
@@ -837,6 +839,7 @@ export type AccessStaff = {
   accessGroupName: string
   isActive: boolean
   isMainAdmin: boolean
+  isMainOperator?: boolean
   createdAtUtc: string
 }
 
@@ -1109,6 +1112,29 @@ export const api = {
     }),
   resetAccessUserPassword: (id: string, password: string) =>
     request<ResetPasswordResult>(`/api/admin/access/users/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    }),
+  operatorAccessPages: () => request<AccessPage[]>('/api/operator/access/pages'),
+  operatorAccessGroups: () => request<AccessGroup[]>('/api/operator/access/groups'),
+  createOperatorAccessGroup: (body: { name: string; description: string; pages: PageId[] }) =>
+    request<AccessGroup>('/api/operator/access/groups', { method: 'POST', body: JSON.stringify(body) }),
+  updateOperatorAccessGroup: (id: string, body: { name: string; description: string; pages: PageId[] }) =>
+    request<AccessGroup>(`/api/operator/access/groups/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteOperatorAccessGroup: (id: string) =>
+    request<{ ok: boolean }>(`/api/operator/access/groups/${id}/delete`, { method: 'POST' }),
+  operatorAccessUsers: () => request<AccessStaff[]>('/api/operator/access/users'),
+  createOperatorAccessUser: (body: { fullName: string; phone: string; accessGroupId: string; password: string }) =>
+    request<AccessStaff>('/api/operator/access/users', { method: 'POST', body: JSON.stringify(body) }),
+  updateOperatorAccessUser: (id: string, body: { fullName: string; phone: string; accessGroupId: string; password?: string }) =>
+    request<AccessStaff>(`/api/operator/access/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  setOperatorAccessUserActive: (id: string, isActive: boolean) =>
+    request<AccessStaff>(`/api/operator/access/users/${id}/active`, {
+      method: 'POST',
+      body: JSON.stringify({ isActive }),
+    }),
+  resetOperatorAccessUserPassword: (id: string, password: string) =>
+    request<ResetPasswordResult>(`/api/operator/access/users/${id}/reset-password`, {
       method: 'POST',
       body: JSON.stringify({ password }),
     }),

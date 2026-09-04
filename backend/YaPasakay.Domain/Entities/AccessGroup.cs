@@ -6,6 +6,9 @@ public class AccessGroup : BaseEntity
 {
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    /// <summary>Null = Super Admin role. Set = Operator-scoped employee role.</summary>
+    public Guid? OperatorId { get; set; }
+    public Operator? Operator { get; set; }
     public ICollection<AccessGroupPage> Pages { get; set; } = new List<AccessGroupPage>();
     public ICollection<AppUser> Users { get; set; } = new List<AppUser>();
 }

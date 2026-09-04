@@ -473,6 +473,7 @@ public static class DbSeeder
             PasswordHash = SecretHasher.Hash(OperatorPassword),
             Role = UserRole.Operator,
             OperatorId = op.Id,
+            IsMainOperator = true,
             IsActive = true
         });
         await db.SaveChangesAsync(cancellationToken);

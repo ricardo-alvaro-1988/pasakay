@@ -497,6 +497,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             PasswordHash = SecretHasher.Hash(form.Password!.Trim()),
             Role = UserRole.Operator,
             OperatorId = op.Id,
+            IsMainOperator = true,
             IsActive = true
         });
 
@@ -593,11 +594,16 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             return BadRequest(new { message = ex.Message });
         }
 
-        var login = await db.Users.FirstOrDefaultAsync(x => x.OperatorId == id && x.Role == UserRole.Operator, cancellationToken);
+        var login = await db.Users
+            .Where(x => x.OperatorId == id && x.Role == UserRole.Operator)
+            .OrderByDescending(x => x.IsMainOperator)
+            .ThenBy(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
         if (login is not null)
         {
             login.PhoneNumber = phone;
             login.FullName = form.ContactName.Trim();
+            login.IsMainOperator = true;
             if (!string.IsNullOrWhiteSpace(form.Password))
             {
                 if (!SecretHasher.IsStrongPassword(form.Password))
