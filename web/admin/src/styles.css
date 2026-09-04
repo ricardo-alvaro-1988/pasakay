@@ -236,34 +236,38 @@ input:-webkit-autofill:focus {
 
 .nav {
   display: grid;
-  gap: 2px;
+  gap: 1px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding-right: 2px;
+  align-content: start;
 }
 .nav.nav-grouped {
-  gap: 4px;
+  gap: 1px;
 }
 .nav-group {
   display: grid;
-  gap: 1px;
+  gap: 0;
 }
 .nav-group-toggle {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   border: 0;
   background: transparent;
   color: var(--muted);
-  border-radius: 8px;
-  padding: 5px 8px;
+  border-radius: 6px;
+  padding: 4px 6px;
+  min-height: 0;
+  height: auto;
   text-align: left;
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
+  line-height: 1.2;
 }
 .nav-group-toggle:hover {
   background: var(--bg-soft);
@@ -280,13 +284,14 @@ input:-webkit-autofill:focus {
 }
 .nav-group-chevron {
   flex: 0 0 auto;
-  font-size: 11px;
+  font-size: 10px;
   opacity: 0.75;
+  line-height: 1;
 }
 .nav-group-items {
   display: grid;
-  gap: 1px;
-  padding-left: 2px;
+  gap: 0;
+  padding: 0 0 2px 2px;
 }
 .nav button {
   position: relative;
@@ -296,11 +301,21 @@ input:-webkit-autofill:focus {
   border: 0;
   background: transparent;
   color: var(--muted);
-  border-radius: 10px;
-  padding: 6px 8px;
+  border-radius: 8px;
+  padding: 5px 6px;
+  min-height: 0;
+  height: auto;
   text-align: left;
-  font-size: 13px;
-  line-height: 1.2;
+  font-size: 12.5px;
+  line-height: 1.15;
+}
+.nav button.nav-group-toggle {
+  padding: 4px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .nav button.active {
   background: var(--active);
@@ -308,10 +323,11 @@ input:-webkit-autofill:focus {
   font-weight: 700;
 }
 .nav .ico {
-  width: 18px;
+  width: 16px;
   text-align: center;
-  flex: 0 0 18px;
-  font-size: 13px;
+  flex: 0 0 16px;
+  font-size: 12px;
+  line-height: 1;
 }
 .nav .label {
   min-width: 0;
@@ -320,7 +336,7 @@ input:-webkit-autofill:focus {
   white-space: nowrap;
 }
 .collapsed .nav span.label { display: none; }
-.collapsed .nav button { justify-content: center; padding: 10px; }
+.collapsed .nav button { justify-content: center; padding: 8px; }
 .collapsed .nav-group-toggle { display: none; }
 
 .side-foot { margin-top: auto; display: grid; gap: 8px; }
