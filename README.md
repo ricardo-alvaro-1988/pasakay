@@ -91,8 +91,14 @@ flutter build apk --dart-define=API_BASE=https://yapasakay.com
 
 Debug rider builds also use `https://yapasakay.com`.
 
-## Three-site production
+## Multi-site production
 
-Jenkins deploys the same production package to `yapasakay.com`, `pricebadz.com`, and `pasakyaman.com` from `main`. Each site keeps its own Linux service, upload folder, release metadata, and SQL Server database. See [deploy/pricebadz-production.md](deploy/pricebadz-production.md) and [deploy/pasakyaman-production.md](deploy/pasakyaman-production.md) for clone setup notes.
+Jenkins deploys the same production package to `yapasakay.com`, `pricebadz.com`, `pasakyaman.com`, and `trygoride.com` from `main`. Each site keeps its own Linux service, upload folder, release metadata, and SQL Server database. See [deploy/pricebadz-production.md](deploy/pricebadz-production.md), [deploy/pasakyaman-production.md](deploy/pasakyaman-production.md), and [deploy/trygoride-production.md](deploy/trygoride-production.md) for clone setup notes.
 
-<!-- final testing -->
+To add another branded website on the same YaPasakay codebase, use [deploy/new-production-site.md](deploy/new-production-site.md). The runbook includes the server setup and the required `Jenkinsfile` deployment target update. Future request format:
+
+```text
+Create new website for YaPasakay with this domain/name: example.com
+```
+
+<!-- testing jenkins cache deploy again -->

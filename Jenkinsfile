@@ -41,8 +41,28 @@ pipeline {
                     rm -rf .jenkins
                     mkdir -p .jenkins/publish .jenkins/package
 
-                    npm ci --prefix web/customer
-                    npm ci --prefix web/admin
+                    previous_commit="${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-}"
+                    if [ -z "${previous_commit}" ] || ! git cat-file -e "${previous_commit}^{commit}" 2>/dev/null; then
+                        if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+                            previous_commit="$(git rev-parse HEAD~1)"
+                        fi
+                    fi
+
+                    npm_ci_for() {
+                        local app_dir="$1"
+                        local app_name="$2"
+
+                        if [ -n "${previous_commit}" ] && git diff --quiet "${previous_commit}" HEAD -- "${app_dir}/package.json" "${app_dir}/package-lock.json"; then
+                            echo "No package manifest changes for ${app_name}; using npm cache first."
+                            npm ci --prefer-offline --no-audit --prefix "${app_dir}"
+                        else
+                            echo "Package manifest changed for ${app_name}; allowing npm registry lookup."
+                            npm ci --no-audit --prefix "${app_dir}"
+                        fi
+                    }
+
+                    npm_ci_for web/customer customer
+                    npm_ci_for web/admin admin
 
                     bash deploy/sync-wwwroot.sh
 
@@ -114,6 +134,7 @@ pipeline {
 yapasakay|${DEPLOY_HOST}|/var/www/yapasakay|yapasakay.service|/etc/yapasakay/yapasakay-api.env|http://127.0.0.1:5003/health|/var/www/releases/yapasakay
 pricebadz|${DEPLOY_HOST}|/var/www/pricebadz|pricebadz.service|/etc/pricebadz/pricebadz-api.env|http://127.0.0.1:5004/health|/var/www/releases/pricebadz
 pasakyaman|${DEPLOY_HOST}|/var/www/pasakyaman|pasakyaman.service|/etc/pasakyaman/pasakyaman-api.env|http://127.0.0.1:5005/health|/var/www/releases/pasakyaman
+trygoride|${DEPLOY_HOST}|/var/www/trygoride|trygoride.service|/etc/trygoride/trygoride-api.env|http://127.0.0.1:5006/health|/var/www/releases/trygoride
 TARGETS
                     '''
                 }

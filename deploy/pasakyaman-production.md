@@ -16,6 +16,7 @@ For the initial clone, copy `/etc/yapasakay/yapasakay-api.env` to `/etc/pasakyam
 PublicOrigin=https://pasakyaman.com
 CorsOrigins__0=https://pasakyaman.com
 CorsOrigins__1=https://www.pasakyaman.com
+GoogleAuth__ClientId='<pasakyaman-google-web-client-id>'
 YP_DB_NAME=pasakyamanDB
 YP_UPLOAD_ROOT=/var/lib/pasakyaman/uploads
 Storage__UploadsPath=/var/lib/pasakyaman/uploads
@@ -27,6 +28,19 @@ YP_HEALTH_URL=http://127.0.0.1:5005/health
 ```
 
 Create a matching `pasakyaman.service` that runs on `http://127.0.0.1:5005`, and add an nginx server block for `pasakyaman.com` and `www.pasakyaman.com` proxying to that port.
+
+## Google OAuth
+
+The customer web app uses Google Identity Services with a popup callback, so Pasakyaman does not need a redirect URI for normal customer login. It does need an OAuth 2.0 client of type `Web application`, and that exact client ID must be set as `GoogleAuth__ClientId` in `/etc/pasakyaman/pasakyaman-api.env`.
+
+In Google Cloud, add both of these entries to the OAuth client's Authorized JavaScript origins:
+
+```text
+https://pasakyaman.com
+https://www.pasakyaman.com
+```
+
+If Pasakyaman uses its own Google OAuth client instead of the YapasaKay client, make sure the backend env file and the Google Cloud client are the same client. A mismatch allows the button to load but makes `/api/auth/google` reject the returned ID token.
 
 ## Database copy
 
