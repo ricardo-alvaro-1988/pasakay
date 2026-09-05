@@ -88,6 +88,42 @@ public class RiderWalletController(AppDbContext db, RiderWalletService wallets) 
         return Ok(RiderWalletService.Map(tx!));
     }
 
+    [HttpGet("cash-in-destinations")]
+    public async Task<ActionResult<OperatorCashInDestinationsResponse>> CashInDestinations(CancellationToken cancellationToken)
+    {
+        var (rider, status, message) = await RiderContext.RequireAsync(db, User, cancellationToken);
+        if (rider is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var op = rider.Operator
+            ?? await db.Operators.FirstOrDefaultAsync(x => x.Id == rider.OperatorId, cancellationToken);
+        if (op is null)
+        {
+            return NotFound(new { message = "Operator not found." });
+        }
+
+        var banks = await db.OperatorCashInBankAccounts
+            .Where(x => x.OperatorId == op.Id)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        return Ok(new OperatorCashInDestinationsResponse(
+            op.GCashNumber,
+            UploadUrls.FromPath(op.GCashQrPath),
+            op.MayaNumber,
+            UploadUrls.FromPath(op.MayaQrPath),
+            banks.Select(x => new OperatorCashInBankItem(
+                x.Id,
+                x.BankName,
+                x.AccountName,
+                x.AccountNumber,
+                UploadUrls.FromPath(x.QrImagePath),
+                x.SortOrder)).ToList()));
+    }
+
     private async Task<RiderWalletResponse> BuildSummaryAsync(
         Guid riderId,
         string riderName,

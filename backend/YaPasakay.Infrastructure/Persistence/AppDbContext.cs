@@ -35,6 +35,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PlatformBrandSettings> PlatformBrandSettings => Set<PlatformBrandSettings>();
     public DbSet<RiderInviteLink> RiderInviteLinks => Set<RiderInviteLink>();
     public DbSet<RiderApplication> RiderApplications => Set<RiderApplication>();
+    public DbSet<OperatorCashInBankAccount> OperatorCashInBankAccounts => Set<OperatorCashInBankAccount>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -71,6 +72,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.GovernmentId).HasMaxLength(80);
             entity.Property(x => x.ProfilePhotoPath).HasMaxLength(260);
             entity.Property(x => x.GovernmentIdPhotoPath).HasMaxLength(260);
+            entity.Property(x => x.GCashNumber).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.GCashQrPath).HasMaxLength(260);
+            entity.Property(x => x.MayaNumber).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.MayaQrPath).HasMaxLength(260);
             entity.Property(x => x.MotorcycleCommissionPercent).HasColumnType("decimal(5,2)").HasDefaultValue(10m);
             entity.Property(x => x.TricycleCommissionPercent).HasColumnType("decimal(5,2)").HasDefaultValue(5m);
             entity.HasOne(x => x.AddressBarangay)
@@ -509,6 +514,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(x => x.AddressBarangayId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OperatorCashInBankAccount>(entity =>
+        {
+            entity.HasIndex(x => x.OperatorId);
+            entity.Property(x => x.BankName).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.AccountName).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.AccountNumber).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.QrImagePath).HasMaxLength(260);
+            entity.HasOne(x => x.Operator)
+                .WithMany(x => x.CashInBankAccounts)
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

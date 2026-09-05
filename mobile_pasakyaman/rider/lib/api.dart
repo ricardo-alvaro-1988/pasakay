@@ -323,6 +323,11 @@ class RiderApi {
     return WalletSummary.fromJson(await _json(response, fallback: 'Could not load wallet.'));
   }
 
+  Future<CashInDestinations> cashInDestinations() async {
+    final response = await _get(_uri('/api/rider/wallet/cash-in-destinations'), headers: _headers());
+    return CashInDestinations.fromJson(await _json(response, fallback: 'Could not load cash-in details.'));
+  }
+
   Future<List<RiderTripListItem>> trips() async {
     final response = await _get(_uri('/api/rider/trips'), headers: _headers());
     if (response.statusCode < 200 || response.statusCode >= 300) {

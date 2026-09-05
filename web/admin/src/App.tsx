@@ -78,6 +78,8 @@ import {
   WalletRequest,
   RiderWalletDetail,
   OperatorWalletOverview,
+  OperatorCashInBank,
+  OperatorCashInDestinations,
   OperatorOverview,
   OperatorNavAlerts,
   OperatorInboxItem,
@@ -1613,6 +1615,275 @@ function OperatorWalletPage() {
           </div>
         )}
       </div>
+
+      <OperatorCashInSettings />
+    </div>
+  )
+}
+
+function OperatorCashInSettings() {
+  const [data, setData] = useState<OperatorCashInDestinations | null>(null)
+  const [gCashNumber, setGCashNumber] = useState('')
+  const [mayaNumber, setMayaNumber] = useState('')
+  const [gCashQr, setGCashQr] = useState<File | null>(null)
+  const [mayaQr, setMayaQr] = useState<File | null>(null)
+  const [clearGCashQr, setClearGCashQr] = useState(false)
+  const [clearMayaQr, setClearMayaQr] = useState(false)
+  const [bankName, setBankName] = useState('')
+  const [accountName, setAccountName] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+  const [bankQr, setBankQr] = useState<File | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editBankName, setEditBankName] = useState('')
+  const [editAccountName, setEditAccountName] = useState('')
+  const [editAccountNumber, setEditAccountNumber] = useState('')
+  const [editBankQr, setEditBankQr] = useState<File | null>(null)
+  const [clearEditQr, setClearEditQr] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  function apply(next: OperatorCashInDestinations) {
+    setData(next)
+    setGCashNumber(next.gCashNumber ?? '')
+    setMayaNumber(next.mayaNumber ?? '')
+  }
+
+  useEffect(() => {
+    api.operatorCashInDestinations()
+      .then((next) => {
+        apply(next)
+        setError('')
+      })
+      .catch((err: Error) => setError(err.message))
+  }, [])
+
+  async function saveEwallets(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const body = new FormData()
+      body.append('gCashNumber', gCashNumber.trim())
+      body.append('mayaNumber', mayaNumber.trim())
+      if (clearGCashQr) body.append('clearGCashQr', 'true')
+      if (clearMayaQr) body.append('clearMayaQr', 'true')
+      if (gCashQr) body.append('gCashQr', gCashQr)
+      if (mayaQr) body.append('mayaQr', mayaQr)
+      apply(await api.saveOperatorCashInEwallets(body))
+      setGCashQr(null)
+      setMayaQr(null)
+      setClearGCashQr(false)
+      setClearMayaQr(false)
+      setNotice('GCash and Maya cash-in details saved. Riders will see these when cashing in.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save e-wallet details.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addBank(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const body = new FormData()
+      body.append('bankName', bankName.trim())
+      body.append('accountName', accountName.trim())
+      body.append('accountNumber', accountNumber.trim())
+      if (bankQr) body.append('qr', bankQr)
+      apply(await api.addOperatorCashInBank(body))
+      setBankName('')
+      setAccountName('')
+      setAccountNumber('')
+      setBankQr(null)
+      setNotice('Bank account added for rider cash-in.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add bank account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function startEdit(row: OperatorCashInBank) {
+    setEditingId(row.id)
+    setEditBankName(row.bankName)
+    setEditAccountName(row.accountName)
+    setEditAccountNumber(row.accountNumber)
+    setEditBankQr(null)
+    setClearEditQr(false)
+  }
+
+  async function saveBank(e: FormEvent) {
+    e.preventDefault()
+    if (!editingId) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const body = new FormData()
+      body.append('bankName', editBankName.trim())
+      body.append('accountName', editAccountName.trim())
+      body.append('accountNumber', editAccountNumber.trim())
+      if (clearEditQr) body.append('clearQr', 'true')
+      if (editBankQr) body.append('qr', editBankQr)
+      apply(await api.updateOperatorCashInBank(editingId, body))
+      setEditingId(null)
+      setNotice('Bank account updated.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update bank account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeBank(id: string) {
+    if (!window.confirm('Remove this bank account from rider cash-in?')) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      apply(await api.deleteOperatorCashInBank(id))
+      if (editingId === id) setEditingId(null)
+      setNotice('Bank account removed.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove bank account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="panel-head">
+        <div>
+          <h2 style={{ margin: 0 }}>Cash-in QR &amp; accounts</h2>
+          <p className="muted">Riders see these details when they cash in via GCash, Maya, or bank transfer.</p>
+        </div>
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      {notice ? <p className="ok">{notice}</p> : null}
+      {!data ? <p>Loading cash-in settings…</p> : (
+        <>
+          <form onSubmit={saveEwallets}>
+            <h3>GCash</h3>
+            <div className="form-grid">
+              <label className="field">
+                <span>GCash number</span>
+                <input value={gCashNumber} onChange={(e) => setGCashNumber(e.target.value)} placeholder="09XXXXXXXXX" />
+              </label>
+              <label className="field">
+                <span>GCash QR</span>
+                <input type="file" accept="image/*" onChange={(e) => { setGCashQr(e.target.files?.[0] ?? null); setClearGCashQr(false) }} />
+              </label>
+            </div>
+            {data.gCashQrUrl && !clearGCashQr ? (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+                <PhotoThumb src={data.gCashQrUrl} alt="GCash QR" className="id-preview" />
+                <button className="btn tiny danger" type="button" onClick={() => setClearGCashQr(true)}>Remove QR</button>
+              </div>
+            ) : null}
+            <h3 style={{ marginTop: 20 }}>Maya</h3>
+            <div className="form-grid">
+              <label className="field">
+                <span>Maya number</span>
+                <input value={mayaNumber} onChange={(e) => setMayaNumber(e.target.value)} placeholder="09XXXXXXXXX" />
+              </label>
+              <label className="field">
+                <span>Maya QR</span>
+                <input type="file" accept="image/*" onChange={(e) => { setMayaQr(e.target.files?.[0] ?? null); setClearMayaQr(false) }} />
+              </label>
+            </div>
+            {data.mayaQrUrl && !clearMayaQr ? (
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+                <PhotoThumb src={data.mayaQrUrl} alt="Maya QR" className="id-preview" />
+                <button className="btn tiny danger" type="button" onClick={() => setClearMayaQr(true)}>Remove QR</button>
+              </div>
+            ) : null}
+            <div style={{ marginTop: 14, maxWidth: 220 }}>
+              <button className="btn" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save GCash & Maya'}</button>
+            </div>
+          </form>
+
+          <h3 style={{ marginTop: 28 }}>Custom bank accounts</h3>
+          <p className="muted" style={{ marginTop: 0 }}>Add one or more bank transfer options for riders.</p>
+          {data.banks.length === 0 ? <p className="muted">No bank accounts yet.</p> : (
+            <div className="table-wrap" style={{ marginBottom: 16 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Bank</th>
+                    <th>Account name</th>
+                    <th>Account no.</th>
+                    <th>QR</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.banks.map((row) => (
+                    <tr key={row.id}>
+                      <td><strong>{row.bankName}</strong></td>
+                      <td>{row.accountName}</td>
+                      <td>{row.accountNumber}</td>
+                      <td>{row.qrUrl ? <PhotoThumb src={row.qrUrl} alt={`${row.bankName} QR`} /> : '—'}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                          <button className="btn tiny" type="button" onClick={() => startEdit(row)}>Edit</button>
+                          <button className="btn tiny danger" type="button" disabled={busy} onClick={() => void removeBank(row.id)}>Remove</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {editingId ? (
+            <form onSubmit={saveBank} style={{ marginBottom: 20 }}>
+              <h3>Edit bank account</h3>
+              <div className="form-grid">
+                <label className="field"><span>Bank name</span><input value={editBankName} onChange={(e) => setEditBankName(e.target.value)} required /></label>
+                <label className="field"><span>Account name</span><input value={editAccountName} onChange={(e) => setEditAccountName(e.target.value)} required /></label>
+                <label className="field"><span>Account number</span><input value={editAccountNumber} onChange={(e) => setEditAccountNumber(e.target.value)} required /></label>
+                <label className="field">
+                  <span>Bank QR</span>
+                  <input type="file" accept="image/*" onChange={(e) => { setEditBankQr(e.target.files?.[0] ?? null); setClearEditQr(false) }} />
+                </label>
+              </div>
+              {data.banks.find((b) => b.id === editingId)?.qrUrl && !clearEditQr ? (
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 8 }}>
+                  <PhotoThumb src={data.banks.find((b) => b.id === editingId)!.qrUrl} alt="Bank QR" className="id-preview" />
+                  <button className="btn tiny danger" type="button" onClick={() => setClearEditQr(true)}>Remove QR</button>
+                </div>
+              ) : null}
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button className="btn" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save bank'}</button>
+                <button className="btn tiny" type="button" onClick={() => setEditingId(null)}>Cancel</button>
+              </div>
+            </form>
+          ) : null}
+
+          <form onSubmit={addBank}>
+            <h3>Add bank account</h3>
+            <div className="form-grid">
+              <label className="field"><span>Bank name</span><input value={bankName} onChange={(e) => setBankName(e.target.value)} required /></label>
+              <label className="field"><span>Account name</span><input value={accountName} onChange={(e) => setAccountName(e.target.value)} required /></label>
+              <label className="field"><span>Account number</span><input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} required /></label>
+              <label className="field">
+                <span>Bank QR</span>
+                <input type="file" accept="image/*" onChange={(e) => setBankQr(e.target.files?.[0] ?? null)} />
+              </label>
+            </div>
+            <div style={{ marginTop: 14, maxWidth: 220 }}>
+              <button className="btn" type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add bank'}</button>
+            </div>
+          </form>
+        </>
+      )}
     </div>
   )
 }

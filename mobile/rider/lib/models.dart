@@ -467,6 +467,61 @@ class WalletSummary {
       );
 }
 
+class CashInBankDestination {
+  CashInBankDestination({
+    required this.id,
+    required this.bankName,
+    required this.accountName,
+    required this.accountNumber,
+    this.qrUrl,
+  });
+
+  final String id;
+  final String bankName;
+  final String accountName;
+  final String accountNumber;
+  final String? qrUrl;
+
+  factory CashInBankDestination.fromJson(Map<String, dynamic> json) => CashInBankDestination(
+        id: asText(json['id']),
+        bankName: asText(json['bankName']),
+        accountName: asText(json['accountName']),
+        accountNumber: asText(json['accountNumber']),
+        qrUrl: asTextOrNull(json['qrUrl']),
+      );
+}
+
+class CashInDestinations {
+  CashInDestinations({
+    required this.gCashNumber,
+    this.gCashQrUrl,
+    required this.mayaNumber,
+    this.mayaQrUrl,
+    required this.banks,
+  });
+
+  final String gCashNumber;
+  final String? gCashQrUrl;
+  final String mayaNumber;
+  final String? mayaQrUrl;
+  final List<CashInBankDestination> banks;
+
+  bool get hasGCash => gCashNumber.trim().isNotEmpty || (gCashQrUrl?.isNotEmpty ?? false);
+  bool get hasMaya => mayaNumber.trim().isNotEmpty || (mayaQrUrl?.isNotEmpty ?? false);
+  bool get hasBanks => banks.isNotEmpty;
+
+  factory CashInDestinations.fromJson(Map<String, dynamic> json) => CashInDestinations(
+        gCashNumber: asText(json['gCashNumber']),
+        gCashQrUrl: asTextOrNull(json['gCashQrUrl']),
+        mayaNumber: asText(json['mayaNumber']),
+        mayaQrUrl: asTextOrNull(json['mayaQrUrl']),
+        banks: (json['banks'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(CashInBankDestination.fromJson)
+            .toList(),
+      );
+}
+
 class WalletTx {
   WalletTx({
     required this.id,

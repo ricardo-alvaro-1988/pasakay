@@ -808,6 +808,21 @@ public record ResolveWalletRequestResult(
     WalletTransactionItem Transaction,
     decimal Balance);
 
+public record OperatorCashInBankItem(
+    Guid Id,
+    string BankName,
+    string AccountName,
+    string AccountNumber,
+    string? QrUrl,
+    int SortOrder);
+
+public record OperatorCashInDestinationsResponse(
+    string GCashNumber,
+    string? GCashQrUrl,
+    string MayaNumber,
+    string? MayaQrUrl,
+    IReadOnlyList<OperatorCashInBankItem> Banks);
+
 public static class UploadUrls
 {
     public static string? FromPath(string? relativePath) =>

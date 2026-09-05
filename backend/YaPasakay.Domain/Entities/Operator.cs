@@ -21,10 +21,15 @@ public class Operator : BaseEntity
     public decimal MotorcycleCommissionPercent { get; set; } = 10;
     public decimal TricycleCommissionPercent { get; set; } = 5;
     public BookingDispatchMode BookingDispatchMode { get; set; } = BookingDispatchMode.Broadcast;
+    public string GCashNumber { get; set; } = string.Empty;
+    public string? GCashQrPath { get; set; }
+    public string MayaNumber { get; set; } = string.Empty;
+    public string? MayaQrPath { get; set; }
     public ICollection<AppUser> Users { get; set; } = new List<AppUser>();
     public ICollection<RiderProfile> Riders { get; set; } = new List<RiderProfile>();
     public ICollection<OperatorBarangay> Areas { get; set; } = new List<OperatorBarangay>();
     public ICollection<FareMatrix> FareMatrices { get; set; } = new List<FareMatrix>();
     public ICollection<OperatorBill> Bills { get; set; } = new List<OperatorBill>();
     public ICollection<OperatorNotification> Notifications { get; set; } = new List<OperatorNotification>();
+    public ICollection<OperatorCashInBankAccount> CashInBankAccounts { get; set; } = new List<OperatorCashInBankAccount>();
 }

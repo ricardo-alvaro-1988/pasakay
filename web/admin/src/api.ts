@@ -308,6 +308,23 @@ export type OperatorWalletOverview = {
   riders: RiderWalletBalance[]
 }
 
+export type OperatorCashInBank = {
+  id: string
+  bankName: string
+  accountName: string
+  accountNumber: string
+  qrUrl: string | null
+  sortOrder: number
+}
+
+export type OperatorCashInDestinations = {
+  gCashNumber: string
+  gCashQrUrl: string | null
+  mayaNumber: string
+  mayaQrUrl: string | null
+  banks: OperatorCashInBank[]
+}
+
 export type RideStop = {
   details: string
   barangay: string
@@ -1485,6 +1502,27 @@ export const api = {
     return request<Paged<WalletHistoryItem>>(`/api/operator/wallet/history?${params}`)
   },
   operatorWalletRequests: () => request<WalletRequest[]>('/api/operator/wallet/requests'),
+  operatorCashInDestinations: () =>
+    request<OperatorCashInDestinations>('/api/operator/wallet/cash-in-destinations'),
+  saveOperatorCashInEwallets: (body: FormData) =>
+    request<OperatorCashInDestinations>('/api/operator/wallet/cash-in-destinations/ewallets', {
+      method: 'PUT',
+      body,
+    }),
+  addOperatorCashInBank: (body: FormData) =>
+    request<OperatorCashInDestinations>('/api/operator/wallet/cash-in-destinations/banks', {
+      method: 'POST',
+      body,
+    }),
+  updateOperatorCashInBank: (id: string, body: FormData) =>
+    request<OperatorCashInDestinations>(`/api/operator/wallet/cash-in-destinations/banks/${id}`, {
+      method: 'PUT',
+      body,
+    }),
+  deleteOperatorCashInBank: (id: string) =>
+    request<OperatorCashInDestinations>(`/api/operator/wallet/cash-in-destinations/banks/${id}`, {
+      method: 'DELETE',
+    }),
   operatorRiderWallet: (riderId: string) => request<RiderWalletDetail>(`/api/operator/wallet/riders/${riderId}`),
   approveWalletRequest: (id: string) =>
     request<{ transaction: WalletTransaction; balance: number }>(`/api/operator/wallet/requests/${id}/approve`, { method: 'POST' }),

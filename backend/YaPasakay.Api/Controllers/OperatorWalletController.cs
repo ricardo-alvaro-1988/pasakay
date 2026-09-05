@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using YaPasakay.Api.Models;
 using YaPasakay.Api.Services;
 using YaPasakay.Application.Admin;
+using YaPasakay.Domain.Entities;
 using YaPasakay.Domain.Enums;
 using YaPasakay.Infrastructure.Persistence;
 
@@ -11,7 +13,7 @@ namespace YaPasakay.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "Operator")]
 [Route("api/operator/wallet")]
-public class OperatorWalletController(AppDbContext db, RiderWalletService wallets, LiveNotify live) : ControllerBase
+public class OperatorWalletController(AppDbContext db, RiderWalletService wallets, LiveNotify live, UploadStore uploads) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<OperatorWalletOverviewResponse>> Overview(CancellationToken cancellationToken)
@@ -331,6 +333,242 @@ public class OperatorWalletController(AppDbContext db, RiderWalletService wallet
         }
 
         return Ok(RiderWalletService.Map(tx!));
+    }
+
+    [HttpGet("cash-in-destinations")]
+    public async Task<ActionResult<OperatorCashInDestinationsResponse>> CashInDestinations(CancellationToken cancellationToken)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        return Ok(await MapCashInDestinationsAsync(op, cancellationToken));
+    }
+
+    [HttpPut("cash-in-destinations/ewallets")]
+    [RequestSizeLimit(8_000_000)]
+    public async Task<ActionResult<OperatorCashInDestinationsResponse>> SaveEwallets(
+        [FromForm] OperatorEwalletCashInForm form,
+        CancellationToken cancellationToken)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        op.GCashNumber = (form.GCashNumber ?? string.Empty).Trim();
+        op.MayaNumber = (form.MayaNumber ?? string.Empty).Trim();
+        if (op.GCashNumber.Length > 40 || op.MayaNumber.Length > 40)
+        {
+            return BadRequest(new { message = "GCash and Maya numbers must be 40 characters or less." });
+        }
+
+        try
+        {
+            if (form.ClearGCashQr)
+            {
+                op.GCashQrPath = null;
+            }
+            else if (form.GCashQr is not null)
+            {
+                op.GCashQrPath = await uploads.SaveAsync(
+                    form.GCashQr, "operator-cash-in", $"{op.Id}-gcash", cancellationToken);
+            }
+
+            if (form.ClearMayaQr)
+            {
+                op.MayaQrPath = null;
+            }
+            else if (form.MayaQr is not null)
+            {
+                op.MayaQrPath = await uploads.SaveAsync(
+                    form.MayaQr, "operator-cash-in", $"{op.Id}-maya", cancellationToken);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
+        op.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(await MapCashInDestinationsAsync(op, cancellationToken));
+    }
+
+    [HttpPost("cash-in-destinations/banks")]
+    [RequestSizeLimit(8_000_000)]
+    public async Task<ActionResult<OperatorCashInDestinationsResponse>> AddBank(
+        [FromForm] OperatorBankCashInForm form,
+        CancellationToken cancellationToken)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var parsed = ParseBank(form);
+        if (parsed.Error is not null)
+        {
+            return BadRequest(new { message = parsed.Error });
+        }
+
+        var maxOrder = await db.OperatorCashInBankAccounts
+            .Where(x => x.OperatorId == op.Id)
+            .Select(x => (int?)x.SortOrder)
+            .MaxAsync(cancellationToken) ?? 0;
+
+        var row = new OperatorCashInBankAccount
+        {
+            OperatorId = op.Id,
+            BankName = parsed.BankName!,
+            AccountName = parsed.AccountName!,
+            AccountNumber = parsed.AccountNumber!,
+            SortOrder = maxOrder + 1,
+        };
+
+        try
+        {
+            if (form.Qr is not null)
+            {
+                row.QrImagePath = await uploads.SaveAsync(
+                    form.Qr, "operator-cash-in", $"{op.Id}-bank-{row.Id}", cancellationToken);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
+        db.OperatorCashInBankAccounts.Add(row);
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(await MapCashInDestinationsAsync(op, cancellationToken));
+    }
+
+    [HttpPut("cash-in-destinations/banks/{id:guid}")]
+    [RequestSizeLimit(8_000_000)]
+    public async Task<ActionResult<OperatorCashInDestinationsResponse>> UpdateBank(
+        Guid id,
+        [FromForm] OperatorBankCashInForm form,
+        CancellationToken cancellationToken)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var row = await db.OperatorCashInBankAccounts
+            .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op.Id, cancellationToken);
+        if (row is null)
+        {
+            return NotFound(new { message = "Bank account not found." });
+        }
+
+        var parsed = ParseBank(form);
+        if (parsed.Error is not null)
+        {
+            return BadRequest(new { message = parsed.Error });
+        }
+
+        row.BankName = parsed.BankName!;
+        row.AccountName = parsed.AccountName!;
+        row.AccountNumber = parsed.AccountNumber!;
+        row.UpdatedAtUtc = DateTime.UtcNow;
+
+        try
+        {
+            if (form.ClearQr)
+            {
+                row.QrImagePath = null;
+            }
+            else if (form.Qr is not null)
+            {
+                row.QrImagePath = await uploads.SaveAsync(
+                    form.Qr, "operator-cash-in", $"{op.Id}-bank-{row.Id}", cancellationToken);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(await MapCashInDestinationsAsync(op, cancellationToken));
+    }
+
+    [HttpDelete("cash-in-destinations/banks/{id:guid}")]
+    public async Task<ActionResult<OperatorCashInDestinationsResponse>> DeleteBank(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var row = await db.OperatorCashInBankAccounts
+            .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op.Id, cancellationToken);
+        if (row is null)
+        {
+            return NotFound(new { message = "Bank account not found." });
+        }
+
+        db.OperatorCashInBankAccounts.Remove(row);
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(await MapCashInDestinationsAsync(op, cancellationToken));
+    }
+
+    private async Task<OperatorCashInDestinationsResponse> MapCashInDestinationsAsync(
+        Operator op,
+        CancellationToken cancellationToken)
+    {
+        var banks = await db.OperatorCashInBankAccounts
+            .Where(x => x.OperatorId == op.Id)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        return new OperatorCashInDestinationsResponse(
+            op.GCashNumber,
+            UploadUrls.FromPath(op.GCashQrPath),
+            op.MayaNumber,
+            UploadUrls.FromPath(op.MayaQrPath),
+            banks.Select(x => new OperatorCashInBankItem(
+                x.Id,
+                x.BankName,
+                x.AccountName,
+                x.AccountNumber,
+                UploadUrls.FromPath(x.QrImagePath),
+                x.SortOrder)).ToList());
+    }
+
+    private static (string? BankName, string? AccountName, string? AccountNumber, string? Error) ParseBank(
+        OperatorBankCashInForm form)
+    {
+        var bankName = (form.BankName ?? string.Empty).Trim();
+        var accountName = (form.AccountName ?? string.Empty).Trim();
+        var accountNumber = (form.AccountNumber ?? string.Empty).Trim();
+        if (bankName.Length is < 2 or > 80)
+        {
+            return (null, null, null, "Enter a bank name.");
+        }
+
+        if (accountName.Length is < 2 or > 120)
+        {
+            return (null, null, null, "Enter the bank account name.");
+        }
+
+        if (accountNumber.Length is < 4 or > 60)
+        {
+            return (null, null, null, "Enter the bank account number.");
+        }
+
+        return (bankName, accountName, accountNumber, null);
     }
 
     private (Guid? userId, string? error) ApprovedByUserId(bool approved)
