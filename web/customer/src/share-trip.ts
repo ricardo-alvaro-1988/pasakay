@@ -1,13 +1,15 @@
 import { CustomerTrip, kmLabel, paymentLabel, peso, tripHeadline } from './api'
+import { DEFAULT_BRAND_NAME } from './brand-themes'
 
 export type TripSharePayload = {
   title: string
   text: string
 }
 
-export function formatTripShare(trip: CustomerTrip): TripSharePayload {
+export function formatTripShare(trip: CustomerTrip, brandName = DEFAULT_BRAND_NAME): TripSharePayload {
+  const brand = brandName.trim() || DEFAULT_BRAND_NAME
   const lines = [
-    `Ya! Pasakay — ${trip.reference}`,
+    `${brand} — ${trip.reference}`,
     tripHeadline(String(trip.status)),
     '',
     trip.riderName ? `Rider: ${trip.riderName}` : null,
@@ -24,7 +26,7 @@ export function formatTripShare(trip: CustomerTrip): TripSharePayload {
   ].filter(Boolean) as string[]
 
   return {
-    title: `Ya! Pasakay ${trip.reference}`,
+    title: `${brand} ${trip.reference}`,
     text: lines.join('\n'),
   }
 }
@@ -33,13 +35,13 @@ export function whatsAppShareUrl(text: string) {
   return `https://wa.me/?text=${encodeURIComponent(text)}`
 }
 
-export async function copyTripShare(trip: CustomerTrip) {
-  const { text } = formatTripShare(trip)
+export async function copyTripShare(trip: CustomerTrip, brandName = DEFAULT_BRAND_NAME) {
+  const { text } = formatTripShare(trip, brandName)
   await navigator.clipboard.writeText(text)
 }
 
-export async function nativeShareTrip(trip: CustomerTrip) {
-  const { title, text } = formatTripShare(trip)
+export async function nativeShareTrip(trip: CustomerTrip, brandName = DEFAULT_BRAND_NAME) {
+  const { title, text } = formatTripShare(trip, brandName)
   await navigator.share({ title, text })
 }
 

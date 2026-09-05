@@ -860,7 +860,7 @@ function Home({
             </button>
             <section className={`panel book-sheet${trip || pendingRate.trip ? ' live' : ''}`}>
             {trip ? (
-              <TripPanel trip={trip} onDesk={onDesk} onError={setError} />
+              <TripPanel trip={trip} brandName={brandName} onDesk={onDesk} onError={setError} />
             ) : pendingRate.trip ? (
               <RateRidePanel
                 trip={pendingRate.trip}
@@ -942,18 +942,24 @@ function Home({
                         className="passenger-input"
                         type="number"
                         min={1}
+                        max={4}
                         inputMode="numeric"
                         value={passengers}
                         onChange={(e) => {
                           const next = Math.floor(Number(e.target.value))
-                          setPassengers(Number.isFinite(next) && next >= 1 ? next : 1)
+                          if (!Number.isFinite(next) || next < 1) {
+                            setPassengers(1)
+                            return
+                          }
+                          setPassengers(Math.min(4, next))
                         }}
                         aria-label="Passenger count"
                       />
                       <button
                         type="button"
                         className="passenger-btn"
-                        onClick={() => setPassengers((n) => n + 1)}
+                        disabled={passengers >= 4}
+                        onClick={() => setPassengers((n) => Math.min(4, n + 1))}
                         aria-label="More passengers"
                       >
                         +
@@ -1121,7 +1127,17 @@ function Home({
   )
 }
 
-function TripPanel({ trip, onDesk, onError }: { trip: CustomerTrip; onDesk: (desk: Desk) => void; onError: (text: string) => void }) {
+function TripPanel({
+  trip,
+  brandName,
+  onDesk,
+  onError,
+}: {
+  trip: CustomerTrip
+  brandName: string
+  onDesk: (desk: Desk) => void
+  onError: (text: string) => void
+}) {
   const [chatOpen, setChatOpen] = useState(false)
   const [unread, setUnread] = useState(0)
   const [shareNote, setShareNote] = useState('')
@@ -1141,7 +1157,7 @@ function TripPanel({ trip, onDesk, onError }: { trip: CustomerTrip; onDesk: (des
           <p className="status-title">{tripHeadline(String(trip.status))}</p>
           <p className="muted">{trip.reference} · {trip.operatorName}</p>
         </div>
-        {!trip.riderName && <ShareTripButton trip={trip} onNote={setShareNote} compact />}
+        {!trip.riderName && <ShareTripButton trip={trip} brandName={brandName} onNote={setShareNote} compact />}
       </div>
       {shareNote && <p className="share-note">{shareNote}</p>}
       {trip.riderName && (
@@ -1168,7 +1184,7 @@ function TripPanel({ trip, onDesk, onError }: { trip: CustomerTrip; onDesk: (des
                 )}
               </button>
             )}
-            <ShareTripButton trip={trip} onNote={setShareNote} />
+            <ShareTripButton trip={trip} brandName={brandName} onNote={setShareNote} />
             {trip.riderPhone && (
               <a className="call icon-btn" href={`tel:${trip.riderPhone}`} aria-label="Call rider" title="Call">
                 <CallIcon />
@@ -1261,7 +1277,7 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     paymentMethod: payment,
     paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
     riderId,
-    passengerCount: vehicle === 'Motorcycle' ? 1 : Math.max(1, passengerCount),
+    passengerCount: vehicle === 'Motorcycle' ? 1 : Math.min(4, Math.max(1, passengerCount)),
   }
 }
 

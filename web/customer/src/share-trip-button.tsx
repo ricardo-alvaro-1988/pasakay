@@ -1,21 +1,23 @@
 import { useMemo, useRef, useState } from 'react'
 import type { CustomerTrip } from './api'
+import { DEFAULT_BRAND_NAME } from './brand-themes'
 import { canNativeShare, copyTripShare, formatTripShare, nativeShareTrip, whatsAppShareUrl } from './share-trip'
 
 type Props = {
   trip: CustomerTrip
+  brandName?: string
   onNote: (message: string) => void
   compact?: boolean
 }
 
-export function ShareTripButton({ trip, onNote, compact }: Props) {
+export function ShareTripButton({ trip, brandName = DEFAULT_BRAND_NAME, onNote, compact }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
-  const payload = useMemo(() => formatTripShare(trip), [trip])
+  const payload = useMemo(() => formatTripShare(trip, brandName), [trip, brandName])
 
   async function shareNative() {
     try {
-      await nativeShareTrip(trip)
+      await nativeShareTrip(trip, brandName)
       onNote('')
       setOpen(false)
     } catch (err) {
@@ -28,7 +30,7 @@ export function ShareTripButton({ trip, onNote, compact }: Props) {
 
   async function shareCopy() {
     try {
-      await copyTripShare(trip)
+      await copyTripShare(trip, brandName)
       onNote('Copied! Paste in Messenger or any chat app.')
       setOpen(false)
     } catch {

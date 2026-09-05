@@ -401,18 +401,24 @@ export function ScheduleScreen({
               className="passenger-input"
               type="number"
               min={1}
+              max={4}
               inputMode="numeric"
               value={passengers}
               onChange={(e) => {
                 const next = Math.floor(Number(e.target.value))
-                setPassengers(Number.isFinite(next) && next >= 1 ? next : 1)
+                if (!Number.isFinite(next) || next < 1) {
+                  setPassengers(1)
+                  return
+                }
+                setPassengers(Math.min(4, next))
               }}
               aria-label="Passenger count"
             />
             <button
               type="button"
               className="passenger-btn"
-              onClick={() => setPassengers((n) => n + 1)}
+              disabled={passengers >= 4}
+              onClick={() => setPassengers((n) => Math.min(4, n + 1))}
               aria-label="More passengers"
             >
               +
@@ -461,7 +467,7 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     dropoffLng: dropoff.lng,
     paymentMethod: payment,
     paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
-    passengerCount: vehicle === 'Motorcycle' ? 1 : Math.max(1, passengerCount),
+    passengerCount: vehicle === 'Motorcycle' ? 1 : Math.min(4, Math.max(1, passengerCount)),
   }
 }
 

@@ -636,7 +636,7 @@ public class CustomerBookingsController(
         var (distance, eta) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
         var passengers = vehicle == VehicleType.Motorcycle
             ? 1
-            : Math.Max(1, request.PassengerCount);
+            : Math.Clamp(request.PassengerCount, 1, 4);
         var fareRow = await OperatorMaps.LoadFareMatrixAsync(
             db,
             op.Id,

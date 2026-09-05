@@ -101,6 +101,7 @@ export type RiderListItem = {
   phoneNumber: string
   vehicleType: VehicleType
   plateNumber: string
+  vehicleFranchiseNumber: string
   vehicleModel: string | null
   isActive: boolean
   licenseType: string
@@ -144,6 +145,7 @@ export type RiderApplicationDetail = {
   phoneNumber: string
   vehicleType: string
   plateNumber: string
+  vehicleFranchiseNumber: string
   vehicleModel: string | null
   licenseType: string
   licenseNumber: string

@@ -994,6 +994,11 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("VehicleFranchiseNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
                     b.Property<string>("VehicleModel")
                         .HasMaxLength(80)
                         .HasColumnType("nvarchar(80)");
@@ -1146,6 +1151,11 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("VehicleFranchiseNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
 
                     b.Property<string>("VehicleModel")
                         .HasMaxLength(80)

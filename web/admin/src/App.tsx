@@ -8322,6 +8322,7 @@ function OperatorRiderApplicationDetail({
       {error ? <p className="error">{error}</p> : null}
       <div className="detail-grid">
         <div><span className="muted">Vehicle</span><p><VehicleTag type={row.vehicleType} /> {row.plateNumber}</p></div>
+        <div><span className="muted">Franchise no.</span><p>{row.vehicleFranchiseNumber || '—'}</p></div>
         <div><span className="muted">Model</span><p>{row.vehicleModel || '—'}</p></div>
         <div><span className="muted">License</span><p>{row.licenseType} · {row.licenseNumber}</p></div>
         <div><span className="muted">Address</span><p>{row.fullAddress}</p></div>
@@ -8380,6 +8381,7 @@ function PublicRiderJoinPage({
   const [phone, setPhone] = useState('')
   const [vehicleType, setVehicleType] = useState<VehicleType>('Motorcycle')
   const [plateNumber, setPlateNumber] = useState('')
+  const [vehicleFranchiseNumber, setVehicleFranchiseNumber] = useState('')
   const [vehicleModel, setVehicleModel] = useState('')
   const [licenseType, setLicenseType] = useState('')
   const [licenseNumber, setLicenseNumber] = useState('')
@@ -8418,6 +8420,10 @@ function PublicRiderJoinPage({
       setError('Select at least one payment method you accept.')
       return
     }
+    if (!vehicleFranchiseNumber.trim()) {
+      setError('Enter the vehicle franchise number.')
+      return
+    }
     if (password.trim().length < 6) {
       setError('Set a password of at least 6 characters.')
       return
@@ -8435,6 +8441,7 @@ function PublicRiderJoinPage({
       data.append('password', password.trim())
       data.append('vehicleType', vehicleType)
       data.append('plateNumber', plateNumber)
+      data.append('vehicleFranchiseNumber', vehicleFranchiseNumber.trim())
       data.append('vehicleModel', vehicleModel)
       data.append('licenseType', licenseType)
       data.append('licenseNumber', licenseNumber)
@@ -8488,6 +8495,7 @@ function PublicRiderJoinPage({
             <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" required />
           </label>
           <label className="field"><span>Plate</span><input value={plateNumber} onChange={(e) => setPlateNumber(e.target.value)} required /></label>
+          <label className="field"><span>Franchise no.</span><input value={vehicleFranchiseNumber} onChange={(e) => setVehicleFranchiseNumber(e.target.value)} required /></label>
           <label className="field"><span>Vehicle model</span><input value={vehicleModel} onChange={(e) => setVehicleModel(e.target.value)} /></label>
           <label className="field">
             <span>License type</span>
@@ -8599,6 +8607,7 @@ function OperatorRiderForm({
   const [phone, setPhone] = useState('')
   const [vehicleType, setVehicleType] = useState<VehicleType>('Motorcycle')
   const [plateNumber, setPlateNumber] = useState('')
+  const [vehicleFranchiseNumber, setVehicleFranchiseNumber] = useState('')
   const [vehicleModel, setVehicleModel] = useState('')
   const [licenseType, setLicenseType] = useState('')
   const [licenseNumber, setLicenseNumber] = useState('')
@@ -8625,6 +8634,7 @@ function OperatorRiderForm({
       setPhone(row.phoneNumber)
       setVehicleType(row.vehicleType)
       setPlateNumber(row.plateNumber)
+      setVehicleFranchiseNumber(row.vehicleFranchiseNumber ?? '')
       setVehicleModel(row.vehicleModel ?? '')
       setLicenseType(row.licenseType)
       setLicenseNumber(row.licenseNumber)
@@ -8654,6 +8664,10 @@ function OperatorRiderForm({
       setError('Select at least one payment method this rider accepts.')
       return
     }
+    if (!vehicleFranchiseNumber.trim()) {
+      setError('Enter the vehicle franchise number.')
+      return
+    }
     if (!riderId && password.trim().length < 6) {
       setError('Set a password of at least 6 characters.')
       return
@@ -8675,6 +8689,7 @@ function OperatorRiderForm({
       if (password.trim()) data.append('password', password.trim())
       data.append('vehicleType', vehicleType)
       data.append('plateNumber', plateNumber)
+      data.append('vehicleFranchiseNumber', vehicleFranchiseNumber.trim())
       data.append('vehicleModel', vehicleModel)
       data.append('licenseType', licenseType)
       data.append('licenseNumber', licenseNumber)
@@ -8716,6 +8731,7 @@ function OperatorRiderForm({
           <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} autoComplete="new-password" />
         </label>
         <label className="field"><span>Plate</span><input value={plateNumber} onChange={(e) => setPlateNumber(e.target.value)} /></label>
+        <label className="field"><span>Franchise no.</span><input value={vehicleFranchiseNumber} onChange={(e) => setVehicleFranchiseNumber(e.target.value)} required /></label>
         <label className="field"><span>Vehicle model</span><input value={vehicleModel} onChange={(e) => setVehicleModel(e.target.value)} /></label>
         <label className="field">
           <span>License type</span>
@@ -8833,6 +8849,7 @@ function OperatorRiderDetail({ riderId, onBack, onEdit }: { riderId: string; onB
             <p>{rider.phoneNumber}</p>
             <p>{rider.fullAddress || 'No address yet'}</p>
             <p>{rider.vehicleType} · {rider.plateNumber}</p>
+            <p>Franchise: {rider.vehicleFranchiseNumber || '—'}</p>
             <div className="tag-row" style={{ marginTop: 10 }}>
               <VehicleTag type={rider.vehicleType} />
               <StatusTag active={rider.isActive} />

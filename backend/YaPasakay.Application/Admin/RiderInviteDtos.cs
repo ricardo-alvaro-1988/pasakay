@@ -22,6 +22,7 @@ public record RiderApplicationDetailResponse(
     string PhoneNumber,
     string VehicleType,
     string PlateNumber,
+    string VehicleFranchiseNumber,
     string? VehicleModel,
     string LicenseType,
     string LicenseNumber,

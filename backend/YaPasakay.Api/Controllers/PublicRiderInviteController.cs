@@ -92,6 +92,7 @@ public class PublicRiderInviteController(AppDbContext db, UploadStore uploads) :
             PasswordHash = SecretHasher.Hash(form.Password!.Trim()),
             VehicleType = form.VehicleType,
             PlateNumber = parsed.Plate,
+            VehicleFranchiseNumber = parsed.Franchise,
             VehicleModel = parsed.Model,
             LicenseType = parsed.LicenseType,
             LicenseNumber = parsed.LicenseNumber,
@@ -208,33 +209,34 @@ public class PublicRiderInviteController(AppDbContext db, UploadStore uploads) :
             .FirstOrDefaultAsync(x => x.Token == value && x.IsActive && x.Operator.IsActive, cancellationToken);
     }
 
-    private async Task<(string Name, string Phone, string Plate, string? Model, string LicenseType, string LicenseNumber, string? Error)> ParseAsync(
+    private async Task<(string Name, string Phone, string Plate, string Franchise, string? Model, string LicenseType, string LicenseNumber, string? Error)> ParseAsync(
         CreateRiderForm form,
         CancellationToken cancellationToken)
     {
         var name = (form.FullName ?? string.Empty).Trim();
         var phone = PhoneNormalizer.Normalize(form.Phone);
         var plate = (form.PlateNumber ?? string.Empty).Trim().ToUpperInvariant();
+        var franchise = (form.VehicleFranchiseNumber ?? string.Empty).Trim().ToUpperInvariant();
         var licenseType = (form.LicenseType ?? string.Empty).Trim();
         var licenseNumber = (form.LicenseNumber ?? string.Empty).Trim();
-        if (name.Length == 0 || phone.Length < 10 || plate.Length == 0 || licenseType.Length == 0 || licenseNumber.Length == 0)
+        if (name.Length == 0 || phone.Length < 10 || plate.Length == 0 || franchise.Length == 0 || licenseType.Length == 0 || licenseNumber.Length == 0)
         {
-            return ("", "", "", null, "", "", "Name, phone, plate, license type, and license number are required.");
+            return ("", "", "", "", null, "", "", "Name, phone, plate, vehicle franchise number, license type, and license number are required.");
         }
 
         if (form.VehicleType is not VehicleType.Motorcycle and not VehicleType.Tricycle)
         {
-            return ("", "", "", null, "", "", "Choose Motorcycle or Tricycle.");
+            return ("", "", "", "", null, "", "", "Choose Motorcycle or Tricycle.");
         }
 
         var taken = await db.Users.AnyAsync(x => x.PhoneNumber == phone, cancellationToken);
         if (taken)
         {
-            return ("", "", "", null, "", "", "That phone is already in use.");
+            return ("", "", "", "", null, "", "", "That phone is already in use.");
         }
 
         var model = string.IsNullOrWhiteSpace(form.VehicleModel) ? null : form.VehicleModel.Trim();
-        return (name, phone, plate, model, licenseType, licenseNumber, null);
+        return (name, phone, plate, franchise, model, licenseType, licenseNumber, null);
     }
 }
 
@@ -404,6 +406,7 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
             OperatorId = op.Id,
             VehicleType = application.VehicleType,
             PlateNumber = application.PlateNumber,
+            VehicleFranchiseNumber = application.VehicleFranchiseNumber,
             VehicleModel = application.VehicleModel,
             LicenseType = application.LicenseType,
             LicenseNumber = application.LicenseNumber,
@@ -518,6 +521,7 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
             row.PhoneNumber,
             row.VehicleType.ToString(),
             row.PlateNumber,
+            row.VehicleFranchiseNumber,
             row.VehicleModel,
             row.LicenseType,
             row.LicenseNumber,

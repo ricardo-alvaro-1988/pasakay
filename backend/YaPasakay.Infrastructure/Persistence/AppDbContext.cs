@@ -82,6 +82,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<RiderProfile>(entity =>
         {
             entity.Property(x => x.PlateNumber).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.VehicleFranchiseNumber).HasMaxLength(40).IsRequired();
             entity.Property(x => x.VehicleModel).HasMaxLength(80);
             entity.Property(x => x.LicenseType).HasMaxLength(60);
             entity.Property(x => x.LicenseNumber).HasMaxLength(80);
@@ -486,6 +487,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
             entity.Property(x => x.PasswordHash).HasMaxLength(200).IsRequired();
             entity.Property(x => x.PlateNumber).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.VehicleFranchiseNumber).HasMaxLength(40).IsRequired();
             entity.Property(x => x.VehicleModel).HasMaxLength(80);
             entity.Property(x => x.LicenseType).HasMaxLength(60).IsRequired();
             entity.Property(x => x.LicenseNumber).HasMaxLength(60).IsRequired();

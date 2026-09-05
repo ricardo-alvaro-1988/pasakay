@@ -110,6 +110,7 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
             OperatorId = op.Id,
             VehicleType = form.VehicleType,
             PlateNumber = parsed.Plate,
+            VehicleFranchiseNumber = parsed.Franchise,
             VehicleModel = parsed.Model,
             LicenseType = parsed.LicenseType,
             LicenseNumber = parsed.LicenseNumber,
@@ -193,6 +194,7 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
         rider.AppUser.UpdatedAtUtc = DateTime.UtcNow;
         rider.VehicleType = form.VehicleType;
         rider.PlateNumber = parsed.Plate;
+        rider.VehicleFranchiseNumber = parsed.Franchise;
         rider.VehicleModel = parsed.Model;
         rider.LicenseType = parsed.LicenseType;
         rider.LicenseNumber = parsed.LicenseNumber;
@@ -340,7 +342,7 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
         return OperatorMaps.RiderDetail(rider);
     }
 
-    private async Task<(string Name, string Phone, string Plate, string? Model, string LicenseType, string LicenseNumber, string? Error)> ParseAsync(
+    private async Task<(string Name, string Phone, string Plate, string Franchise, string? Model, string LicenseType, string LicenseNumber, string? Error)> ParseAsync(
         CreateRiderForm form,
         Guid? userId,
         CancellationToken cancellationToken)
@@ -348,16 +350,17 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
         var name = (form.FullName ?? string.Empty).Trim();
         var phone = PhoneNormalizer.Normalize(form.Phone);
         var plate = (form.PlateNumber ?? string.Empty).Trim().ToUpperInvariant();
+        var franchise = (form.VehicleFranchiseNumber ?? string.Empty).Trim().ToUpperInvariant();
         var licenseType = (form.LicenseType ?? string.Empty).Trim();
         var licenseNumber = (form.LicenseNumber ?? string.Empty).Trim();
-        if (name.Length == 0 || phone.Length < 10 || plate.Length == 0 || licenseType.Length == 0 || licenseNumber.Length == 0)
+        if (name.Length == 0 || phone.Length < 10 || plate.Length == 0 || franchise.Length == 0 || licenseType.Length == 0 || licenseNumber.Length == 0)
         {
-            return ("", "", "", null, "", "", "Name, phone, plate, license type, and license number are required.");
+            return ("", "", "", "", null, "", "", "Name, phone, plate, vehicle franchise number, license type, and license number are required.");
         }
 
         if (form.VehicleType is not VehicleType.Motorcycle and not VehicleType.Tricycle)
         {
-            return ("", "", "", null, "", "", "Choose Motorcycle or Tricycle.");
+            return ("", "", "", "", null, "", "", "Choose Motorcycle or Tricycle.");
         }
 
         var taken = await db.Users.AnyAsync(
@@ -365,10 +368,10 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
             cancellationToken);
         if (taken)
         {
-            return ("", "", "", null, "", "", "That phone is already in use.");
+            return ("", "", "", "", null, "", "", "That phone is already in use.");
         }
 
         var model = string.IsNullOrWhiteSpace(form.VehicleModel) ? null : form.VehicleModel.Trim();
-        return (name, phone, plate, model, licenseType, licenseNumber, null);
+        return (name, phone, plate, franchise, model, licenseType, licenseNumber, null);
     }
 }

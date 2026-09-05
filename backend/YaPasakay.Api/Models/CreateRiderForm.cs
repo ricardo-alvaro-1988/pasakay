@@ -9,6 +9,7 @@ public class CreateRiderForm
     public string? Password { get; set; }
     public VehicleType VehicleType { get; set; } = VehicleType.Motorcycle;
     public string PlateNumber { get; set; } = string.Empty;
+    public string VehicleFranchiseNumber { get; set; } = string.Empty;
     public string? VehicleModel { get; set; }
     public string LicenseType { get; set; } = string.Empty;
     public string LicenseNumber { get; set; } = string.Empty;
