@@ -61,6 +61,13 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     _Fact(label: 'Operator', value: desk?.companyName ?? '—'),
+                    _Fact(
+                      label: 'Credibility',
+                      value: desk == null
+                          ? '—'
+                          : '${desk.credibilityScore}'
+                              '${desk.riderCancelCount == 0 ? '' : ' · ${desk.riderCancelCount} cancel${desk.riderCancelCount == 1 ? '' : 's'}'}',
+                    ),
                     _Fact(label: 'Vehicle', value: desk?.vehicleLine ?? '—'),
                     _Fact(
                       label: 'Address',

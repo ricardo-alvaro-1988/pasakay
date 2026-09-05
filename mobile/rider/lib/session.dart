@@ -208,6 +208,13 @@ class RiderSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> cancelTrip(String tripId) async {
+    _rememberTrip();
+    desk = await api.cancelTrip(tripId);
+    await _syncChat();
+    notifyListeners();
+  }
+
   Future<void> hail(String customerId) async {
     desk = await api.hail(customerId);
     _shownOfferId = null;

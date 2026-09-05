@@ -27,6 +27,8 @@ public class RiderProfile : BaseEntity
     public bool IsOnline { get; set; }
     public DateTime? OnlineAtUtc { get; set; }
     public bool IsActive { get; set; } = true;
+    public int RiderCancelCount { get; set; }
+    public int CredibilityScore { get; set; } = 100;
     public ICollection<Trip> Trips { get; set; } = new List<Trip>();
     public ICollection<TripOffer> Offers { get; set; } = new List<TripOffer>();
     public ICollection<RiderPaymentMethod> PaymentMethods { get; set; } = new List<RiderPaymentMethod>();

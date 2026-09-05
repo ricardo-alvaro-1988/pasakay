@@ -70,9 +70,9 @@ class RiderSession extends ChangeNotifier {
         error = ex.message;
       }
     } on TimeoutException {
-      error = 'Cannot reach TryGoRide right now.';
+      error = 'Cannot reach Ya! Pasakay right now.';
     } catch (_) {
-      error = 'Cannot reach TryGoRide right now.';
+      error = 'Cannot reach Ya! Pasakay right now.';
     }
     notifyListeners();
     if (desk != null) {
@@ -100,7 +100,7 @@ class RiderSession extends ChangeNotifier {
     } on ApiException catch (ex) {
       error = ex.message;
     } catch (_) {
-      error = 'Cannot reach TryGoRide right now.';
+      error = 'Cannot reach Ya! Pasakay right now.';
     } finally {
       busy = false;
       notifyListeners();
@@ -150,7 +150,7 @@ class RiderSession extends ChangeNotifier {
     } on ApiException catch (ex) {
       error = ex.message;
     } catch (_) {
-      error = 'Cannot reach TryGoRide right now.';
+      error = 'Cannot reach Ya! Pasakay right now.';
     }
     notifyListeners();
   }
@@ -204,6 +204,13 @@ class RiderSession extends ChangeNotifier {
   Future<void> completeTrip(String tripId) async {
     _rememberTrip();
     desk = await api.completeTrip(tripId);
+    await _syncChat();
+    notifyListeners();
+  }
+
+  Future<void> cancelTrip(String tripId) async {
+    _rememberTrip();
+    desk = await api.cancelTrip(tripId);
     await _syncChat();
     notifyListeners();
   }

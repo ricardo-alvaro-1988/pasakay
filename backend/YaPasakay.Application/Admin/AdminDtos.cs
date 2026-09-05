@@ -107,7 +107,9 @@ public record RiderListItem(
     string LicenseNumber,
     string? ProfilePhotoUrl,
     string? LicensePhotoUrl,
-    IReadOnlyList<PaymentMethod> AcceptedPaymentMethods);
+    IReadOnlyList<PaymentMethod> AcceptedPaymentMethods,
+    int CredibilityScore,
+    int RiderCancelCount);
 
 public record RiderDetailResponse(
     Guid Id,
@@ -124,7 +126,9 @@ public record RiderDetailResponse(
     string? LicensePhotoUrl,
     string FullAddress,
     OperatorAddressItem Address,
-    IReadOnlyList<PaymentMethod> AcceptedPaymentMethods);
+    IReadOnlyList<PaymentMethod> AcceptedPaymentMethods,
+    int CredibilityScore,
+    int RiderCancelCount);
 
 public record RideStopItem(
     string Details,

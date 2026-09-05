@@ -37,6 +37,7 @@ public class Trip : BaseEntity
     public DateTime? CompletedAtUtc { get; set; }
     public DateTime? CancelledAtUtc { get; set; }
     public string? CancelReason { get; set; }
+    public CancelledBy CancelledBy { get; set; } = CancelledBy.None;
     public int? Rating { get; set; }
     public string? RatingComment { get; set; }
     public DateTime? RatedAtUtc { get; set; }

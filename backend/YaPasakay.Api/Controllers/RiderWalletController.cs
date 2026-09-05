@@ -64,29 +64,8 @@ public class RiderWalletController(AppDbContext db, RiderWalletService wallets) 
     }
 
     [HttpPost("cash-out")]
-    public async Task<ActionResult<WalletTransactionItem>> CashOut(
-        [FromBody] CreateWalletRequestBody request,
-        CancellationToken cancellationToken)
-    {
-        var (rider, status, message) = await RiderContext.RequireAsync(db, User, cancellationToken);
-        if (rider is null)
-        {
-            return StatusCode(status, new { message });
-        }
-
-        var (tx, error) = await wallets.RequestCashOutAsync(
-            rider,
-            request.Amount,
-            request.PaymentMethod,
-            request.Note,
-            cancellationToken);
-        if (error is not null)
-        {
-            return BadRequest(new { message = error });
-        }
-
-        return Ok(RiderWalletService.Map(tx!));
-    }
+    public ActionResult CashOut() =>
+        BadRequest(new { message = "Cash out is no longer available in the rider app. Ask your operator for help." });
 
     [HttpGet("cash-in-destinations")]
     public async Task<ActionResult<OperatorCashInDestinationsResponse>> CashInDestinations(CancellationToken cancellationToken)

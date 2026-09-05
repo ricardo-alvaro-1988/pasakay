@@ -234,6 +234,14 @@ class RiderApi {
     return RiderDesk.fromJson(await _json(response, fallback: 'Could not complete trip.'));
   }
 
+  Future<RiderDesk> cancelTrip(String tripId) async {
+    final response = await _post(
+      _uri('/api/rider/trips/$tripId/cancel'),
+      headers: _headers(),
+    );
+    return RiderDesk.fromJson(await _json(response, fallback: 'Could not cancel trip.'));
+  }
+
   Future<RiderDesk> hail(String customerId) async {
     final response = await _post(
       _uri('/api/rider/hail'),

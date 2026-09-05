@@ -70,6 +70,7 @@ public record RiderActiveTrip(
     DateTime? ScheduledAtUtc,
     bool CanStart,
     bool CanComplete,
+    bool CanCancel,
     bool CanSos,
     bool CanViewChat,
     bool CanChat);
@@ -97,4 +98,6 @@ public record RiderDeskResponse(
     string LicenseNumber,
     string? LicensePhotoUrl,
     string FullAddress,
-    bool IsActive);
+    bool IsActive,
+    int CredibilityScore,
+    int RiderCancelCount);

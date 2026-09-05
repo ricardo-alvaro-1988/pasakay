@@ -272,6 +272,43 @@ class TripScreen extends StatelessWidget {
                   child: const Text('Complete'),
                 ),
               ],
+              if (trip.canCancel) ...[
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () async {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Cancel booking?'),
+                        content: const Text(
+                          'This cancels the trip for the customer and lowers your credibility score.',
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep trip')),
+                          FilledButton(
+                            style: FilledButton.styleFrom(backgroundColor: brandSos),
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Cancel booking'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok == true) {
+                      try {
+                        await session.cancelTrip(trip.tripId);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
+                      } catch (ex) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$ex')));
+                        }
+                      }
+                    }
+                  },
+                  child: const Text('Cancel booking'),
+                ),
+              ],
               if (trip.canSos) ...[
                 const SizedBox(height: 16),
                 FilledButton.icon(

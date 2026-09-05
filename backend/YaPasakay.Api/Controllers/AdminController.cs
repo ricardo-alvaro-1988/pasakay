@@ -1165,7 +1165,9 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             rider.LicenseNumber,
             UploadUrls.FromPath(rider.ProfilePhotoPath),
             UploadUrls.FromPath(rider.LicensePhotoPath),
-            RiderPaymentSync.Map(rider.PaymentMethods));
+            RiderPaymentSync.Map(rider.PaymentMethods),
+            rider.CredibilityScore,
+            rider.RiderCancelCount);
 
     private static RiderDetailResponse MapRiderDetail(RiderProfile rider) =>
         new(
@@ -1183,7 +1185,9 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             UploadUrls.FromPath(rider.LicensePhotoPath),
             rider.FullAddress,
             OperatorAddressSync.Map(rider),
-            RiderPaymentSync.Map(rider.PaymentMethods));
+            RiderPaymentSync.Map(rider.PaymentMethods),
+            rider.CredibilityScore,
+            rider.RiderCancelCount);
 
     private async Task<RideDetailResponse> MapRideDetailAsync(Trip trip, CancellationToken cancellationToken)
     {

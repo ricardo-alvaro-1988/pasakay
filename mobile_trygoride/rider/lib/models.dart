@@ -125,6 +125,8 @@ class RiderDesk {
     this.licensePhotoUrl,
     this.fullAddress,
     this.isActive = true,
+    this.credibilityScore = 100,
+    this.riderCancelCount = 0,
   });
 
   final String riderId;
@@ -150,6 +152,8 @@ class RiderDesk {
   final String? licensePhotoUrl;
   final String? fullAddress;
   final bool isActive;
+  final int credibilityScore;
+  final int riderCancelCount;
 
   String get vehicleLine {
     final model = (vehicleModel ?? '').trim();
@@ -192,6 +196,8 @@ class RiderDesk {
         licensePhotoUrl: asTextOrNull(json['licensePhotoUrl']),
         fullAddress: asTextOrNull(json['fullAddress']),
         isActive: asFlag(json['isActive'], true),
+        credibilityScore: asInt(json['credibilityScore'], 100),
+        riderCancelCount: asInt(json['riderCancelCount']),
       );
 }
 
@@ -297,6 +303,7 @@ class RiderTrip {
     required this.paymentMethod,
     required this.canStart,
     required this.canComplete,
+    required this.canCancel,
     required this.canSos,
     this.pickupLat,
     this.pickupLng,
@@ -330,6 +337,7 @@ class RiderTrip {
   final String? paymentMethodOther;
   final bool canStart;
   final bool canComplete;
+  final bool canCancel;
   final bool canSos;
   final bool canViewChat;
   final bool canSendChat;
@@ -361,6 +369,7 @@ class RiderTrip {
         paymentMethodOther: asTextOrNull(json['paymentMethodOther']),
         canStart: asFlag(json['canStart']),
         canComplete: asFlag(json['canComplete']),
+        canCancel: asFlag(json['canCancel']),
         canSos: asFlag(json['canSos']),
         canViewChat: json['canViewChat'] is bool
             ? json['canViewChat'] as bool

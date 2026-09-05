@@ -133,3 +133,12 @@ public enum BookingDispatchMode
     Selection = 1,
     Both = 2
 }
+
+public enum CancelledBy
+{
+    None = 0,
+    Customer = 1,
+    Rider = 2,
+    Operator = 3,
+    System = 4
+}

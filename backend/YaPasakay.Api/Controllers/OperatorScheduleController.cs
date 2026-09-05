@@ -207,6 +207,7 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
         trip.Status = TripStatus.Cancelled;
         trip.CancelledAtUtc = DateTime.UtcNow;
         trip.CancelReason = "Customer cancelled the scheduled booking.";
+        trip.CancelledBy = CancelledBy.Operator;
         trip.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         await broadcast.ExpireTripAsync(trip.Id, cancellationToken);

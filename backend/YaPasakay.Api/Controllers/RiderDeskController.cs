@@ -321,6 +321,9 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
             if (TripBroadcastService.IsCustomerPick(offer.Trip.Notes) && offer.Trip.Status == TripStatus.Pending)
             {
                 offer.Trip.Status = TripStatus.Cancelled;
+                offer.Trip.CancelledAtUtc = now;
+                offer.Trip.CancelReason = "Rider declined the booking.";
+                offer.Trip.CancelledBy = CancelledBy.Rider;
                 offer.Trip.UpdatedAtUtc = now;
             }
 
@@ -553,6 +556,48 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
         return Ok(await BuildDeskAsync(rider.Id, cancellationToken));
     }
 
+    [HttpPost("trips/{id:guid}/cancel")]
+    public async Task<ActionResult<RiderDeskResponse>> CancelTrip(Guid id, CancellationToken cancellationToken)
+    {
+        var (rider, status, message) = await RiderContext.RequireAsync(db, User, cancellationToken);
+        if (rider is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var trip = await db.Trips.FirstOrDefaultAsync(x => x.Id == id && x.RiderId == rider.Id, cancellationToken);
+        if (trip is null)
+        {
+            return NotFound();
+        }
+
+        if (trip.Status is TripStatus.Completed or TripStatus.Cancelled or TripStatus.Ongoing)
+        {
+            return BadRequest(new { message = "This trip can no longer be cancelled." });
+        }
+
+        if (trip.Status is not (TripStatus.Pending or TripStatus.Waiting))
+        {
+            return BadRequest(new { message = "This trip can no longer be cancelled." });
+        }
+
+        trip.Status = TripStatus.Cancelled;
+        trip.CancelledAtUtc = DateTime.UtcNow;
+        trip.CancelReason = "Rider cancelled the booking.";
+        trip.CancelledBy = CancelledBy.Rider;
+        trip.UpdatedAtUtc = DateTime.UtcNow;
+
+        var profile = await db.RiderProfiles.FirstAsync(x => x.Id == rider.Id, cancellationToken);
+        profile.RiderCancelCount += 1;
+        profile.CredibilityScore = Math.Max(0, profile.CredibilityScore - 5);
+        profile.UpdatedAtUtc = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(cancellationToken);
+        await broadcast.ExpireTripAsync(trip.Id, cancellationToken);
+        await live.TripPartiesAsync(trip, "cancelled", cancellationToken);
+        return Ok(await BuildDeskAsync(rider.Id, cancellationToken));
+    }
+
     private async Task<RiderDeskResponse> BuildDeskAsync(Guid riderId, CancellationToken cancellationToken)
     {
         var rider = await db.RiderProfiles
@@ -652,7 +697,9 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
             rider.LicenseNumber,
             UploadUrls.FromPath(rider.LicensePhotoPath),
             rider.FullAddress,
-            rider.IsActive);
+            rider.IsActive,
+            rider.CredibilityScore,
+            rider.RiderCancelCount);
     }
 
     private async Task ClearRiderHailsAsync(Guid riderId, CancellationToken cancellationToken)

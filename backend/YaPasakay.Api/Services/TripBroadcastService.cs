@@ -419,6 +419,7 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.ScheduledAtUtc is DateTime scheduled ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc) : null,
             trip.Status == TripStatus.Waiting,
             trip.Status == TripStatus.Ongoing,
+            trip.Status is TripStatus.Pending or TripStatus.Waiting,
             trip.Status is TripStatus.Waiting or TripStatus.Ongoing,
             TripChatService.CanView(trip),
             TripChatService.CanChat(trip));

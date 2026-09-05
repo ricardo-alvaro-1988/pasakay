@@ -42,73 +42,13 @@ class _WalletScreenState extends State<WalletScreen> {
     }
   }
 
-  Future<void> _request(String kind) async {
-    if (kind == 'cash-in') {
-      await _cashIn();
-      return;
-    }
-    final amount = TextEditingController();
-    String method = 'Cash';
-    final note = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cash out'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amount,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Amount'),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue: method,
-              items: const [
-                DropdownMenuItem(value: 'Cash', child: Text('CASH')),
-                DropdownMenuItem(value: 'GCash', child: Text('GCASH')),
-                DropdownMenuItem(value: 'Maya', child: Text('MAYA')),
-                DropdownMenuItem(value: 'Other', child: Text('OTHERS')),
-              ],
-              onChanged: (value) => method = value ?? 'Cash',
-              decoration: const InputDecoration(labelText: 'Payment method'),
-            ),
-            TextField(
-              controller: note,
-              decoration: const InputDecoration(labelText: 'Note (optional)'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Submit')),
-        ],
-      ),
-    );
-    if (ok != true) {
-      return;
-    }
-    try {
-      await widget.session.api.walletRequest(
-        kind,
-        double.parse(amount.text.trim()),
-        method,
-        note.text.trim().isEmpty ? null : note.text.trim(),
-      );
-      await _load();
-    } catch (ex) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$ex')));
-      }
-    }
-  }
-
   Future<void> _cashIn() async {
     CashInDestinations? destinations;
+    String? loadError;
     try {
       destinations = await widget.session.api.cashInDestinations();
-    } catch (_) {
+    } catch (ex) {
+      loadError = ex is ApiException ? ex.message : 'Could not load cash-in details.';
       destinations = null;
     }
     if (!mounted) return;
@@ -117,6 +57,8 @@ class _WalletScreenState extends State<WalletScreen> {
     final note = TextEditingController();
     String method = 'Cash';
     CashInBankDestination? selectedBank;
+    final hasAny = destinations != null &&
+        (destinations.hasGCash || destinations.hasMaya || destinations.hasBanks);
 
     final ok = await showDialog<bool>(
       context: context,
@@ -133,6 +75,83 @@ class _WalletScreenState extends State<WalletScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (loadError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Text(loadError, style: const TextStyle(color: brandRed, fontWeight: FontWeight.w700)),
+                        )
+                      else if (!hasAny)
+                        const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: Text(
+                            'Your operator has not set cash-in details yet.',
+                            style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
+                          ),
+                        )
+                      else ...[
+                        const Text('Pay to company', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                        const SizedBox(height: 8),
+                        if (dest!.hasGCash)
+                          _CashInDestinationCard(
+                            title: 'GCash',
+                            numberLabel: 'GCash no.',
+                            number: dest.gCashNumber,
+                            qrUrl: widget.session.api.mediaUrl(dest.gCashQrUrl),
+                            highlighted: method == 'GCash',
+                          ),
+                        if (dest.hasMaya) ...[
+                          if (dest.hasGCash) const SizedBox(height: 10),
+                          _CashInDestinationCard(
+                            title: 'Maya',
+                            numberLabel: 'Maya no.',
+                            number: dest.mayaNumber,
+                            qrUrl: widget.session.api.mediaUrl(dest.mayaQrUrl),
+                            highlighted: method == 'Maya',
+                          ),
+                        ],
+                        if (dest.hasBanks) ...[
+                          if (dest.hasGCash || dest.hasMaya) const SizedBox(height: 10),
+                          const Text('Bank accounts', style: TextStyle(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 8),
+                          ...dest.banks.map((bank) {
+                            final selected = method == 'Other' && selectedBank?.id == bank.id;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: InkWell(
+                                onTap: () => setLocal(() {
+                                  method = 'Other';
+                                  selectedBank = bank;
+                                  if (note.text.trim().isEmpty) {
+                                    note.text = '${bank.bankName} · ${bank.accountNumber}';
+                                  }
+                                }),
+                                borderRadius: BorderRadius.circular(14),
+                                child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: selected || (method == 'Other' && selectedBank == null)
+                                          ? brandRed
+                                          : brandLine,
+                                      width: selected ? 2 : 1,
+                                    ),
+                                    color: selected ? brandRed.withValues(alpha: 0.08) : Colors.white,
+                                  ),
+                                  child: _CashInDestinationCard(
+                                    title: bank.bankName,
+                                    numberLabel: bank.accountName,
+                                    number: bank.accountNumber,
+                                    qrUrl: widget.session.api.mediaUrl(bank.qrUrl),
+                                    compact: true,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                        const SizedBox(height: 12),
+                      ],
                       TextField(
                         controller: amount,
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -140,7 +159,7 @@ class _WalletScreenState extends State<WalletScreen> {
                       ),
                       const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        initialValue: method,
+                        value: method,
                         items: const [
                           DropdownMenuItem(value: 'Cash', child: Text('CASH')),
                           DropdownMenuItem(value: 'GCash', child: Text('GCASH')),
@@ -153,59 +172,21 @@ class _WalletScreenState extends State<WalletScreen> {
                         }),
                         decoration: const InputDecoration(labelText: 'Payment method'),
                       ),
-                      if (method == 'GCash' && dest != null && dest.hasGCash) ...[
-                        const SizedBox(height: 12),
-                        _CashInDestinationCard(
-                          title: 'Send to GCash',
-                          numberLabel: 'GCash no.',
-                          number: dest.gCashNumber,
-                          qrUrl: widget.session.api.mediaUrl(dest.gCashQrUrl),
+                      if (method == 'GCash' && dest != null && !dest.hasGCash)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text('No GCash details from your operator.', style: TextStyle(color: brandMuted)),
                         ),
-                      ],
-                      if (method == 'Maya' && dest != null && dest.hasMaya) ...[
-                        const SizedBox(height: 12),
-                        _CashInDestinationCard(
-                          title: 'Send to Maya',
-                          numberLabel: 'Maya no.',
-                          number: dest.mayaNumber,
-                          qrUrl: widget.session.api.mediaUrl(dest.mayaQrUrl),
+                      if (method == 'Maya' && dest != null && !dest.hasMaya)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text('No Maya details from your operator.', style: TextStyle(color: brandMuted)),
                         ),
-                      ],
-                      if (method == 'Other' && dest != null && dest.hasBanks) ...[
-                        const SizedBox(height: 12),
-                        const Text('Choose bank account', style: TextStyle(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 8),
-                        ...dest.banks.map((bank) {
-                          final selected = selectedBank?.id == bank.id;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: InkWell(
-                              onTap: () => setLocal(() {
-                                selectedBank = bank;
-                                if (note.text.trim().isEmpty) {
-                                  note.text = '${bank.bankName} · ${bank.accountNumber}';
-                                }
-                              }),
-                              borderRadius: BorderRadius.circular(14),
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: selected ? brandRed : brandLine, width: selected ? 2 : 1),
-                                  color: selected ? brandRed.withValues(alpha: 0.08) : Colors.white,
-                                ),
-                                child: _CashInDestinationCard(
-                                  title: bank.bankName,
-                                  numberLabel: bank.accountName,
-                                  number: bank.accountNumber,
-                                  qrUrl: widget.session.api.mediaUrl(bank.qrUrl),
-                                  compact: true,
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
+                      if (method == 'Other' && dest != null && !dest.hasBanks)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 8),
+                          child: Text('No bank accounts from your operator.', style: TextStyle(color: brandMuted)),
+                        ),
                       TextField(
                         controller: note,
                         decoration: const InputDecoration(labelText: 'Reference / note (optional)'),
@@ -300,22 +281,9 @@ class _WalletScreenState extends State<WalletScreen> {
                       child: Text(_error!, style: const TextStyle(color: brandRed, fontWeight: FontWeight.w700)),
                     ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () => _request('cash-in'),
-                          child: const Text('Cash in'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => _request('cash-out'),
-                          child: const Text('Cash out'),
-                        ),
-                      ),
-                    ],
+                  FilledButton(
+                    onPressed: _cashIn,
+                    child: const Text('Cash in'),
                   ),
                   const SizedBox(height: 20),
                   const Text('History', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
@@ -693,6 +661,7 @@ class _CashInDestinationCard extends StatelessWidget {
     required this.number,
     this.qrUrl,
     this.compact = false,
+    this.highlighted = false,
   });
 
   final String title;
@@ -700,54 +669,61 @@ class _CashInDestinationCard extends StatelessWidget {
   final String number;
   final String? qrUrl;
   final bool compact;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (!compact)
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        if (!compact) const SizedBox(height: 6),
-        if (compact)
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
-        if (number.trim().isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(numberLabel, style: const TextStyle(color: brandMuted, fontSize: 12, fontWeight: FontWeight.w600)),
-          Row(
-            children: [
-              Expanded(
-                child: Text(number, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-              ),
-              IconButton(
-                tooltip: 'Copy',
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: number));
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Copied')),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.copy_rounded, size: 18),
-              ),
-            ],
-          ),
-        ],
-        if (qrUrl != null && qrUrl!.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              qrUrl!,
-              height: 160,
-              width: 160,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const Text('QR unavailable', style: TextStyle(color: brandMuted)),
+    return Container(
+      padding: compact ? EdgeInsets.zero : const EdgeInsets.all(12),
+      decoration: compact
+          ? null
+          : BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: highlighted ? brandRed : brandLine, width: highlighted ? 2 : 1),
+              color: highlighted ? brandRed.withValues(alpha: 0.08) : Colors.white,
             ),
-          ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+          if (number.trim().isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(numberLabel, style: const TextStyle(color: brandMuted, fontSize: 12, fontWeight: FontWeight.w600)),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(number, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                ),
+                IconButton(
+                  tooltip: 'Copy',
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: number));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Copied')),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                ),
+              ],
+            ),
+          ],
+          if (qrUrl != null && qrUrl!.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(
+                qrUrl!,
+                height: 160,
+                width: 160,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Text('QR unavailable', style: TextStyle(color: brandMuted)),
+              ),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

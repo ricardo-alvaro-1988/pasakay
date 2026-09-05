@@ -3530,6 +3530,7 @@ function RiderDetailPage({
             </p>
             <p>{rider.vehicleModel ? `${rider.vehicleType} · ${rider.vehicleModel}` : rider.vehicleType} · {rider.plateNumber}</p>
             <p>License: {[rider.licenseType, rider.licenseNumber].filter(Boolean).join(' · ') || '—'}</p>
+            <p>Credibility: {rider.credibilityScore ?? 100}{rider.riderCancelCount ? ` · ${rider.riderCancelCount} cancel${rider.riderCancelCount === 1 ? '' : 's'}` : ''}</p>
             <div className="tag-row" style={{ marginTop: 10 }}>
               <VehicleTag type={rider.vehicleType} />
               <StatusTag active={rider.isActive} />
@@ -9121,6 +9122,7 @@ function OperatorRiderDetail({ riderId, onBack, onEdit }: { riderId: string; onB
             <p>{rider.fullAddress || 'No address yet'}</p>
             <p>{rider.vehicleType} · {rider.plateNumber}</p>
             <p>Franchise: {rider.vehicleFranchiseNumber || '—'}</p>
+            <p>Credibility: {rider.credibilityScore ?? 100}{rider.riderCancelCount ? ` · ${rider.riderCancelCount} cancel${rider.riderCancelCount === 1 ? '' : 's'}` : ''}</p>
             <div className="tag-row" style={{ marginTop: 10 }}>
               <VehicleTag type={rider.vehicleType} />
               <StatusTag active={rider.isActive} />

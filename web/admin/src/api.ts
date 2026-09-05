@@ -109,6 +109,8 @@ export type RiderListItem = {
   profilePhotoUrl: string | null
   licensePhotoUrl: string | null
   acceptedPaymentMethods: PaymentMethod[]
+  credibilityScore: number
+  riderCancelCount: number
 }
 
 export type RiderDetail = RiderListItem & {

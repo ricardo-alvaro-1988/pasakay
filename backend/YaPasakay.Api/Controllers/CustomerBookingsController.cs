@@ -549,6 +549,7 @@ public class CustomerBookingsController(
         trip.Status = TripStatus.Cancelled;
         trip.CancelledAtUtc = DateTime.UtcNow;
         trip.CancelReason = "Customer cancelled the booking.";
+        trip.CancelledBy = CancelledBy.Customer;
         trip.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         await broadcast.ExpireTripAsync(trip.Id, cancellationToken);

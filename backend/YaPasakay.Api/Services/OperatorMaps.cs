@@ -22,7 +22,9 @@ public static class OperatorMaps
             rider.LicenseNumber,
             UploadUrls.FromPath(rider.ProfilePhotoPath),
             UploadUrls.FromPath(rider.LicensePhotoPath),
-            RiderPaymentSync.Map(rider.PaymentMethods));
+            RiderPaymentSync.Map(rider.PaymentMethods),
+            rider.CredibilityScore,
+            rider.RiderCancelCount);
 
     public static FleetRiderItem Fleet(RiderProfile rider, TripStatus? status, string? bookingReference) =>
         new(
@@ -55,7 +57,9 @@ public static class OperatorMaps
             UploadUrls.FromPath(rider.LicensePhotoPath),
             rider.FullAddress,
             OperatorAddressSync.Map(rider),
-            RiderPaymentSync.Map(rider.PaymentMethods));
+            RiderPaymentSync.Map(rider.PaymentMethods),
+            rider.CredibilityScore,
+            rider.RiderCancelCount);
 
     public static CustomerListItem Customer(CustomerProfile customer) =>
         new(
