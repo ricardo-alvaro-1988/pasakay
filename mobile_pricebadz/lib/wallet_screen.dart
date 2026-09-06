@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'api.dart';
+import 'cash_in_page.dart';
 import 'models.dart';
 import 'session.dart';
 import 'theme.dart';
@@ -41,60 +42,17 @@ class _WalletScreenState extends State<WalletScreen> {
     }
   }
 
-  Future<void> _request(String kind) async {
-    final amount = TextEditingController();
-    String method = 'Cash';
-    final note = TextEditingController();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(kind == 'cash-in' ? 'Cash in' : 'Cash out'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: amount,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Amount'),
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue: method,
-              items: const [
-                DropdownMenuItem(value: 'Cash', child: Text('CASH')),
-                DropdownMenuItem(value: 'GCash', child: Text('GCASH')),
-                DropdownMenuItem(value: 'Maya', child: Text('MAYA')),
-                DropdownMenuItem(value: 'Other', child: Text('OTHERS')),
-              ],
-              onChanged: (value) => method = value ?? 'Cash',
-              decoration: const InputDecoration(labelText: 'Payment method'),
-            ),
-            TextField(
-              controller: note,
-              decoration: const InputDecoration(labelText: 'Note (optional)'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Submit')),
-        ],
-      ),
+  Future<void> _cashIn() async {
+    final ok = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => CashInPage(session: widget.session)),
     );
-    if (ok != true) {
-      return;
-    }
-    try {
-      await widget.session.api.walletRequest(
-        kind,
-        double.parse(amount.text.trim()),
-        method,
-        note.text.trim().isEmpty ? null : note.text.trim(),
-      );
+    if (ok == true) {
       await _load();
-    } catch (ex) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$ex')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cash-in request submitted. Waiting for operator approval.')),
+        );
       }
     }
   }
@@ -129,7 +87,7 @@ class _WalletScreenState extends State<WalletScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
                 children: [
                   BrandPanel(
-                    color: const Color(0x141E56D8),
+                    color: const Color(0x14E30613),
                     borderColor: brandRed,
                     borderWidth: 2,
                     padding: const EdgeInsets.all(20),
@@ -158,22 +116,9 @@ class _WalletScreenState extends State<WalletScreen> {
                       child: Text(_error!, style: const TextStyle(color: brandRed, fontWeight: FontWeight.w700)),
                     ),
                   const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: () => _request('cash-in'),
-                          child: const Text('Cash in'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => _request('cash-out'),
-                          child: const Text('Cash out'),
-                        ),
-                      ),
-                    ],
+                  FilledButton(
+                    onPressed: _cashIn,
+                    child: const Text('Cash in'),
                   ),
                   const SizedBox(height: 20),
                   const Text('History', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
@@ -422,6 +367,7 @@ class _WalletTripDetailPageState extends State<WalletTripDetailPage> {
                       _detailRow('Status', detail.status),
                       _detailRow('Customer', detail.customerName),
                       _detailRow('Phone', detail.customerPhone),
+                      _detailRow('Persons', passengerLabel(detail.passengerCount)),
                       _detailRow('Vehicle', [detail.vehicleType, detail.vehicleModel, detail.plateNumber].where((x) => (x ?? '').toString().isNotEmpty).join(' · ')),
                       _detailRow('Payment', paymentLabel(detail.paymentMethod)),
                       _detailRow('Requested', _dateTime(detail.requestedAt)),

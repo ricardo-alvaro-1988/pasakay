@@ -272,7 +272,7 @@ class TripScreen extends StatelessWidget {
                   child: const Text('Complete'),
                 ),
               ],
-              if (trip.canCancel) ...[
+              if (trip.canCancel || trip.status.toLowerCase() == 'waiting') ...[
                 const SizedBox(height: 8),
                 OutlinedButton(
                   onPressed: () async {

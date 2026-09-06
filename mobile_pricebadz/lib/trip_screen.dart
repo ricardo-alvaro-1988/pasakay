@@ -115,6 +115,11 @@ class TripScreen extends StatelessWidget {
                     Text(trip.customerName, style: Theme.of(context).textTheme.titleLarge),
                     const SizedBox(height: 4),
                     Text(trip.customerPhone, style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Persons: ${passengerLabel(trip.passengerCount)}',
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: brandRed),
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -208,6 +213,13 @@ class TripScreen extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(trip.dropoff, style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 14),
+                    const Text('PERSONS', style: TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Text(
+                      passengerLabel(trip.passengerCount),
+                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                    ),
+                    const SizedBox(height: 14),
                     Text(
                       '${peso(trip.fare)}  ·  ${trip.distanceKm.toStringAsFixed(1)} km  ·  ${paymentLabel(trip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800),
@@ -243,7 +255,7 @@ class TripScreen extends StatelessWidget {
                       context: context,
                       builder: (context) => AlertDialog(
                         title: const Text('Complete trip?'),
-                        content: const Text('This deducts operator commission from your wallet.'),
+                        content: const Text('This deducts System from your wallet.'),
                         actions: [
                           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
                           FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Complete')),
@@ -258,6 +270,43 @@ class TripScreen extends StatelessWidget {
                     }
                   },
                   child: const Text('Complete'),
+                ),
+              ],
+              if (trip.canCancel || trip.status.toLowerCase() == 'waiting') ...[
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: () async {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Cancel booking?'),
+                        content: const Text(
+                          'This cancels the trip for the customer and lowers your credibility score.',
+                        ),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep trip')),
+                          FilledButton(
+                            style: FilledButton.styleFrom(backgroundColor: brandSos),
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Cancel booking'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok == true) {
+                      try {
+                        await session.cancelTrip(trip.tripId);
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
+                      } catch (ex) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$ex')));
+                        }
+                      }
+                    }
+                  },
+                  child: const Text('Cancel booking'),
                 ),
               ],
               if (trip.canSos) ...[

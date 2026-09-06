@@ -255,6 +255,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     _OfferStop(label: 'PICKUP', value: offer.pickup, icon: Icons.trip_origin),
                     const SizedBox(height: 12),
                     _OfferStop(label: 'DROP-OFF', value: offer.dropoff, icon: Icons.location_on),
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFFC9CD)),
+                      ),
+                      child: Text(
+                        'Persons: ${passengerLabel(offer.passengerCount)}',
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -490,6 +504,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(activeTrip.pickup, style: const TextStyle(fontWeight: FontWeight.w700)),
                     const SizedBox(height: 4),
                     Text(activeTrip.dropoff, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFF1F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFFC9CD)),
+                      ),
+                      child: Text(
+                        'Persons: ${passengerLabel(activeTrip.passengerCount)}',
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15),
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
@@ -527,6 +555,44 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
+                    if (activeTrip.canCancel || activeTrip.status.toLowerCase() == 'waiting') ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: brandSos,
+                          side: const BorderSide(color: brandSos),
+                          minimumSize: const Size.fromHeight(44),
+                        ),
+                        onPressed: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Cancel booking?'),
+                              content: const Text(
+                                'This cancels the trip for the customer and lowers your credibility score.',
+                              ),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep trip')),
+                                FilledButton(
+                                  style: FilledButton.styleFrom(backgroundColor: brandSos),
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text('Cancel booking'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (ok != true) return;
+                          try {
+                            await widget.session.cancelTrip(activeTrip.tripId);
+                          } catch (ex) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$ex')));
+                            }
+                          }
+                        },
+                        child: const Text('Cancel booking'),
+                      ),
+                    ],
                   ],
                 ),
               )
@@ -641,7 +707,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       color: brandSos,
                       shape: const CircleBorder(),
                       elevation: 6,
-                      shadowColor: const Color(0x611E56D8),
+                      shadowColor: const Color(0x61E30613),
                       child: InkWell(
                         customBorder: const CircleBorder(),
                         onTap: _sosBusy ? null : _sosFromHome,

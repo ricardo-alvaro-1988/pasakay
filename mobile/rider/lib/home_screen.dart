@@ -555,6 +555,44 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                     ),
+                    if (activeTrip.canCancel || activeTrip.status.toLowerCase() == 'waiting') ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: brandSos,
+                          side: const BorderSide(color: brandSos),
+                          minimumSize: const Size.fromHeight(44),
+                        ),
+                        onPressed: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (context) => AlertDialog(
+                              title: const Text('Cancel booking?'),
+                              content: const Text(
+                                'This cancels the trip for the customer and lowers your credibility score.',
+                              ),
+                              actions: [
+                                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Keep trip')),
+                                FilledButton(
+                                  style: FilledButton.styleFrom(backgroundColor: brandSos),
+                                  onPressed: () => Navigator.pop(context, true),
+                                  child: const Text('Cancel booking'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (ok != true) return;
+                          try {
+                            await widget.session.cancelTrip(activeTrip.tripId);
+                          } catch (ex) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$ex')));
+                            }
+                          }
+                        },
+                        child: const Text('Cancel booking'),
+                      ),
+                    ],
                   ],
                 ),
               )

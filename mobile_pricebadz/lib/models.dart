@@ -77,6 +77,11 @@ String paymentLabel(String? method) {
   }
 }
 
+String passengerLabel(int? count) {
+  final n = (count ?? 1).clamp(1, 999);
+  return n == 1 ? '1 person' : '$n persons';
+}
+
 DateTime? parseUtc(dynamic value) {
   if (value is! String || value.isEmpty) {
     return null;
@@ -120,6 +125,8 @@ class RiderDesk {
     this.licensePhotoUrl,
     this.fullAddress,
     this.isActive = true,
+    this.credibilityScore = 100,
+    this.riderCancelCount = 0,
   });
 
   final String riderId;
@@ -145,6 +152,8 @@ class RiderDesk {
   final String? licensePhotoUrl;
   final String? fullAddress;
   final bool isActive;
+  final int credibilityScore;
+  final int riderCancelCount;
 
   String get vehicleLine {
     final model = (vehicleModel ?? '').trim();
@@ -187,6 +196,8 @@ class RiderDesk {
         licensePhotoUrl: asTextOrNull(json['licensePhotoUrl']),
         fullAddress: asTextOrNull(json['fullAddress']),
         isActive: asFlag(json['isActive'], true),
+        credibilityScore: asInt(json['credibilityScore'], 100),
+        riderCancelCount: asInt(json['riderCancelCount']),
       );
 }
 
@@ -222,6 +233,7 @@ class JobOffer {
     required this.dropoff,
     required this.fare,
     required this.distanceKm,
+    this.passengerCount = 1,
     required this.paymentMethod,
     required this.isPreferred,
     required this.highlighted,
@@ -243,6 +255,7 @@ class JobOffer {
   final double? pickupLng;
   final double fare;
   final double distanceKm;
+  final int passengerCount;
   final double? riderDistanceKm;
   final String paymentMethod;
   final String? paymentMethodOther;
@@ -262,6 +275,7 @@ class JobOffer {
         pickupLng: (json['pickupLng'] as num?)?.toDouble(),
         fare: (json['fare'] as num?)?.toDouble() ?? 0,
         distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+        passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
         riderDistanceKm: (json['riderDistanceKm'] as num?)?.toDouble(),
         paymentMethod: paymentCode(json['paymentMethod']),
         paymentMethodOther: asTextOrNull(json['paymentMethodOther']),
@@ -285,9 +299,11 @@ class RiderTrip {
     required this.dropoff,
     required this.fare,
     required this.distanceKm,
+    this.passengerCount = 1,
     required this.paymentMethod,
     required this.canStart,
     required this.canComplete,
+    required this.canCancel,
     required this.canSos,
     this.pickupLat,
     this.pickupLng,
@@ -316,10 +332,12 @@ class RiderTrip {
   final DateTime? lastCompletedAt;
   final double fare;
   final double distanceKm;
+  final int passengerCount;
   final String paymentMethod;
   final String? paymentMethodOther;
   final bool canStart;
   final bool canComplete;
+  final bool canCancel;
   final bool canSos;
   final bool canViewChat;
   final bool canSendChat;
@@ -346,10 +364,12 @@ class RiderTrip {
         lastCompletedAt: parseUtc(json['lastCompletedAtUtc']),
         fare: (json['fare'] as num?)?.toDouble() ?? 0,
         distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+        passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
         paymentMethod: paymentCode(json['paymentMethod']),
         paymentMethodOther: asTextOrNull(json['paymentMethodOther']),
         canStart: asFlag(json['canStart']),
         canComplete: asFlag(json['canComplete']),
+        canCancel: asFlag(json['canCancel']),
         canSos: asFlag(json['canSos']),
         canViewChat: json['canViewChat'] is bool
             ? json['canViewChat'] as bool
@@ -375,6 +395,7 @@ class RiderTripListItem {
     required this.dropoff,
     required this.fare,
     required this.distanceKm,
+    this.passengerCount = 1,
     required this.vehicleType,
     required this.paymentMethod,
     required this.requestedAt,
@@ -389,6 +410,7 @@ class RiderTripListItem {
   final String dropoff;
   final double fare;
   final double distanceKm;
+  final int passengerCount;
   final String vehicleType;
   final String paymentMethod;
   final String? paymentMethodOther;
@@ -403,6 +425,7 @@ class RiderTripListItem {
         dropoff: asText(json['dropoff']),
         fare: (json['fare'] as num?)?.toDouble() ?? 0,
         distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+        passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
         vehicleType: vehicleLabel(json['vehicleType']),
         paymentMethod: paymentCode(json['paymentMethod']),
         paymentMethodOther: asTextOrNull(json['paymentMethodOther']),
@@ -449,6 +472,61 @@ class WalletSummary {
         recent: (json['recent'] as List? ?? [])
             .whereType<Map<String, dynamic>>()
             .map(WalletTx.fromJson)
+            .toList(),
+      );
+}
+
+class CashInBankDestination {
+  CashInBankDestination({
+    required this.id,
+    required this.bankName,
+    required this.accountName,
+    required this.accountNumber,
+    this.qrUrl,
+  });
+
+  final String id;
+  final String bankName;
+  final String accountName;
+  final String accountNumber;
+  final String? qrUrl;
+
+  factory CashInBankDestination.fromJson(Map<String, dynamic> json) => CashInBankDestination(
+        id: asText(json['id']),
+        bankName: asText(json['bankName']),
+        accountName: asText(json['accountName']),
+        accountNumber: asText(json['accountNumber']),
+        qrUrl: asTextOrNull(json['qrUrl']),
+      );
+}
+
+class CashInDestinations {
+  CashInDestinations({
+    required this.gCashNumber,
+    this.gCashQrUrl,
+    required this.mayaNumber,
+    this.mayaQrUrl,
+    required this.banks,
+  });
+
+  final String gCashNumber;
+  final String? gCashQrUrl;
+  final String mayaNumber;
+  final String? mayaQrUrl;
+  final List<CashInBankDestination> banks;
+
+  bool get hasGCash => gCashNumber.trim().isNotEmpty || (gCashQrUrl?.isNotEmpty ?? false);
+  bool get hasMaya => mayaNumber.trim().isNotEmpty || (mayaQrUrl?.isNotEmpty ?? false);
+  bool get hasBanks => banks.isNotEmpty;
+
+  factory CashInDestinations.fromJson(Map<String, dynamic> json) => CashInDestinations(
+        gCashNumber: asText(json['gCashNumber']),
+        gCashQrUrl: asTextOrNull(json['gCashQrUrl']),
+        mayaNumber: asText(json['mayaNumber']),
+        mayaQrUrl: asTextOrNull(json['mayaQrUrl']),
+        banks: (json['banks'] as List? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(CashInBankDestination.fromJson)
             .toList(),
       );
 }
@@ -540,6 +618,7 @@ class RiderTripDetail {
     required this.dropoff,
     required this.fare,
     required this.distanceKm,
+    this.passengerCount = 1,
     required this.vehicleType,
     required this.requestedAt,
     required this.paymentMethod,
@@ -575,6 +654,7 @@ class RiderTripDetail {
   final String? notes;
   final double fare;
   final double distanceKm;
+  final int passengerCount;
   final int? durationMinutes;
   final String vehicleType;
   final DateTime requestedAt;
@@ -626,6 +706,7 @@ class RiderTripDetail {
         notes: asTextOrNull(json['notes']),
         fare: (json['fare'] as num?)?.toDouble() ?? 0,
         distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+        passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
         durationMinutes: json['durationMinutes'] == null ? null : asInt(json['durationMinutes']),
         vehicleType: vehicleLabel(json['vehicleType']),
         requestedAt: parseUtc(json['requestedAtUtc']) ?? DateTime.now(),
