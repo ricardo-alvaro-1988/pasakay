@@ -2166,11 +2166,12 @@ tr.clickable:hover { background: var(--bg-soft); }
   width: min(560px, 100%);
   max-height: min(90vh, 720px);
   overflow: visible;
-  background: var(--panel);
+  background: color-mix(in srgb, var(--bg-elev) 96%, transparent);
   border: 1px solid var(--line);
   border-radius: 16px;
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
   padding: 20px 22px 22px;
+  color: var(--text);
 }
 .modal-panel h2 {
   margin: 0;
