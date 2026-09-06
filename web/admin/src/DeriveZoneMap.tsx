@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import { loadGoogleMaps } from './FleetMap'
 
@@ -15,31 +15,115 @@ type GMaps = {
   Marker: new (opts: Record<string, unknown>) => GMarker
   Polygon: new (opts: Record<string, unknown>) => GPolygon
   LatLngBounds: new () => GBounds
-  event: { addListener: (target: unknown, name: string, handler: (e: { latLng?: { lat: () => number; lng: () => number } }) => void) => void }
+  Geocoder: new () => GGeocoder
+  event: {
+    addListener: (
+      target: unknown,
+      name: string,
+      handler: (...args: never[]) => void,
+    ) => void
+  }
+  places?: {
+    Autocomplete: new (
+      input: HTMLInputElement,
+      opts?: Record<string, unknown>,
+    ) => GAutocomplete
+  }
 }
 
 type GMap = {
   setCenter: (p: DeriveMapPoint) => void
   setZoom: (z: number) => void
   fitBounds: (bounds: GBounds, padding?: number) => void
+  getBounds: () => GBounds | undefined
 }
 
-type GMarker = { setMap: (map: GMap | null) => void }
+type GMarker = { setMap: (map: GMap | null) => void; setPosition?: (p: DeriveMapPoint) => void }
 type GPolygon = { setMap: (map: GMap | null) => void }
-type GBounds = { extend: (p: DeriveMapPoint) => void }
+type GBounds = {
+  extend: (p: DeriveMapPoint) => void
+  getNorthEast?: () => { lat: () => number; lng: () => number }
+  getSouthWest?: () => { lat: () => number; lng: () => number }
+}
+
+type GLatLng = { lat: () => number; lng: () => number }
+type GGeocoder = {
+  geocode: (
+    req: Record<string, unknown>,
+    cb: (results: Array<{ geometry?: { location?: GLatLng } }> | null, status: string) => void,
+  ) => void
+}
+type GAutocomplete = {
+  addListener: (name: string, handler: () => void) => void
+  getPlace: () => {
+    geometry?: { location?: GLatLng; viewport?: GBounds }
+    formatted_address?: string
+    name?: string
+  }
+}
 
 const DEFAULT_CENTER = { lat: 13.4115, lng: 121.1803 }
 
 export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
   const host = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const mapRef = useRef<GMap | null>(null)
   const gmapsRef = useRef<GMaps | null>(null)
   const polygonRef = useRef<GPolygon | null>(null)
   const markersRef = useRef<GMarker[]>([])
+  const searchMarkerRef = useRef<GMarker | null>(null)
   const pointsRef = useRef(points)
   pointsRef.current = points
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const [searchError, setSearchError] = useState('')
+  const [searchBusy, setSearchBusy] = useState(false)
+
+  function goToLocation(gmaps: GMaps, map: GMap, lat: number, lng: number, viewport?: GBounds) {
+    const target = { lat, lng }
+    if (viewport?.getNorthEast && viewport?.getSouthWest) {
+      map.fitBounds(viewport, 48)
+    } else {
+      map.setCenter(target)
+      map.setZoom(16)
+    }
+    searchMarkerRef.current?.setMap(null)
+    searchMarkerRef.current = new gmaps.Marker({
+      map,
+      position: target,
+      title: 'Search result',
+      opacity: 0.85,
+    })
+  }
+
+  function geocodeQuery(gmaps: GMaps, map: GMap, text: string) {
+    const trimmed = text.trim()
+    if (!trimmed) {
+      setSearchError('Enter a place or address to search.')
+      return
+    }
+    setSearchBusy(true)
+    setSearchError('')
+    const geocoder = new gmaps.Geocoder()
+    const bounds = map.getBounds?.()
+    geocoder.geocode(
+      {
+        address: trimmed,
+        componentRestrictions: { country: 'PH' },
+        ...(bounds ? { bounds } : {}),
+      },
+      (results, status) => {
+        setSearchBusy(false)
+        if (status !== 'OK' || !results?.[0]?.geometry?.location) {
+          setSearchError('No matching place found. Try a clearer address.')
+          return
+        }
+        const loc = results[0].geometry.location
+        const viewport = (results[0].geometry as { viewport?: GBounds }).viewport
+        goToLocation(gmaps, map, loc.lat(), loc.lng(), viewport)
+      },
+    )
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -58,18 +142,38 @@ export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
         fullscreenControl: false,
       })
       mapRef.current = map
-      gmaps.event.addListener(map, 'click', (e) => {
+      gmaps.event.addListener(map, 'click', ((e: { latLng?: GLatLng }) => {
         if (!e.latLng) return
         const next = [...pointsRef.current, { lat: e.latLng.lat(), lng: e.latLng.lng() }]
         onChangeRef.current(next)
-      })
+      }) as (...args: never[]) => void)
       draw(gmaps, map, pointsRef.current)
+
+      const input = searchRef.current
+      if (input && gmaps.places?.Autocomplete) {
+        const autocomplete = new gmaps.places.Autocomplete(input, {
+          fields: ['geometry', 'name', 'formatted_address'],
+          componentRestrictions: { country: 'ph' },
+        })
+        autocomplete.addListener('place_changed', () => {
+          const place = autocomplete.getPlace()
+          const loc = place.geometry?.location
+          if (!loc) {
+            setSearchError('Could not locate that place.')
+            return
+          }
+          setSearchError('')
+          goToLocation(gmaps, map, loc.lat(), loc.lng(), place.geometry?.viewport)
+        })
+      }
     }
     void boot().catch(() => {})
     return () => {
       cancelled = true
       markersRef.current.forEach((m) => m.setMap(null))
       markersRef.current = []
+      searchMarkerRef.current?.setMap(null)
+      searchMarkerRef.current = null
       polygonRef.current?.setMap(null)
       polygonRef.current = null
       mapRef.current = null
@@ -117,12 +221,53 @@ export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
     }
   }
 
+  function onSearchSubmit(e: FormEvent) {
+    e.preventDefault()
+    const map = mapRef.current
+    const gmaps = gmapsRef.current
+    if (!map || !gmaps) {
+      setSearchError('Map is still loading.')
+      return
+    }
+    geocodeQuery(gmaps, map, searchRef.current?.value ?? '')
+  }
+
   return (
     <div>
+      <form
+        onSubmit={onSearchSubmit}
+        style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}
+      >
+        <input
+          ref={searchRef}
+          type="search"
+          defaultValue=""
+          onChange={() => {
+            if (searchError) setSearchError('')
+          }}
+          placeholder="Search place or address (e.g. Port of Calapan)"
+          style={{
+            flex: 1,
+            minWidth: 220,
+            margin: 0,
+            padding: '10px 12px',
+            borderRadius: 10,
+            border: '1px solid var(--line)',
+            background: 'var(--panel, #fff)',
+            color: 'inherit',
+            font: 'inherit',
+          }}
+          aria-label="Search map location"
+        />
+        <button className="btn tiny" type="submit" disabled={searchBusy}>
+          {searchBusy ? 'Searching…' : 'Go'}
+        </button>
+      </form>
+      {searchError ? <p className="error" style={{ marginTop: 0 }}>{searchError}</p> : null}
       <div ref={host} style={{ width: '100%', height, borderRadius: 14, border: '1px solid var(--line)' }} />
       <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <p className="muted" style={{ margin: 0, flex: 1 }}>
-          Click the map to add polygon points ({points.length} point{points.length === 1 ? '' : 's'}). Need at least 3.
+          Search to jump to an area, then click the map to add polygon points ({points.length} point{points.length === 1 ? '' : 's'}). Need at least 3.
         </p>
         <button className="btn tiny" type="button" disabled={points.length === 0} onClick={() => onChange(points.slice(0, -1))}>
           Undo point

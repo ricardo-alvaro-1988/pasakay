@@ -397,6 +397,7 @@ input:-webkit-autofill:focus {
 
 .search, .ac { position: relative; z-index: 1; }
 .search:focus-within, .ac:focus-within { z-index: 30; }
+.pac-container { z-index: 10000 !important; }
 .search input, .top .ac input, .toolbar .ac input {
   border-radius: 999px;
   padding-left: 18px;
