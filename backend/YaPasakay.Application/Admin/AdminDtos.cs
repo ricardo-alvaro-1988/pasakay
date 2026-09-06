@@ -818,13 +818,16 @@ public record OperatorCashInBankItem(
     string AccountName,
     string AccountNumber,
     string? QrUrl,
-    int SortOrder);
+    int SortOrder,
+    bool IsActive);
 
 public record OperatorCashInDestinationsResponse(
     string GCashNumber,
     string? GCashQrUrl,
+    bool GCashIsActive,
     string MayaNumber,
     string? MayaQrUrl,
+    bool MayaIsActive,
     IReadOnlyList<OperatorCashInBankItem> Banks);
 
 public static class UploadUrls

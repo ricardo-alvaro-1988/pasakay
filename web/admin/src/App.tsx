@@ -1625,6 +1625,8 @@ function OperatorCashInSettings() {
   const [data, setData] = useState<OperatorCashInDestinations | null>(null)
   const [gCashNumber, setGCashNumber] = useState('')
   const [mayaNumber, setMayaNumber] = useState('')
+  const [gCashIsActive, setGCashIsActive] = useState(true)
+  const [mayaIsActive, setMayaIsActive] = useState(true)
   const [gCashQr, setGCashQr] = useState<File | null>(null)
   const [mayaQr, setMayaQr] = useState<File | null>(null)
   const [clearGCashQr, setClearGCashQr] = useState(false)
@@ -1632,11 +1634,13 @@ function OperatorCashInSettings() {
   const [bankName, setBankName] = useState('')
   const [accountName, setAccountName] = useState('')
   const [accountNumber, setAccountNumber] = useState('')
+  const [bankIsActive, setBankIsActive] = useState(true)
   const [bankQr, setBankQr] = useState<File | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editBankName, setEditBankName] = useState('')
   const [editAccountName, setEditAccountName] = useState('')
   const [editAccountNumber, setEditAccountNumber] = useState('')
+  const [editBankIsActive, setEditBankIsActive] = useState(true)
   const [editBankQr, setEditBankQr] = useState<File | null>(null)
   const [clearEditQr, setClearEditQr] = useState(false)
   const [error, setError] = useState('')
@@ -1647,6 +1651,8 @@ function OperatorCashInSettings() {
     setData(next)
     setGCashNumber(next.gCashNumber ?? '')
     setMayaNumber(next.mayaNumber ?? '')
+    setGCashIsActive(next.gCashIsActive !== false)
+    setMayaIsActive(next.mayaIsActive !== false)
   }
 
   useEffect(() => {
@@ -1667,6 +1673,8 @@ function OperatorCashInSettings() {
       const body = new FormData()
       body.append('gCashNumber', gCashNumber.trim())
       body.append('mayaNumber', mayaNumber.trim())
+      body.append('gCashIsActive', gCashIsActive ? 'true' : 'false')
+      body.append('mayaIsActive', mayaIsActive ? 'true' : 'false')
       if (clearGCashQr) body.append('clearGCashQr', 'true')
       if (clearMayaQr) body.append('clearMayaQr', 'true')
       if (gCashQr) body.append('gCashQr', gCashQr)
@@ -1676,7 +1684,7 @@ function OperatorCashInSettings() {
       setMayaQr(null)
       setClearGCashQr(false)
       setClearMayaQr(false)
-      setNotice('GCash and Maya cash-in details saved. Riders will see these when cashing in.')
+      setNotice('GCash and Maya cash-in details saved. Only Active methods appear for riders.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save e-wallet details.')
     } finally {
@@ -1694,11 +1702,13 @@ function OperatorCashInSettings() {
       body.append('bankName', bankName.trim())
       body.append('accountName', accountName.trim())
       body.append('accountNumber', accountNumber.trim())
+      body.append('isActive', bankIsActive ? 'true' : 'false')
       if (bankQr) body.append('qr', bankQr)
       apply(await api.addOperatorCashInBank(body))
       setBankName('')
       setAccountName('')
       setAccountNumber('')
+      setBankIsActive(true)
       setBankQr(null)
       setNotice('Bank account added for rider cash-in.')
     } catch (err) {
@@ -1713,6 +1723,7 @@ function OperatorCashInSettings() {
     setEditBankName(row.bankName)
     setEditAccountName(row.accountName)
     setEditAccountNumber(row.accountNumber)
+    setEditBankIsActive(row.isActive !== false)
     setEditBankQr(null)
     setClearEditQr(false)
   }
@@ -1728,6 +1739,7 @@ function OperatorCashInSettings() {
       body.append('bankName', editBankName.trim())
       body.append('accountName', editAccountName.trim())
       body.append('accountNumber', editAccountNumber.trim())
+      body.append('isActive', editBankIsActive ? 'true' : 'false')
       if (clearEditQr) body.append('clearQr', 'true')
       if (editBankQr) body.append('qr', editBankQr)
       apply(await api.updateOperatorCashInBank(editingId, body))
@@ -1735,6 +1747,25 @@ function OperatorCashInSettings() {
       setNotice('Bank account updated.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not update bank account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function setBankActive(row: OperatorCashInBank, nextActive: boolean) {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const body = new FormData()
+      body.append('bankName', row.bankName)
+      body.append('accountName', row.accountName)
+      body.append('accountNumber', row.accountNumber)
+      body.append('isActive', nextActive ? 'true' : 'false')
+      apply(await api.updateOperatorCashInBank(row.id, body))
+      setNotice(nextActive ? 'Bank set to Active — riders can see it.' : 'Bank set to Inactive — hidden from riders.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update bank status.')
     } finally {
       setBusy(false)
     }
@@ -1761,7 +1792,7 @@ function OperatorCashInSettings() {
       <div className="panel-head">
         <div>
           <h2 style={{ margin: 0 }}>Cash-in QR &amp; accounts</h2>
-          <p className="muted">Riders see these details when they cash in via GCash, Maya, or bank transfer.</p>
+          <p className="muted">Riders only see methods marked Active. Inactive stays saved here but is hidden in the rider app.</p>
         </div>
       </div>
       {error ? <p className="error">{error}</p> : null}
@@ -1774,6 +1805,13 @@ function OperatorCashInSettings() {
               <label className="field">
                 <span>GCash number</span>
                 <input value={gCashNumber} onChange={(e) => setGCashNumber(e.target.value)} placeholder="09XXXXXXXXX" />
+              </label>
+              <label className="field">
+                <span>Status</span>
+                <select value={gCashIsActive ? 'active' : 'inactive'} onChange={(e) => setGCashIsActive(e.target.value === 'active')}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
               </label>
               <label className="field">
                 <span>GCash QR</span>
@@ -1793,6 +1831,13 @@ function OperatorCashInSettings() {
                 <input value={mayaNumber} onChange={(e) => setMayaNumber(e.target.value)} placeholder="09XXXXXXXXX" />
               </label>
               <label className="field">
+                <span>Status</span>
+                <select value={mayaIsActive ? 'active' : 'inactive'} onChange={(e) => setMayaIsActive(e.target.value === 'active')}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
+              <label className="field">
                 <span>Maya QR</span>
                 <input type="file" accept="image/*" onChange={(e) => { setMayaQr(e.target.files?.[0] ?? null); setClearMayaQr(false) }} />
               </label>
@@ -1809,7 +1854,7 @@ function OperatorCashInSettings() {
           </form>
 
           <h3 style={{ marginTop: 28 }}>Custom bank accounts</h3>
-          <p className="muted" style={{ marginTop: 0 }}>Add one or more bank transfer options for riders.</p>
+          <p className="muted" style={{ marginTop: 0 }}>Add one or more bank transfer options for riders. Inactive banks are hidden from riders.</p>
           {data.banks.length === 0 ? <p className="muted">No bank accounts yet.</p> : (
             <div className="table-wrap" style={{ marginBottom: 16 }}>
               <table>
@@ -1818,6 +1863,7 @@ function OperatorCashInSettings() {
                     <th>Bank</th>
                     <th>Account name</th>
                     <th>Account no.</th>
+                    <th>Status</th>
                     <th>QR</th>
                     <th />
                   </tr>
@@ -1828,9 +1874,22 @@ function OperatorCashInSettings() {
                       <td><strong>{row.bankName}</strong></td>
                       <td>{row.accountName}</td>
                       <td>{row.accountNumber}</td>
+                      <td>
+                        <span className={row.isActive !== false ? 'ok' : 'muted'}>
+                          {row.isActive !== false ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
                       <td>{row.qrUrl ? <PhotoThumb src={row.qrUrl} alt={`${row.bankName} QR`} /> : '—'}</td>
                       <td>
-                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                          <button
+                            className="btn tiny"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void setBankActive(row, row.isActive === false)}
+                          >
+                            {row.isActive !== false ? 'Set inactive' : 'Set active'}
+                          </button>
                           <button className="btn tiny" type="button" onClick={() => startEdit(row)}>Edit</button>
                           <button className="btn tiny danger" type="button" disabled={busy} onClick={() => void removeBank(row.id)}>Remove</button>
                         </div>
@@ -1849,6 +1908,13 @@ function OperatorCashInSettings() {
                 <label className="field"><span>Bank name</span><input value={editBankName} onChange={(e) => setEditBankName(e.target.value)} required /></label>
                 <label className="field"><span>Account name</span><input value={editAccountName} onChange={(e) => setEditAccountName(e.target.value)} required /></label>
                 <label className="field"><span>Account number</span><input value={editAccountNumber} onChange={(e) => setEditAccountNumber(e.target.value)} required /></label>
+                <label className="field">
+                  <span>Status</span>
+                  <select value={editBankIsActive ? 'active' : 'inactive'} onChange={(e) => setEditBankIsActive(e.target.value === 'active')}>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </label>
                 <label className="field">
                   <span>Bank QR</span>
                   <input type="file" accept="image/*" onChange={(e) => { setEditBankQr(e.target.files?.[0] ?? null); setClearEditQr(false) }} />
@@ -1873,6 +1939,13 @@ function OperatorCashInSettings() {
               <label className="field"><span>Bank name</span><input value={bankName} onChange={(e) => setBankName(e.target.value)} required /></label>
               <label className="field"><span>Account name</span><input value={accountName} onChange={(e) => setAccountName(e.target.value)} required /></label>
               <label className="field"><span>Account number</span><input value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} required /></label>
+              <label className="field">
+                <span>Status</span>
+                <select value={bankIsActive ? 'active' : 'inactive'} onChange={(e) => setBankIsActive(e.target.value === 'active')}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
               <label className="field">
                 <span>Bank QR</span>
                 <input type="file" accept="image/*" onChange={(e) => setBankQr(e.target.files?.[0] ?? null)} />

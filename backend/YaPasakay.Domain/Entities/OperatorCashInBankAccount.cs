@@ -11,4 +11,5 @@ public class OperatorCashInBankAccount : BaseEntity
     public string AccountNumber { get; set; } = string.Empty;
     public string? QrImagePath { get; set; }
     public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
 }

@@ -23,8 +23,10 @@ public class Operator : BaseEntity
     public BookingDispatchMode BookingDispatchMode { get; set; } = BookingDispatchMode.Broadcast;
     public string GCashNumber { get; set; } = string.Empty;
     public string? GCashQrPath { get; set; }
+    public bool GCashIsActive { get; set; } = true;
     public string MayaNumber { get; set; } = string.Empty;
     public string? MayaQrPath { get; set; }
+    public bool MayaIsActive { get; set; } = true;
     public ICollection<AppUser> Users { get; set; } = new List<AppUser>();
     public ICollection<RiderProfile> Riders { get; set; } = new List<RiderProfile>();
     public ICollection<OperatorBarangay> Areas { get; set; } = new List<OperatorBarangay>();

@@ -317,13 +317,16 @@ export type OperatorCashInBank = {
   accountNumber: string
   qrUrl: string | null
   sortOrder: number
+  isActive: boolean
 }
 
 export type OperatorCashInDestinations = {
   gCashNumber: string
   gCashQrUrl: string | null
+  gCashIsActive: boolean
   mayaNumber: string
   mayaQrUrl: string | null
+  mayaIsActive: boolean
   banks: OperatorCashInBank[]
 }
 

@@ -361,6 +361,16 @@ public class OperatorWalletController(AppDbContext db, RiderWalletService wallet
 
         op.GCashNumber = (form.GCashNumber ?? string.Empty).Trim();
         op.MayaNumber = (form.MayaNumber ?? string.Empty).Trim();
+        if (form.GCashIsActive.HasValue)
+        {
+            op.GCashIsActive = form.GCashIsActive.Value;
+        }
+
+        if (form.MayaIsActive.HasValue)
+        {
+            op.MayaIsActive = form.MayaIsActive.Value;
+        }
+
         if (op.GCashNumber.Length > 40 || op.MayaNumber.Length > 40)
         {
             return BadRequest(new { message = "GCash and Maya numbers must be 40 characters or less." });
@@ -428,6 +438,7 @@ public class OperatorWalletController(AppDbContext db, RiderWalletService wallet
             AccountName = parsed.AccountName!,
             AccountNumber = parsed.AccountNumber!,
             SortOrder = maxOrder + 1,
+            IsActive = form.IsActive ?? true,
         };
 
         try
@@ -477,6 +488,11 @@ public class OperatorWalletController(AppDbContext db, RiderWalletService wallet
         row.BankName = parsed.BankName!;
         row.AccountName = parsed.AccountName!;
         row.AccountNumber = parsed.AccountNumber!;
+        if (form.IsActive.HasValue)
+        {
+            row.IsActive = form.IsActive.Value;
+        }
+
         row.UpdatedAtUtc = DateTime.UtcNow;
 
         try
@@ -536,15 +552,18 @@ public class OperatorWalletController(AppDbContext db, RiderWalletService wallet
         return new OperatorCashInDestinationsResponse(
             op.GCashNumber,
             UploadUrls.FromPath(op.GCashQrPath),
+            op.GCashIsActive,
             op.MayaNumber,
             UploadUrls.FromPath(op.MayaQrPath),
+            op.MayaIsActive,
             banks.Select(x => new OperatorCashInBankItem(
                 x.Id,
                 x.BankName,
                 x.AccountName,
                 x.AccountNumber,
                 UploadUrls.FromPath(x.QrImagePath),
-                x.SortOrder)).ToList());
+                x.SortOrder,
+                x.IsActive)).ToList());
     }
 
     private static (string? BankName, string? AccountName, string? AccountNumber, string? Error) ParseBank(

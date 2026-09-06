@@ -84,23 +84,32 @@ public class RiderWalletController(AppDbContext db, RiderWalletService wallets) 
         }
 
         var banks = await db.OperatorCashInBankAccounts
-            .Where(x => x.OperatorId == op.Id)
+            .Where(x => x.OperatorId == op.Id && x.IsActive)
             .OrderBy(x => x.SortOrder)
             .ThenBy(x => x.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
+        // Inactive e-wallets are omitted from rider UI (empty number/QR).
+        var gCashNumber = op.GCashIsActive ? op.GCashNumber : string.Empty;
+        var gCashQr = op.GCashIsActive ? UploadUrls.FromPath(op.GCashQrPath) : null;
+        var mayaNumber = op.MayaIsActive ? op.MayaNumber : string.Empty;
+        var mayaQr = op.MayaIsActive ? UploadUrls.FromPath(op.MayaQrPath) : null;
+
         return Ok(new OperatorCashInDestinationsResponse(
-            op.GCashNumber,
-            UploadUrls.FromPath(op.GCashQrPath),
-            op.MayaNumber,
-            UploadUrls.FromPath(op.MayaQrPath),
+            gCashNumber,
+            gCashQr,
+            op.GCashIsActive,
+            mayaNumber,
+            mayaQr,
+            op.MayaIsActive,
             banks.Select(x => new OperatorCashInBankItem(
                 x.Id,
                 x.BankName,
                 x.AccountName,
                 x.AccountNumber,
                 UploadUrls.FromPath(x.QrImagePath),
-                x.SortOrder)).ToList()));
+                x.SortOrder,
+                x.IsActive)).ToList()));
     }
 
     private async Task<RiderWalletResponse> BuildSummaryAsync(

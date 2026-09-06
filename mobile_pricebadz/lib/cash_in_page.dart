@@ -147,16 +147,18 @@ class _CashInPageState extends State<CashInPage> {
                         selected: _selection == 'Cash',
                         onTap: () => setState(() => _selection = 'Cash'),
                       ),
-                      _MethodChip(
-                        label: 'GCash',
-                        selected: _selection == 'GCash',
-                        onTap: () => setState(() => _selection = 'GCash'),
-                      ),
-                      _MethodChip(
-                        label: 'Maya',
-                        selected: _selection == 'Maya',
-                        onTap: () => setState(() => _selection = 'Maya'),
-                      ),
+                      if (_destinations?.hasGCash ?? false)
+                        _MethodChip(
+                          label: 'GCash',
+                          selected: _selection == 'GCash',
+                          onTap: () => setState(() => _selection = 'GCash'),
+                        ),
+                      if (_destinations?.hasMaya ?? false)
+                        _MethodChip(
+                          label: 'Maya',
+                          selected: _selection == 'Maya',
+                          onTap: () => setState(() => _selection = 'Maya'),
+                        ),
                       ...?_destinations?.banks.map(
                         (bank) => _MethodChip(
                           label: bank.bankName,

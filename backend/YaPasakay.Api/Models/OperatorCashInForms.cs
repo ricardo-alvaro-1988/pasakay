@@ -5,9 +5,11 @@ public class OperatorEwalletCashInForm
     public string? GCashNumber { get; set; }
     public IFormFile? GCashQr { get; set; }
     public bool ClearGCashQr { get; set; }
+    public bool? GCashIsActive { get; set; }
     public string? MayaNumber { get; set; }
     public IFormFile? MayaQr { get; set; }
     public bool ClearMayaQr { get; set; }
+    public bool? MayaIsActive { get; set; }
 }
 
 public class OperatorBankCashInForm
@@ -17,4 +19,5 @@ public class OperatorBankCashInForm
     public string AccountNumber { get; set; } = string.Empty;
     public IFormFile? Qr { get; set; }
     public bool ClearQr { get; set; }
+    public bool? IsActive { get; set; }
 }
