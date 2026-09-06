@@ -10,7 +10,8 @@ namespace YaPasakay.Api.Services;
 public class TripBroadcastService(AppDbContext db, LiveNotify live)
 {
     public const decimal MinWalletToReceive = 100m;
-    public const double RadiusKm = 8;
+    /// <summary>Broadcast radius for nearby online riders (km).</summary>
+    public const double RadiusKm = 5;
     public const int MaxRiders = 20;
     public const string DirectHailNote = "Direct hail";
     public const string CustomerPickNote = "Customer selected rider";
@@ -50,6 +51,12 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             return;
         }
 
+        // Broadcast must NOT treat the provisional Trip.RiderId as preferred — that caused
+        // only the pre-picked phone to get the job while other nearby riders were skipped.
+        // Customer-pick keeps a single preferred rider.
+        var customerPick = IsCustomerPick(trip.Notes);
+        Guid? preferredRiderId = customerPick ? trip.RiderId : null;
+
         var ranked = await RankEligibleRidersAsync(
             trip.OperatorId,
             trip.VehicleType,
@@ -57,8 +64,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.PickupLat,
             trip.PickupLng,
             trip.PickupBarangayId,
-            preferredRiderId: trip.RiderId,
-            includePreferredEvenIfIneligible: true,
+            preferredRiderId,
+            includePreferredEvenIfIneligible: customerPick,
             cancellationToken);
 
         var existing = await db.TripOffers
@@ -70,7 +77,7 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             ? now.Add(ScheduledOfferTtl)
             : now.Add(LiveOfferTtl);
 
-        var chosen = IsCustomerPick(trip.Notes)
+        var chosen = customerPick
             ? ranked.Where(x => x.Rider.Id == trip.RiderId).Take(1).ToList()
             : ranked.Take(MaxRiders).ToList();
 
@@ -108,6 +115,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
                     offer.DistanceKm = Math.Round((decimal)liveKm, 2);
                 }
 
+                // Still ping so every nearby rider gets the broadcast (SignalR / push).
+                notifyRiderIds.Add(rider.Id);
                 continue;
             }
 
@@ -196,6 +205,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             }
 
             var distance = Geo.DistanceKm(rider.LastLat, rider.LastLng, pickupLat, pickupLng);
+            // Prefer known nearby riders; still include online riders with no GPS so they
+            // are not silently dropped from broadcast.
             if (!preferred
                 && pickupLat is not null
                 && pickupLng is not null
