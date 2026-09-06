@@ -1208,6 +1208,11 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             : null;
 
         var fare = await OperatorMaps.LoadFareMatrixAsync(db, trip, cancellationToken);
+        DeriveFareMatrix? derive = null;
+        if (trip.DeriveFareZoneId is Guid zoneId)
+        {
+            derive = await OperatorMaps.LoadDeriveFareMatrixAsync(db, zoneId, trip.VehicleType, cancellationToken);
+        }
 
         return new RideDetailResponse(
             trip.Id,
@@ -1248,7 +1253,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 .OrderBy(x => x.SentAtUtc)
                 .Select(TripChatService.Map)
                 .ToList(),
-            RideCommissionCalculator.ForTrip(trip, fare),
+            RideCommissionCalculator.ForTrip(trip, fare, derive),
             trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,
             trip.PromoDiscountAmount,
             trip.IsPromoSponsored,

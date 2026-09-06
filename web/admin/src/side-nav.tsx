@@ -241,6 +241,7 @@ export const OPERATOR_MENU_GROUPS: SideNavGroup[] = [
     label: 'Rates',
     items: [
       { id: 'fares', label: 'Fare matrix', icon: '₱' },
+      { id: 'derive-fares', label: 'Derive fare', icon: '◎' },
       { id: 'surcharges', label: 'Surcharges', icon: '+' },
     ],
   },

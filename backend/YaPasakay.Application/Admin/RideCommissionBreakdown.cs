@@ -13,10 +13,10 @@ public record RideCommissionBreakdown(
 
 public static class RideCommissionCalculator
 {
-    public static RideCommissionBreakdown? ForTrip(Trip trip, FareMatrix? fareMatrix) =>
-        ForTrip(trip, trip.Operator, fareMatrix);
+    public static RideCommissionBreakdown? ForTrip(Trip trip, FareMatrix? fareMatrix, DeriveFareMatrix? deriveMatrix = null) =>
+        ForTrip(trip, trip.Operator, fareMatrix, deriveMatrix);
 
-    public static RideCommissionBreakdown? ForTrip(Trip trip, Operator op, FareMatrix? fareMatrix)
+    public static RideCommissionBreakdown? ForTrip(Trip trip, Operator op, FareMatrix? fareMatrix, DeriveFareMatrix? deriveMatrix = null)
     {
         if (trip.Status == TripStatus.Cancelled || trip.Fare <= 0)
         {
@@ -26,7 +26,12 @@ public static class RideCommissionCalculator
         var systemPercent = FareCommissionSplit.SystemPercent(op, trip.VehicleType);
         decimal operatorPercent;
         decimal driverPercent;
-        if (fareMatrix is not null)
+        if (deriveMatrix is not null)
+        {
+            operatorPercent = deriveMatrix.OperatorCommissionPercent;
+            driverPercent = deriveMatrix.DriverCommissionPercent;
+        }
+        else if (fareMatrix is not null)
         {
             operatorPercent = fareMatrix.OperatorCommissionPercent;
             driverPercent = fareMatrix.DriverCommissionPercent;
@@ -51,9 +56,10 @@ public static class RideCommissionCalculator
     public static (decimal Amount, decimal RemitPercent)? WalletDeduction(
         Trip trip,
         Operator op,
-        FareMatrix? fareMatrix)
+        FareMatrix? fareMatrix,
+        DeriveFareMatrix? deriveMatrix = null)
     {
-        var breakdown = ForTrip(trip, op, fareMatrix);
+        var breakdown = ForTrip(trip, op, fareMatrix, deriveMatrix);
         if (breakdown is null)
         {
             return null;

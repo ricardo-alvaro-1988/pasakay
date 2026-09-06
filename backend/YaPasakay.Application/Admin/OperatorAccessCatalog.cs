@@ -12,6 +12,7 @@ public static class OperatorAccessCatalog
         new("customers", "Customers"),
         new("fleet", "Fleet"),
         new("fares", "Fare matrix"),
+        new("derive-fares", "Derive fare"),
         new("surcharges", "Surcharges"),
         new("support", "Support"),
         new("inbox", "Inbox"),

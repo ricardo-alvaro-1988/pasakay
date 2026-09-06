@@ -869,6 +869,52 @@ public record SaveOperatorPromoRequest(
 
 public record OperatorPromoListResponse(IReadOnlyList<OperatorPromoItem> Items);
 
+public record DeriveFareLatLng(double Lat, double Lng);
+
+public record DeriveFareZoneListItem(
+    Guid Id,
+    string Name,
+    decimal MaxDropoffKm,
+    bool IsActive,
+    int Priority,
+    int PointCount,
+    DateTime CreatedAtUtc);
+
+public record DeriveFareRatesItem(
+    VehicleType VehicleType,
+    decimal BaseFare,
+    decimal PerKm,
+    decimal MinimumFare,
+    decimal IncludedKm,
+    decimal OperatorCommissionPercent,
+    decimal DriverCommissionPercent,
+    bool IsActive,
+    IReadOnlyList<FarePassengerTierItem> PassengerTiers,
+    IReadOnlyList<FareSampleItem> Samples);
+
+public record DeriveFareZoneDetailResponse(
+    Guid Id,
+    string Name,
+    decimal MaxDropoffKm,
+    bool IsActive,
+    int Priority,
+    IReadOnlyList<DeriveFareLatLng> Polygon,
+    decimal MotorcycleCommissionPercent,
+    decimal TricycleCommissionPercent,
+    DeriveFareRatesItem? Motorcycle,
+    DeriveFareRatesItem? Tricycle);
+
+public record SaveDeriveFareZoneRequest(
+    string Name,
+    decimal MaxDropoffKm,
+    bool IsActive,
+    int Priority,
+    IReadOnlyList<DeriveFareLatLng> Polygon,
+    FareVehicleRatesBody Motorcycle,
+    FareVehicleRatesBody Tricycle);
+
+public record DeriveFareZoneListResponse(IReadOnlyList<DeriveFareZoneListItem> Items);
+
 public static class UploadUrls
 {
     public static string? FromPath(string? relativePath) =>

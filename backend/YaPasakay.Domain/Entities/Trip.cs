@@ -38,6 +38,8 @@ public class Trip : BaseEntity
     public Guid? PromoId { get; set; }
     public OperatorPromo? Promo { get; set; }
     public int? DiscountPercent { get; set; }
+    public Guid? DeriveFareZoneId { get; set; }
+    public DeriveFareZone? DeriveFareZone { get; set; }
     public decimal DistanceKm { get; set; }
     public int PassengerCount { get; set; } = 1;
     public DateTime RequestedAtUtc { get; set; }

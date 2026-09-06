@@ -68,7 +68,7 @@ function loadGoogleMaps(key: string) {
       return
     }
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=drawing,geometry`
     script.async = true
     script.defer = true
     script.dataset.ypGoogleMaps = '1'

@@ -20,7 +20,8 @@ public class CustomerBookingsController(
     LiveNotify live,
     GoogleDrivingDistance driving,
     UploadStore uploads,
-    OperatorPromoService promos) : ControllerBase
+    OperatorPromoService promos,
+    DeriveFarePricingService deriveFares) : ControllerBase
 {
 
     [HttpGet("desk")]
@@ -453,6 +454,7 @@ public class CustomerBookingsController(
             IsPromoSponsored = prepared.PromoApplied,
             PromoId = prepared.PromoId,
             DiscountPercent = prepared.DiscountPercent,
+            DeriveFareZoneId = prepared.DeriveFareZoneId,
             DistanceKm = prepared.DistanceKm,
             PassengerCount = prepared.PassengerCount,
             PaymentMethod = body.PaymentMethod,
@@ -660,18 +662,36 @@ public class CustomerBookingsController(
         var passengers = vehicle == VehicleType.Motorcycle
             ? 1
             : Math.Clamp(request.PassengerCount, 1, 4);
+
         var fareRow = await OperatorMaps.LoadFareMatrixAsync(
             db,
             op.Id,
             vehicle,
             pickup.MunicipalityId,
             cancellationToken);
-        if (fareRow is null)
+
+        Guid? deriveZoneId = null;
+        decimal fare;
+        var derive = await deriveFares.ResolveAsync(op.Id, vehicle, pickupLat, pickupLng, distance, cancellationToken);
+        if (derive.Error is not null)
         {
-            return new PreparedBooking { Error = "No fare matrix for this municipality. Ask the operator to set rates for this city." };
+            return new PreparedBooking { Error = derive.Error };
         }
 
-        var fare = FareQuote.ComputeForPassengers(fareRow, passengers, distance);
+        if (derive.Zone is not null && derive.Matrix is not null)
+        {
+            deriveZoneId = derive.Zone.Id;
+            fare = DeriveFarePricingService.ComputeWithSharedSurcharges(derive.Matrix, fareRow, passengers, distance);
+        }
+        else
+        {
+            if (fareRow is null)
+            {
+                return new PreparedBooking { Error = "No fare matrix for this municipality. Ask the operator to set rates for this city." };
+            }
+
+            fare = DeriveFarePricingService.ComputeMunicipalityWithSurcharges(fareRow, passengers, distance);
+        }
 
         OperatorPromo? promo = null;
         var customerFare = fare;
@@ -734,6 +754,7 @@ public class CustomerBookingsController(
             PromoId = promo?.Id,
             DiscountPercent = promo?.DiscountPercent,
             PromoDisplayCode = promo is not null ? OperatorPromoRules.DisplayCode(promo.DiscountPercent) : null,
+            DeriveFareZoneId = deriveZoneId,
             PassengerCount = passengers,
             EtaMinutes = eta,
             VehicleType = vehicle
@@ -888,6 +909,7 @@ public class CustomerBookingsController(
         public Guid? PromoId { get; set; }
         public int? DiscountPercent { get; set; }
         public string? PromoDisplayCode { get; set; }
+        public Guid? DeriveFareZoneId { get; set; }
         public int PassengerCount { get; set; } = 1;
         public int EtaMinutes { get; set; }
         public VehicleType VehicleType { get; set; }

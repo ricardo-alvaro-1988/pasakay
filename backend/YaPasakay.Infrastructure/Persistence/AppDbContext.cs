@@ -38,6 +38,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<OperatorCashInBankAccount> OperatorCashInBankAccounts => Set<OperatorCashInBankAccount>();
     public DbSet<OperatorPromo> OperatorPromos => Set<OperatorPromo>();
     public DbSet<PromoRedemption> PromoRedemptions => Set<PromoRedemption>();
+    public DbSet<DeriveFareZone> DeriveFareZones => Set<DeriveFareZone>();
+    public DbSet<DeriveFareMatrix> DeriveFareMatrices => Set<DeriveFareMatrix>();
+    public DbSet<DeriveFarePassengerTier> DeriveFarePassengerTiers => Set<DeriveFarePassengerTier>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -265,6 +268,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.Promo)
                 .WithMany()
                 .HasForeignKey(x => x.PromoId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.DeriveFareZone)
+                .WithMany()
+                .HasForeignKey(x => x.DeriveFareZoneId)
                 .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.PickupBarangay)
                 .WithMany()
@@ -565,6 +572,46 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(x => x.TripId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DeriveFareZone>(entity =>
+        {
+            entity.HasIndex(x => new { x.OperatorId, x.Name });
+            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.MaxDropoffKm).HasColumnType("decimal(8,2)");
+            entity.Property(x => x.PolygonJson).HasColumnType("nvarchar(max)").IsRequired();
+            entity.HasOne(x => x.Operator)
+                .WithMany(x => x.DeriveFareZones)
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DeriveFareMatrix>(entity =>
+        {
+            entity.HasIndex(x => new { x.DeriveFareZoneId, x.VehicleType }).IsUnique();
+            entity.Property(x => x.BaseFare).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.PerKm).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.MinimumFare).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.IncludedKm).HasColumnType("decimal(6,2)");
+            entity.Property(x => x.OperatorCommissionPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.DriverCommissionPercent).HasColumnType("decimal(5,2)");
+            entity.HasOne(x => x.Zone)
+                .WithMany(x => x.Matrices)
+                .HasForeignKey(x => x.DeriveFareZoneId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DeriveFarePassengerTier>(entity =>
+        {
+            entity.HasIndex(x => new { x.DeriveFareMatrixId, x.PassengerCount }).IsUnique();
+            entity.Property(x => x.BaseFare).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.PerKm).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.MinimumFare).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.IncludedKm).HasColumnType("decimal(6,2)");
+            entity.HasOne(x => x.Matrix)
+                .WithMany(x => x.PassengerTiers)
+                .HasForeignKey(x => x.DeriveFareMatrixId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

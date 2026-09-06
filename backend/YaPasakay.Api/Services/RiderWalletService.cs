@@ -213,9 +213,15 @@ public class RiderWalletService(AppDbContext db)
         }
 
         var fareMatrix = await OperatorMaps.LoadFareMatrixAsync(db, trip, cancellationToken);
+        DeriveFareMatrix? deriveMatrix = null;
+        if (trip.DeriveFareZoneId is Guid zoneId)
+        {
+            deriveMatrix = await OperatorMaps.LoadDeriveFareMatrixAsync(db, zoneId, trip.VehicleType, cancellationToken);
+        }
+
         var op = trip.Operator
             ?? await db.Operators.FirstAsync(x => x.Id == trip.OperatorId, cancellationToken);
-        var deduction = RideCommissionCalculator.WalletDeduction(trip, op, fareMatrix);
+        var deduction = RideCommissionCalculator.WalletDeduction(trip, op, fareMatrix, deriveMatrix);
         if (deduction is null)
         {
             return (null, null);

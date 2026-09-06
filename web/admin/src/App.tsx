@@ -39,6 +39,10 @@ import {
   TerritoryListItem,
   OperatorFareMatrix,
   OperatorFareListItem,
+  DeriveFareZoneDetail,
+  DeriveFareZoneListItem,
+  DeriveFareRates,
+  DeriveFareLatLng,
   BillingOperator,
   BillingOperatorDetail,
   OperatorBill,
@@ -113,6 +117,7 @@ import {
 import logoCircle from './asset/logo-circle.png'
 import FleetMap from './FleetMap'
 import TripLiveMap from './TripLiveMap'
+import { DeriveZoneMap } from './DeriveZoneMap'
 import {
   ADMIN_MENU_GROUPS,
   OPERATOR_MENU_GROUPS,
@@ -7064,6 +7069,7 @@ function OperatorShell({
         {page === 'customers' && <OperatorCustomersPage />}
         {page === 'fleet' && <OperatorFleetPage theme={theme} />}
         {page === 'fares' && <OperatorFaresPage />}
+        {page === 'derive-fares' && <OperatorDeriveFaresPage />}
         {page === 'surcharges' && <OperatorSurchargesPage />}
         {page === 'support' && <OperatorSupportPage />}
         {page === 'inbox' && (
@@ -9374,6 +9380,335 @@ function OperatorRiderDetail({ riderId, onBack, onEdit }: { riderId: string; onB
         onOpenRide={setRideId}
         commissionView="rider"
       />
+    </div>
+  )
+}
+
+function deriveRatesAsFare(rates: DeriveFareRates | null): FareRates | null {
+  if (!rates) return null
+  return {
+    vehicleType: rates.vehicleType,
+    municipalityId: '',
+    municipalityName: '',
+    baseFare: rates.baseFare,
+    perKm: rates.perKm,
+    minimumFare: rates.minimumFare,
+    includedKm: rates.includedKm,
+    operatorCommissionPercent: rates.operatorCommissionPercent,
+    driverCommissionPercent: rates.driverCommissionPercent,
+    isActive: rates.isActive,
+    passengerTiers: rates.passengerTiers,
+    surcharges: [],
+    samples: rates.samples,
+  }
+}
+
+function OperatorDeriveFaresPage() {
+  const [items, setItems] = useState<DeriveFareZoneListItem[] | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [name, setName] = useState('')
+  const [maxDropoffKm, setMaxDropoffKm] = useState('10')
+  const [priority, setPriority] = useState('0')
+  const [isActive, setIsActive] = useState(true)
+  const [polygon, setPolygon] = useState<DeriveFareLatLng[]>([])
+  const [motorcycle, setMotorcycle] = useState<FareDraft>(fareDraft(null, 10, true))
+  const [tricycle, setTricycle] = useState<FareDraft>(fareDraft(null, 5, false))
+  const [linked, setLinked] = useState(true)
+  const [systemMc, setSystemMc] = useState(10)
+  const [systemTrike, setSystemTrike] = useState(5)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const matrixStub: OperatorFareMatrix = {
+    operatorId: '',
+    operatorName: '',
+    operatorActive: true,
+    motorcycleCommissionPercent: systemMc,
+    tricycleCommissionPercent: systemTrike,
+    municipalityId: null,
+    municipalityName: null,
+    municipalities: [],
+    motorcycle: null,
+    tricycle: null,
+  }
+
+  async function refreshList() {
+    const res = await api.deriveFareZones()
+    setItems(res.items)
+  }
+
+  useEffect(() => {
+    refreshList().catch((err: Error) => setError(err.message))
+  }, [])
+
+  function resetEditor(detail?: DeriveFareZoneDetail | null) {
+    if (!detail) {
+      setName('')
+      setMaxDropoffKm('10')
+      setPriority('0')
+      setIsActive(true)
+      setPolygon([])
+      setMotorcycle(fareDraft(null, systemMc, true))
+      setTricycle(fareDraft(null, systemTrike, false))
+      setLinked(true)
+      return
+    }
+    setName(detail.name)
+    setMaxDropoffKm(String(detail.maxDropoffKm))
+    setPriority(String(detail.priority))
+    setIsActive(detail.isActive)
+    setPolygon(detail.polygon ?? [])
+    setSystemMc(detail.motorcycleCommissionPercent)
+    setSystemTrike(detail.tricycleCommissionPercent)
+    const mc = fareDraft(deriveRatesAsFare(detail.motorcycle), detail.motorcycleCommissionPercent, true)
+    const trike = fareDraft(deriveRatesAsFare(detail.tricycle), detail.tricycleCommissionPercent, false)
+    setMotorcycle(mc)
+    setTricycle(trike)
+    setLinked(sameDraft(mc, trike) || !detail.tricycle)
+  }
+
+  async function openCreate() {
+    setError('')
+    setNotice('')
+    setEditingId(null)
+    setCreating(true)
+    try {
+      const fares = await api.opFares()
+      setSystemMc(fares.motorcycleCommissionPercent)
+      setSystemTrike(fares.tricycleCommissionPercent)
+      resetEditor(null)
+      setMotorcycle(fareDraft(null, fares.motorcycleCommissionPercent, true))
+      setTricycle(fareDraft(null, fares.tricycleCommissionPercent, false))
+    } catch {
+      resetEditor(null)
+    }
+  }
+
+  async function openEdit(id: string) {
+    setError('')
+    setNotice('')
+    setBusy(true)
+    try {
+      const detail = await api.deriveFareZone(id)
+      setEditingId(id)
+      setCreating(false)
+      resetEditor(detail)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load zone.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function closeEditor() {
+    setCreating(false)
+    setEditingId(null)
+    setError('')
+  }
+
+  function applyCommission(current: FareDraft, system: number, patch: Partial<FareDraft>): FareDraft {
+    const next = { ...current, ...patch }
+    if (patch.operatorCommissionPercent != null && patch.driverCommissionPercent == null) {
+      next.driverCommissionPercent = remainderPercent(system, next.operatorCommissionPercent)
+    }
+    if (patch.driverCommissionPercent != null && patch.operatorCommissionPercent == null) {
+      next.operatorCommissionPercent = remainderPercent(system, next.driverCommissionPercent)
+    }
+    return next
+  }
+
+  function changeRates(vehicle: VehicleType, patch: Partial<FareDraft>) {
+    const commissionPatch = patch.operatorCommissionPercent != null || patch.driverCommissionPercent != null
+    if (linked && !commissionPatch) {
+      setMotorcycle((current) => ({ ...current, ...patch }))
+      setTricycle((current) => ({ ...current, ...patch }))
+      return
+    }
+    if (vehicle === 'Motorcycle') {
+      setMotorcycle((current) => applyCommission(current, systemMc, patch))
+    } else {
+      setTricycle((current) => applyCommission(current, systemTrike, patch))
+    }
+  }
+
+  async function save() {
+    const maxKm = Number(maxDropoffKm)
+    if (!name.trim()) {
+      setError('Name is required.')
+      return
+    }
+    if (!Number.isFinite(maxKm) || maxKm <= 0) {
+      setError('Max drop-off km must be greater than zero.')
+      return
+    }
+    if (polygon.length < 3) {
+      setError('Draw a polygon with at least 3 points.')
+      return
+    }
+    const trikeDraft = linked
+      ? { ...motorcycle, operatorCommissionPercent: tricycle.operatorCommissionPercent, driverCommissionPercent: tricycle.driverCommissionPercent }
+      : tricycle
+    if (commissionSum(systemMc, motorcycle) !== 100 || commissionSum(systemTrike, trikeDraft) !== 100) {
+      setError('System, operator, and driver commission must add up to 100% for each vehicle.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      const body = {
+        name: name.trim(),
+        maxDropoffKm: maxKm,
+        isActive,
+        priority: Math.floor(Number(priority) || 0),
+        polygon,
+        motorcycle: parseDraft(motorcycle, true),
+        tricycle: parseDraft(trikeDraft, false),
+      }
+      const saved = editingId
+        ? await api.updateDeriveFareZone(editingId, body)
+        : await api.createDeriveFareZone(body)
+      await refreshList()
+      setNotice(`${saved.name} saved.`)
+      closeEditor()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save derive fare zone.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function toggle(item: DeriveFareZoneListItem) {
+    try {
+      await api.toggleDeriveFareZone(item.id)
+      await refreshList()
+      setNotice(`${item.name} is now ${item.isActive ? 'inactive' : 'active'}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not toggle zone.')
+    }
+  }
+
+  async function remove(item: DeriveFareZoneListItem) {
+    if (!window.confirm(`Delete ${item.name}?`)) return
+    try {
+      await api.deleteDeriveFareZone(item.id)
+      await refreshList()
+      setNotice(`${item.name} deleted.`)
+      if (editingId === item.id) closeEditor()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete zone.')
+    }
+  }
+
+  if (creating || editingId) {
+    return (
+      <div className="card">
+        <div className="toolbar">
+          <div>
+            <button className="btn tiny" type="button" onClick={closeEditor}>Back to list</button>
+            <h2 style={{ marginTop: 12 }}>{editingId ? 'Edit derive fare' : 'Add derive fare'}</h2>
+            <p className="muted" style={{ margin: '6px 0 0', maxWidth: 560 }}>
+              Name the zone, draw its polygon, set max drop-off km, then set rates (same layout as Fare matrix).
+              Surcharges come from Rates → Surcharges for the pickup municipality.
+            </p>
+          </div>
+        </div>
+        {error ? <p className="error">{error}</p> : null}
+        <div className="form-grid" style={{ marginBottom: 16 }}>
+          <label className="field wide">
+            <span>Name</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Port Of Calapan City Mindoro" />
+          </label>
+          <label className="field">
+            <span>Max drop-off km</span>
+            <input type="number" min={0.1} step={0.1} value={maxDropoffKm} onChange={(e) => setMaxDropoffKm(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Priority</span>
+            <input type="number" value={priority} onChange={(e) => setPriority(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Status</span>
+            <select value={isActive ? 'active' : 'inactive'} onChange={(e) => setIsActive(e.target.value === 'active')}>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </label>
+        </div>
+        <h3 style={{ marginTop: 0 }}>Zone polygon</h3>
+        <DeriveZoneMap points={polygon} onChange={setPolygon} />
+        <h3>Fare rates</h3>
+        <RelatedFareRatesTable
+          data={{ ...matrixStub, motorcycleCommissionPercent: systemMc, tricycleCommissionPercent: systemTrike }}
+          motorcycle={motorcycle}
+          tricycle={tricycle}
+          linked={linked}
+          onLinked={setLinked}
+          onChange={changeRates}
+        />
+        <div className="modal-actions">
+          <button className="btn" type="button" disabled={busy} onClick={() => void save()}>
+            {busy ? 'Saving…' : editingId ? 'Save changes' : 'Create zone'}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!items) return error ? <p className="error">{error}</p> : <p>Loading derive fares…</p>
+
+  return (
+    <div className="card">
+      <div className="toolbar">
+        <div>
+          <h2 style={{ margin: 0 }}>Derive fare</h2>
+          <p className="muted" style={{ margin: '6px 0 0', maxWidth: 560 }}>
+            Special fare zones by map polygon. Pickup inside a zone uses these rates (plus shared surcharges). Outside zones use the municipality Fare matrix.
+          </p>
+        </div>
+        <button className="btn" type="button" style={{ width: 'auto', whiteSpace: 'nowrap' }} onClick={() => void openCreate()}>
+          Add zone
+        </button>
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      {notice ? <p className="ok">{notice}</p> : null}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Max km</th>
+              <th>Points</th>
+              <th>Priority</th>
+              <th>Status</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 ? (
+              <tr><td colSpan={6}>No derive fare zones yet.</td></tr>
+            ) : items.map((item) => (
+              <tr key={item.id}>
+                <td><strong>{item.name}</strong></td>
+                <td>{item.maxDropoffKm}</td>
+                <td>{item.pointCount}</td>
+                <td>{item.priority}</td>
+                <td><span className={`tag ${item.isActive ? 'active' : 'rejected'}`}>{item.isActive ? 'Active' : 'Inactive'}</span></td>
+                <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                  <button className="btn tiny" type="button" onClick={() => void openEdit(item.id)}>Edit</button>
+                  {' '}
+                  <button className={`btn tiny${item.isActive ? ' danger' : ''}`} type="button" onClick={() => void toggle(item)}>
+                    {item.isActive ? 'Deactivate' : 'Activate'}
+                  </button>
+                  {' '}
+                  <button className="btn tiny danger" type="button" onClick={() => void remove(item)}>Delete</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

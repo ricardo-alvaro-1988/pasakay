@@ -9,6 +9,7 @@ export type PageId =
   | 'customers'
   | 'territories'
   | 'fares'
+  | 'derive-fares'
   | 'surcharges'
   | 'billing'
   | 'commission'
@@ -601,6 +602,72 @@ export type FareRates = {
   passengerTiers: FarePassengerTier[]
   surcharges: FareSurcharge[]
   samples: FareSample[]
+}
+
+export type DeriveFareLatLng = { lat: number; lng: number }
+
+export type DeriveFareZoneListItem = {
+  id: string
+  name: string
+  maxDropoffKm: number
+  isActive: boolean
+  priority: number
+  pointCount: number
+  createdAtUtc: string
+}
+
+export type DeriveFareRates = {
+  vehicleType: VehicleType
+  baseFare: number
+  perKm: number
+  minimumFare: number
+  includedKm: number
+  operatorCommissionPercent: number
+  driverCommissionPercent: number
+  isActive: boolean
+  passengerTiers: FarePassengerTier[]
+  samples: FareSample[]
+}
+
+export type DeriveFareZoneDetail = {
+  id: string
+  name: string
+  maxDropoffKm: number
+  isActive: boolean
+  priority: number
+  polygon: DeriveFareLatLng[]
+  motorcycleCommissionPercent: number
+  tricycleCommissionPercent: number
+  motorcycle: DeriveFareRates | null
+  tricycle: DeriveFareRates | null
+}
+
+export type SaveDeriveFareZoneBody = {
+  name: string
+  maxDropoffKm: number
+  isActive: boolean
+  priority: number
+  polygon: DeriveFareLatLng[]
+  motorcycle: {
+    baseFare: number
+    perKm: number
+    minimumFare: number
+    includedKm: number
+    operatorCommissionPercent: number
+    driverCommissionPercent: number
+    isActive: boolean
+    passengerTiers: FarePassengerTier[]
+  }
+  tricycle: {
+    baseFare: number
+    perKm: number
+    minimumFare: number
+    includedKm: number
+    operatorCommissionPercent: number
+    driverCommissionPercent: number
+    isActive: boolean
+    passengerTiers: FarePassengerTier[]
+  }
 }
 
 export type FleetDuty = 'available' | 'pending' | 'waiting' | 'ongoing' | 'offline'
@@ -1642,6 +1709,16 @@ export const api = {
       passengerTiers: FarePassengerTier[]
     }
   }) => request<OperatorFareMatrix>('/api/operator/fares/matrix', { method: 'PUT', body: JSON.stringify(body) }),
+  deriveFareZones: () => request<{ items: DeriveFareZoneListItem[] }>('/api/operator/derive-fares'),
+  deriveFareZone: (id: string) => request<DeriveFareZoneDetail>(`/api/operator/derive-fares/${id}`),
+  createDeriveFareZone: (body: SaveDeriveFareZoneBody) =>
+    request<DeriveFareZoneDetail>('/api/operator/derive-fares', { method: 'POST', body: JSON.stringify(body) }),
+  updateDeriveFareZone: (id: string, body: SaveDeriveFareZoneBody) =>
+    request<DeriveFareZoneDetail>(`/api/operator/derive-fares/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  toggleDeriveFareZone: (id: string) =>
+    request<DeriveFareZoneDetail>(`/api/operator/derive-fares/${id}/toggle`, { method: 'POST' }),
+  deleteDeriveFareZone: (id: string) =>
+    request<void>(`/api/operator/derive-fares/${id}`, { method: 'DELETE' }),
   addOperatorSurcharges: (body: {
     municipalityId: string
     vehicleTypes: VehicleType[]

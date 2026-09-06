@@ -296,7 +296,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
             throw new InvalidOperationException("No fare matrix for this municipality.");
         }
 
-        return FareQuote.ComputeForPassengers(fare, passengerCount, distanceKm <= 0 ? 4 : distanceKm);
+        return DeriveFarePricingService.ComputeMunicipalityWithSurcharges(fare, passengerCount, distanceKm <= 0 ? 4 : distanceKm);
     }
 
     private static (DateTime Start, DateTime EndExclusive) ResolveBoardWindow(DateOnly? from, DateOnly? to)

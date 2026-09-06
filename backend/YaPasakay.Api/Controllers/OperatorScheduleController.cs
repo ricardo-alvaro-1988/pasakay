@@ -246,7 +246,7 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
             return null;
         }
 
-        return FareQuote.ComputeForPassengers(fare, passengerCount, distanceKm);
+        return DeriveFarePricingService.ComputeMunicipalityWithSurcharges(fare, passengerCount, distanceKm);
     }
 
     private static ScheduledBookingItem Map(Trip trip) =>

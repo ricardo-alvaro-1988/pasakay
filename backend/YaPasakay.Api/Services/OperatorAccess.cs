@@ -108,6 +108,11 @@ public static class OperatorAccess
             return "commission";
         }
 
+        if (value.StartsWith("/api/operator/derive-fares"))
+        {
+            return "derive-fares";
+        }
+
         if (value.StartsWith("/api/operator/fares"))
         {
             return value.Contains("/surcharge", StringComparison.Ordinal) ? "surcharges" : "fares";

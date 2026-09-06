@@ -96,7 +96,7 @@ public static class OperatorMaps
         return name.Length > 0 ? name : customer.AppUser.FullName;
     }
 
-    public static RideDetailResponse RideDetail(Trip trip, FareMatrix? fareMatrix = null)
+    public static RideDetailResponse RideDetail(Trip trip, FareMatrix? fareMatrix = null, DeriveFareMatrix? deriveMatrix = null)
     {
         var rider = trip.Rider;
         DateTime? ended = trip.Status switch
@@ -149,7 +149,7 @@ public static class OperatorMaps
                 .OrderBy(x => x.SentAtUtc)
                 .Select(TripChatService.Map)
                 .ToList(),
-            RideCommissionCalculator.ForTrip(trip, fareMatrix),
+            RideCommissionCalculator.ForTrip(trip, fareMatrix, deriveMatrix),
             trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,
             trip.PromoDiscountAmount,
             trip.IsPromoSponsored,
@@ -165,7 +165,13 @@ public static class OperatorMaps
         CancellationToken cancellationToken)
     {
         var fare = await LoadFareMatrixAsync(db, trip, cancellationToken);
-        return RideDetail(trip, fare);
+        DeriveFareMatrix? derive = null;
+        if (trip.DeriveFareZoneId is Guid zoneId)
+        {
+            derive = await LoadDeriveFareMatrixAsync(db, zoneId, trip.VehicleType, cancellationToken);
+        }
+
+        return RideDetail(trip, fare, derive);
     }
 
     public static async Task<FareMatrix?> LoadFareMatrixAsync(
@@ -180,6 +186,7 @@ public static class OperatorMaps
         }
 
         return await db.FareMatrices
+            .Include(x => x.Surcharges)
             .FirstOrDefaultAsync(
                 x => x.OperatorId == trip.OperatorId
                     && x.VehicleType == trip.VehicleType
@@ -196,10 +203,24 @@ public static class OperatorMaps
         CancellationToken cancellationToken) =>
         await db.FareMatrices
             .Include(x => x.PassengerTiers)
+            .Include(x => x.Surcharges)
             .FirstOrDefaultAsync(
                 x => x.OperatorId == operatorId
                     && x.VehicleType == vehicleType
                     && x.MunicipalityId == municipalityId
+                    && x.IsActive,
+                cancellationToken);
+
+    public static async Task<DeriveFareMatrix?> LoadDeriveFareMatrixAsync(
+        AppDbContext db,
+        Guid zoneId,
+        VehicleType vehicleType,
+        CancellationToken cancellationToken) =>
+        await db.DeriveFareMatrices
+            .Include(x => x.PassengerTiers)
+            .FirstOrDefaultAsync(
+                x => x.DeriveFareZoneId == zoneId
+                    && x.VehicleType == vehicleType
                     && x.IsActive,
                 cancellationToken);
 
