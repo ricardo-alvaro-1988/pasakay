@@ -100,7 +100,7 @@ import {
 import { readSidebarCollapsed, readTheme, setSidebarCollapsed, setTheme, Theme } from './theme'
 import { useOpsAlerts } from './use-ops-alerts'
 import { SOS_ALERT_EVENT, type OpsAlert } from './ops-hub'
-import { stopSosAlarm } from './sos-alert'
+import { playSosAlarm, stopSosAlarm, unlockSosAudio } from './sos-alert'
 import logoCircle from './asset/logo-circle.png'
 import FleetMap from './FleetMap'
 import TripLiveMap from './TripLiveMap'
@@ -399,6 +399,7 @@ function SosBanner({
           </p>
         </div>
         <div className="sos-alert-actions">
+          <button className="btn tiny" type="button" onClick={() => { unlockSosAudio(); playSosAlarm() }}>Test / restart alarm</button>
           <button className="btn tiny" type="button" onClick={stopSosAlarm}>Stop alarm</button>
           {onOpenSupport ? (
             <button className="btn tiny" type="button" onClick={onOpenSupport}>Open Support</button>

@@ -26,8 +26,8 @@ export function useOpsAlerts(onRefresh: () => void) {
   refreshRef.current = onRefresh
 
   useEffect(() => {
-    unlockSosAudio()
     bindSosAudioUnlock()
+    unlockSosAudio()
 
     const connection = createOpsConnection((payload: OpsAlert) => {
       if (payload.reason === 'sos') {
