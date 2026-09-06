@@ -10,8 +10,10 @@ namespace YaPasakay.Api.Services;
 public class TripBroadcastService(AppDbContext db, LiveNotify live)
 {
     public const decimal MinWalletToReceive = 100m;
-    /// <summary>Broadcast radius for nearby online riders (km).</summary>
-    public const double RadiusKm = 5;
+    /// <summary>Default broadcast radius when operator has not set one (km).</summary>
+    public const double DefaultBroadcastRadiusKm = 5;
+    public const double MinBroadcastRadiusKm = 1;
+    public const double MaxBroadcastRadiusKm = 50;
     public const int MaxRiders = 20;
     public const string DirectHailNote = "Direct hail";
     public const string CustomerPickNote = "Customer selected rider";
@@ -57,6 +59,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         var customerPick = IsCustomerPick(trip.Notes);
         Guid? preferredRiderId = customerPick ? trip.RiderId : null;
 
+        var radiusKm = await ResolveBroadcastRadiusKmAsync(trip.OperatorId, cancellationToken);
+
         var ranked = await RankEligibleRidersAsync(
             trip.OperatorId,
             trip.VehicleType,
@@ -66,7 +70,9 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.PickupBarangayId,
             preferredRiderId,
             includePreferredEvenIfIneligible: customerPick,
-            cancellationToken);
+            cancellationToken,
+            enforceRadius: true,
+            radiusKm: radiusKm);
 
         var existing = await db.TripOffers
             .Where(x => x.TripId == trip.Id)
@@ -147,8 +153,11 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         Guid? preferredRiderId,
         bool includePreferredEvenIfIneligible,
         CancellationToken cancellationToken,
-        bool enforceRadius = true)
+        bool enforceRadius = true,
+        double? radiusKm = null)
     {
+        var effectiveRadius = ClampRadius(radiusKm ?? await ResolveBroadcastRadiusKmAsync(operatorId, cancellationToken));
+
         var outsideCoverage = await OperatorAreaSync.CoverageErrorAsync(
                 db,
                 operatorId,
@@ -212,7 +221,7 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
                 && pickupLng is not null
                 && distance is double km
                 && enforceRadius
-                && km > RadiusKm)
+                && km > effectiveRadius)
             {
                 continue;
             }
@@ -450,5 +459,22 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             .Select(x => x.HailRiderId!.Value)
             .ToListAsync(cancellationToken);
         return ids.ToHashSet();
+    }
+
+    public static double ClampRadius(double km) =>
+        Math.Clamp(km, MinBroadcastRadiusKm, MaxBroadcastRadiusKm);
+
+    async Task<double> ResolveBroadcastRadiusKmAsync(Guid operatorId, CancellationToken cancellationToken)
+    {
+        var stored = await db.Operators.AsNoTracking()
+            .Where(x => x.Id == operatorId)
+            .Select(x => (double?)x.BroadcastRadiusKm)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (stored is null or <= 0)
+        {
+            return DefaultBroadcastRadiusKm;
+        }
+
+        return ClampRadius(stored.Value);
     }
 }

@@ -209,6 +209,7 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             loaded.MotorcycleCommissionPercent,
             loaded.TricycleCommissionPercent,
             loaded.BookingDispatchMode,
+            loaded.BroadcastRadiusKm,
             riders.Count,
             loaded.Riders.Count(x => x.VehicleType == VehicleType.Motorcycle),
             loaded.Riders.Count(x => x.VehicleType == VehicleType.Tricycle),
@@ -234,6 +235,16 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             and not BookingDispatchMode.Both)
         {
             return BadRequest(new { message = "Choose Broadcast, Selection, or Both." });
+        }
+
+        if (request.BroadcastRadiusKm is double radius)
+        {
+            if (radius is < 1 or > 50)
+            {
+                return BadRequest(new { message = "Broadcast radius must be between 1 and 50 km." });
+            }
+
+            op.BroadcastRadiusKm = Math.Round(radius, 1);
         }
 
         op.BookingDispatchMode = request.BookingDispatchMode;

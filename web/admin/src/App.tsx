@@ -10030,10 +10030,16 @@ function OperatorCompanyPage() {
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [broadcastRadiusKm, setBroadcastRadiusKm] = useState('5')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    api.operatorCompany().then(setData).catch((err: Error) => setError(err.message))
+    api.operatorCompany()
+      .then((next) => {
+        setData(next)
+        setBroadcastRadiusKm(String(next.broadcastRadiusKm ?? 5))
+      })
+      .catch((err: Error) => setError(err.message))
   }, [])
 
   async function changePassword(e: FormEvent) {
@@ -10067,10 +10073,37 @@ function OperatorCompanyPage() {
     setError('')
     setNotice('')
     try {
-      setData(await api.saveOperatorDispatchMode(mode))
+      const radius = Number(broadcastRadiusKm)
+      const next = await api.saveOperatorDispatchMode(mode, Number.isFinite(radius) ? radius : undefined)
+      setData(next)
+      setBroadcastRadiusKm(String(next.broadcastRadiusKm ?? 5))
       setNotice(`Booking dispatch set to ${mode}.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save dispatch mode.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveBroadcastRadius(e: FormEvent) {
+    e.preventDefault()
+    if (!data) return
+    const radius = Number(broadcastRadiusKm)
+    if (!Number.isFinite(radius) || radius < 1 || radius > 50) {
+      setError('Broadcast radius must be between 1 and 50 km.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const mode = data.bookingDispatchMode ?? 'Broadcast'
+      const next = await api.saveOperatorDispatchMode(mode, radius)
+      setData(next)
+      setBroadcastRadiusKm(String(next.broadcastRadiusKm ?? 5))
+      setNotice(`Broadcast radius set to ${next.broadcastRadiusKm ?? radius} km.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save broadcast radius.')
     } finally {
       setBusy(false)
     }
@@ -10097,6 +10130,8 @@ function OperatorCompanyPage() {
         {data.governmentIdPhotoUrl ? <img className="id-preview" src={data.governmentIdPhotoUrl} alt="Government ID" /> : null}
       </div>
       <p className="muted">Company profile, areas, and commission are set by Super Admin. You can choose how customer bookings find a rider.</p>
+      {error ? <p className="error">{error}</p> : null}
+      {notice ? <p className="ok">{notice}</p> : null}
       <div className="detail-grid">
         <DetailItem label="Government ID" value={`${data.governmentIdType} · ${data.governmentId}`} />
         <DetailItem label="Area of operation" value={data.areaOfOperation} />
@@ -10124,6 +10159,24 @@ function OperatorCompanyPage() {
           </button>
         ))}
       </div>
+      <form onSubmit={saveBroadcastRadius} style={{ marginBottom: 20, maxWidth: 320 }}>
+        <label className="field">
+          <span>Broadcast radius (km)</span>
+          <input
+            type="number"
+            min={1}
+            max={50}
+            step={0.5}
+            value={broadcastRadiusKm}
+            onChange={(e) => setBroadcastRadiusKm(e.target.value)}
+            disabled={busy}
+          />
+        </label>
+        <p className="muted" style={{ margin: '6px 0 10px' }}>
+          Only online riders within this distance of pickup get broadcast offers (1–50 km). Current: {data.broadcastRadiusKm ?? 5} km.
+        </p>
+        <button className="btn tiny" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save radius'}</button>
+      </form>
       <h3>Service areas</h3>
       {data.areas.length === 0 ? <p>No barangays assigned.</p> : (
         <AreaGroups areas={data.areas} />

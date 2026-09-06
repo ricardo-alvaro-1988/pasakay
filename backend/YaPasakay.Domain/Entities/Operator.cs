@@ -21,6 +21,8 @@ public class Operator : BaseEntity
     public decimal MotorcycleCommissionPercent { get; set; } = 10;
     public decimal TricycleCommissionPercent { get; set; } = 5;
     public BookingDispatchMode BookingDispatchMode { get; set; } = BookingDispatchMode.Broadcast;
+    /// <summary>Max distance (km) for broadcast offers to nearby riders.</summary>
+    public double BroadcastRadiusKm { get; set; } = 5;
     public string GCashNumber { get; set; } = string.Empty;
     public string? GCashQrPath { get; set; }
     public bool GCashIsActive { get; set; } = true;

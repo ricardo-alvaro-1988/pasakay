@@ -84,6 +84,7 @@ public record OperatorDetailResponse(
     decimal MotorcycleCommissionPercent,
     decimal TricycleCommissionPercent,
     BookingDispatchMode BookingDispatchMode,
+    double BroadcastRadiusKm,
     int RiderCount,
     int RidersMotorcycle,
     int RidersTricycle,
@@ -92,7 +93,9 @@ public record OperatorDetailResponse(
     IReadOnlyList<OperatorAreaItem> Areas,
     IReadOnlyList<RiderListItem> Riders);
 
-public record SaveBookingDispatchModeRequest(BookingDispatchMode BookingDispatchMode);
+public record SaveBookingDispatchModeRequest(
+    BookingDispatchMode BookingDispatchMode,
+    double? BroadcastRadiusKm = null);
 
 public record RiderListItem(
     Guid Id,
