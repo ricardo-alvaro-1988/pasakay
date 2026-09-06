@@ -260,6 +260,7 @@ public class CustomerBookingsController(
 
         var original = prepared.Fare;
         var customerFare = prepared.CustomerFare;
+        var hasPromos = await promos.HasOfferablePromosAsync(prepared.Operator!.Id, customer.Id, cancellationToken);
         return Ok(new CustomerQuoteResponse(
             customerFare,
             prepared.DistanceKm,
@@ -273,7 +274,8 @@ public class CustomerBookingsController(
             customerFare,
             prepared.PromoApplied,
             prepared.DiscountPercent,
-            prepared.PromoDisplayCode));
+            prepared.PromoDisplayCode,
+            hasPromos));
     }
 
     [HttpPost("service-check")]

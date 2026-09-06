@@ -118,6 +118,7 @@ function TripCard({
   trip: CustomerTrip
   onCancel?: (id: string) => void
 }) {
+  const promo = tripPromoLabel(trip)
   return (
     <article className="card">
       <BookingSummary trip={trip} />
@@ -127,6 +128,15 @@ function TripCard({
           <span>Trip details</span>
           <p>{kmLabel(trip.distanceKm)} · {passengerLabel(trip.passengerCount)} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}</p>
         </div>
+        {promo ? (
+          <div className="booking-meta-row">
+            <span>Promo</span>
+            <p>
+              <span className="tag promo">{promo}</span>
+              {trip.fare > tripPayAmount(trip) ? ` · Was ${peso(trip.fare)}, paid ${peso(tripPayAmount(trip))}` : ''}
+            </p>
+          </div>
+        ) : null}
         {trip.riderName && (
           <div className="booking-meta-row">
             <span>Rider</span>
@@ -201,15 +211,34 @@ function HistoryTripCard({
   )
 }
 
+function tripPayAmount(trip: { fare: number; customerFare?: number }) {
+  if (typeof trip.customerFare === 'number' && trip.customerFare > 0) return trip.customerFare
+  return trip.fare
+}
+
+function tripPromoLabel(trip: {
+  isPromoSponsored?: boolean
+  promoCode?: string | null
+  discountPercent?: number | null
+}) {
+  if (!trip.isPromoSponsored) return null
+  const code = trip.promoCode || (trip.discountPercent != null ? `Save${trip.discountPercent}` : null)
+  if (!code) return 'Promo'
+  return trip.discountPercent != null ? `${code} · ${trip.discountPercent}%` : code
+}
+
 function BookingSummary({ trip, chevron }: { trip: CustomerTrip | CustomerTripDetail; chevron?: boolean }) {
+  const promo = tripPromoLabel(trip)
+  const pay = tripPayAmount(trip)
   return (
     <>
       <div className="card-head">
         <span className="booking-ref">{trip.reference}</span>
-        <b className="price">{peso('customerFare' in trip && typeof trip.customerFare === 'number' && trip.customerFare > 0 ? trip.customerFare : trip.fare)}</b>
+        <b className="price">{peso(pay)}</b>
       </div>
       <div className="booking-summary-meta">
         <span className={`tag ${String(trip.status).toLowerCase()}`}>{tripHeadline(String(trip.status))}</span>
+        {promo ? <span className="tag promo">{promo}</span> : null}
         <span className="booking-when">{trip.scheduledAtUtc ? phWhen(trip.scheduledAtUtc) : phWhen(trip.requestedAtUtc)}</span>
         {chevron ? <span className="history-chevron" aria-hidden="true">›</span> : null}
       </div>
@@ -229,6 +258,8 @@ function BookingRoute({ trip }: { trip: Pick<CustomerTrip, 'pickup' | 'dropoff'>
 }
 
 function BookingDetailBody({ detail }: { detail: CustomerTripDetail }) {
+  const promo = tripPromoLabel(detail)
+  const pay = tripPayAmount(detail)
   return (
     <>
       <BookingRoute trip={detail} />
@@ -237,6 +268,15 @@ function BookingDetailBody({ detail }: { detail: CustomerTripDetail }) {
           <span>Trip details</span>
           <p>{kmLabel(detail.distanceKm)} · {passengerLabel(detail.passengerCount)} · {detail.vehicleType} · {paymentLabel(detail.paymentMethod, detail.paymentMethodOther)}</p>
         </div>
+        {promo ? (
+          <div className="booking-meta-row">
+            <span>Promo</span>
+            <p>
+              <span className="tag promo">{promo}</span>
+              {detail.fare > pay ? ` · Was ${peso(detail.fare)}, paid ${peso(pay)}` : ''}
+            </p>
+          </div>
+        ) : null}
         <div className="booking-meta-row">
           <span>Rider</span>
           <p>{detail.riderName}{detail.plateNumber ? ` · ${detail.plateNumber}` : ''}{detail.riderPhone ? ` · ${detail.riderPhone}` : ''}</p>

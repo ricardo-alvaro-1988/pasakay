@@ -59,7 +59,8 @@ public record CustomerQuoteResponse(
     decimal CustomerFare = 0,
     bool PromoApplied = false,
     int? DiscountPercent = null,
-    string? PromoCode = null);
+    string? PromoCode = null,
+    bool HasActivePromos = false);
 
 public record CustomerServiceCheckRequest(
     Guid? PickupBarangayId,

@@ -1617,6 +1617,11 @@ button.brand-pill:active { transform: scale(.98); }
 .tag.ongoing { background: rgba(122, 162, 255, 0.16); color: #7aa2ff; }
 .tag.completed { background: rgba(139, 227, 74, 0.16); color: #4caf2a; }
 .tag.cancelled { background: var(--accent-soft); color: var(--accent); }
+.tag.promo {
+  background: color-mix(in srgb, #059669 16%, transparent);
+  color: #047857;
+  font-weight: 800;
+}
 .route-mini span {
   display: block;
   color: var(--muted);

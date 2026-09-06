@@ -111,6 +111,36 @@ public class OperatorPromoService(AppDbContext db)
         return null;
     }
 
+    public async Task<bool> HasOfferablePromosAsync(
+        Guid operatorId,
+        Guid? customerId,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var candidates = await db.OperatorPromos
+            .Where(x => x.OperatorId == operatorId && x.IsActive)
+            .Where(x => x.StartsAtUtc == null || x.StartsAtUtc <= now)
+            .Where(x => x.EndsAtUtc == null || x.EndsAtUtc >= now)
+            .Where(x => x.MaxRedemptions == null || x.RedemptionCount < x.MaxRedemptions)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+        if (candidates.Count == 0)
+        {
+            return false;
+        }
+
+        if (customerId is not Guid cid)
+        {
+            return true;
+        }
+
+        var used = await db.PromoRedemptions
+            .Where(x => x.CustomerId == cid && candidates.Contains(x.PromoId))
+            .Select(x => x.PromoId)
+            .ToListAsync(cancellationToken);
+        return candidates.Any(id => !used.Contains(id));
+    }
+
     public async Task RedeemOnCompleteAsync(Trip trip, CancellationToken cancellationToken)
     {
         if (!trip.IsPromoSponsored || trip.PromoId is not Guid promoId || trip.CustomerId is not Guid customerId)

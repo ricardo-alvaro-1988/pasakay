@@ -523,6 +523,11 @@ function Home({
     return () => { ignore = true }
   }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers])
 
+  useEffect(() => {
+    const available = !!(quotes.Motorcycle?.hasActivePromos || quotes.Tricycle?.hasActivePromos)
+    if (!available && promoCode) setPromoCode('')
+  }, [quotes.Motorcycle?.hasActivePromos, quotes.Tricycle?.hasActivePromos, promoCode])
+
   const dispatchMode = quotes[vehicle]?.bookingDispatchMode ?? 'Broadcast'
   const needsRiderPick = !hail && (dispatchMode === 'Selection' || (dispatchMode === 'Both' && dispatchChoice === 'pick'))
 
@@ -788,6 +793,7 @@ function Home({
   const quote = quotes[vehicle]
   const quotePay = quote ? (quote.customerFare ?? quote.fare) : 0
   const quoteOriginal = quote?.originalFare && quote.originalFare > quotePay ? quote.originalFare : null
+  const showPromoField = !!(quotes.Motorcycle?.hasActivePromos || quotes.Tricycle?.hasActivePromos || quote?.hasActivePromos)
   const searchingArea = noOperator.searching
   const canBook = !!pickup && !!dropoff && !quoting && !searchingArea && !noOperator.uncovered && !!quote && quote.riderAvailable !== false && !hail?.isBusy && (payment !== 'Other' || !!paymentRef.trim())
     && (!needsRiderPick || !!selectedRiderId)
@@ -968,24 +974,28 @@ function Home({
                   }}
                   onRefNo={setPaymentRef}
                 />
-                <label className="promo-field">
-                  <span>Promo code</span>
-                  <input
-                    type="text"
-                    inputMode="text"
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder="Save50"
-                    value={promoCode}
-                    onChange={(e) => setPromoCode(e.target.value)}
-                  />
-                </label>
-                {quote?.promoApplied && quote.promoCode ? (
-                  <p className="promo-hint">
-                    {quote.promoCode}
-                    {quote.discountPercent != null ? ` · ${quote.discountPercent}% off` : ' applied'}
-                    {quoteOriginal ? ` · Was ${peso(quoteOriginal)}, you pay ${peso(quotePay)}` : ''}
-                  </p>
+                {showPromoField ? (
+                  <>
+                    <label className="promo-field">
+                      <span>Promo code</span>
+                      <input
+                        type="text"
+                        inputMode="text"
+                        autoComplete="off"
+                        spellCheck={false}
+                        placeholder="Save50"
+                        value={promoCode}
+                        onChange={(e) => setPromoCode(e.target.value)}
+                      />
+                    </label>
+                    {quote?.promoApplied && quote.promoCode ? (
+                      <p className="promo-hint">
+                        {quote.promoCode}
+                        {quote.discountPercent != null ? ` · ${quote.discountPercent}% off` : ' applied'}
+                        {quoteOriginal ? ` · Was ${peso(quoteOriginal)}, you pay ${peso(quotePay)}` : ''}
+                      </p>
+                    ) : null}
+                  </>
                 ) : null}
                 {!hail && dispatchMode === 'Both' && (
                   <div className="dispatch-choice" role="group" aria-label="How to find a rider">

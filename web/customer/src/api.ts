@@ -100,6 +100,7 @@ export type Quote = {
   promoApplied?: boolean
   discountPercent?: number | null
   promoCode?: string | null
+  hasActivePromos?: boolean
 }
 
 export type BookingDispatchMode = 'Broadcast' | 'Selection' | 'Both'
@@ -197,6 +198,11 @@ export type CustomerTripDetail = {
   vehicleModel: string | null
   riderPhotoUrl: string | null
   chat: ChatMessage[]
+  customerFare?: number
+  promoDiscountAmount?: number
+  isPromoSponsored?: boolean
+  discountPercent?: number | null
+  promoCode?: string | null
 }
 
 export function chatFromRider(sender: unknown) {
