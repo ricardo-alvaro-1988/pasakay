@@ -24,12 +24,16 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
     public static readonly TimeSpan LiveOfferTtl = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan ScheduledOfferTtl = TimeSpan.FromHours(2);
 
-    public static bool CanReceiveBookings(decimal balance) => balance >= MinWalletToReceive;
+    /// <summary>Riders need more than ₱100 to receive bookings (₱100 or less is blocked).</summary>
+    public static bool CanReceiveBookings(decimal balance) => balance > MinWalletToReceive;
+
+    public static string WalletBlockedMessage(decimal balance) =>
+        $"Wallet must be above ₱{MinWalletToReceive:0} to receive bookings. Balance: ₱{balance:0.00}.";
 
     public static string WalletHighlight(decimal balance, bool canReceive) =>
         canReceive
-            ? $"Keep at least ₱{MinWalletToReceive:0} in your wallet to receive bookings. Balance: ₱{balance:0.00}."
-            : $"Wallet below ₱{MinWalletToReceive:0}. Cash in to receive bookings. Balance: ₱{balance:0.00}.";
+            ? $"Keep more than ₱{MinWalletToReceive:0} in your wallet to receive bookings. Balance: ₱{balance:0.00}."
+            : WalletBlockedMessage(balance);
 
     public async Task BroadcastAsync(Guid tripId, CancellationToken cancellationToken)
     {
@@ -221,7 +225,10 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
                     .Include(x => x.AppUser)
                     .Include(x => x.Operator)
                     .FirstOrDefaultAsync(x => x.Id == preferredId && x.OperatorId == operatorId, cancellationToken);
-            if (preferredRider is not null && ordered.Count < MaxRiders)
+            // Never bypass the wallet floor — low-balance riders must not receive offers.
+            if (preferredRider is not null
+                && CanReceiveBookings(preferredRider.Wallet?.Balance ?? 0)
+                && ordered.Count < MaxRiders)
             {
                 var distance = Geo.DistanceKm(preferredRider.LastLat, preferredRider.LastLng, pickupLat, pickupLng);
                 ordered.Insert(0, (preferredRider, distance, true));

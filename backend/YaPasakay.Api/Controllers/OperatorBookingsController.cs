@@ -169,6 +169,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
 
         var rider = await db.RiderProfiles
             .Include(x => x.AppUser)
+            .Include(x => x.Wallet)
             .FirstOrDefaultAsync(x => x.Id == request.RiderId && x.OperatorId == op!.Id, cancellationToken);
         if (rider is null || !rider.IsActive || !rider.AppUser.IsActive)
         {
@@ -178,6 +179,12 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         if (rider.Id == trip.RiderId)
         {
             return BadRequest(new { message = "This rider already has the booking." });
+        }
+
+        var balance = rider.Wallet?.Balance ?? 0;
+        if (!TripBroadcastService.CanReceiveBookings(balance))
+        {
+            return BadRequest(new { message = TripBroadcastService.WalletBlockedMessage(balance) });
         }
 
         if (!await RiderPaymentSync.AcceptsAsync(db, rider.Id, trip.PaymentMethod, cancellationToken))

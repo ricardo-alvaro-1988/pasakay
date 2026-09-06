@@ -726,9 +726,14 @@ public class CustomerBookingsController(
             .ToListAsync(cancellationToken);
         var free = riders.Where(x => !busy.Contains(x.Id)).ToList();
         var pool = free.Count > 0 ? free : riders;
-        return pool
+        var funded = pool.Where(x => TripBroadcastService.CanReceiveBookings(x.Wallet?.Balance ?? 0)).ToList();
+        if (funded.Count == 0)
+        {
+            return null;
+        }
+
+        return funded
             .OrderByDescending(x => x.IsOnline)
-            .ThenByDescending(x => TripBroadcastService.CanReceiveBookings(x.Wallet?.Balance ?? 0))
             .ThenBy(x => Geo.DistanceKm(x.LastLat, x.LastLng, pickupLat, pickupLng) ?? double.MaxValue)
             .First();
     }
@@ -759,6 +764,7 @@ public class CustomerBookingsController(
             .Include(x => x.AppUser)
             .Include(x => x.Operator)
             .Include(x => x.PaymentMethods)
+            .Include(x => x.Wallet)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (rider is null || !rider.IsActive || !rider.AppUser.IsActive || rider.Operator is null || !rider.Operator.IsActive)
         {
@@ -777,6 +783,12 @@ public class CustomerBookingsController(
         if (!rider.PaymentMethods.Any(x => x.Method == payment))
         {
             return "This rider does not accept that payment method.";
+        }
+
+        var balance = rider.Wallet?.Balance ?? 0;
+        if (!TripBroadcastService.CanReceiveBookings(balance))
+        {
+            return TripBroadcastService.WalletBlockedMessage(balance);
         }
 
         if (!live)

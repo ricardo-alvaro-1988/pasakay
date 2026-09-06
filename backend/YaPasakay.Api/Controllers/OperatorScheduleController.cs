@@ -103,10 +103,17 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
 
         var rider = await db.RiderProfiles
             .Include(x => x.AppUser)
+            .Include(x => x.Wallet)
             .FirstOrDefaultAsync(x => x.Id == request.RiderId && x.OperatorId == op!.Id, cancellationToken);
         if (rider is null || !rider.IsActive || !rider.AppUser.IsActive)
         {
             return BadRequest(new { message = "Choose an active rider from your fleet." });
+        }
+
+        var balance = rider.Wallet?.Balance ?? 0;
+        if (!TripBroadcastService.CanReceiveBookings(balance))
+        {
+            return BadRequest(new { message = TripBroadcastService.WalletBlockedMessage(balance) });
         }
 
         var pickup = await LoadBarangayAsync(request.PickupBarangayId, cancellationToken);

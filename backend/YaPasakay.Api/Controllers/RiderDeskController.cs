@@ -264,6 +264,12 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
             return BadRequest(new { message = "Finish your current trip first." });
         }
 
+        var balance = rider.Wallet?.Balance ?? 0;
+        if (!TripBroadcastService.CanReceiveBookings(balance))
+        {
+            return BadRequest(new { message = TripBroadcastService.WalletBlockedMessage(balance) });
+        }
+
         var now = DateTime.UtcNow;
         offer.Trip.RiderId = rider.Id;
         offer.Trip.Status = TripStatus.Waiting;

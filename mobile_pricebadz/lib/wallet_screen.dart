@@ -74,7 +74,7 @@ class _WalletScreenState extends State<WalletScreen> {
   Widget build(BuildContext context) {
     final desk = widget.session.desk;
     final balance = _wallet?.balance ?? desk?.walletBalance ?? 0;
-    final low = desk?.walletLow ?? balance < 100;
+    final low = desk?.walletLow ?? balance <= 100;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Wallet')),
@@ -106,7 +106,7 @@ class _WalletScreenState extends State<WalletScreen> {
                     borderWidth: 2,
                     padding: const EdgeInsets.all(14),
                     child: Text(
-                      desk?.walletHighlight ?? 'Keep at least ₱100 in your wallet to receive bookings.',
+                      desk?.walletHighlight ?? 'Keep more than ₱100 in your wallet to receive bookings.',
                       style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
