@@ -2368,7 +2368,7 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.HasOne("YaPasakay.Domain.Entities.DeriveFareZone", "DeriveFareZone")
                         .WithMany()
                         .HasForeignKey("DeriveFareZoneId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("YaPasakay.Domain.Entities.Barangay", "DropoffBarangay")
                         .WithMany()

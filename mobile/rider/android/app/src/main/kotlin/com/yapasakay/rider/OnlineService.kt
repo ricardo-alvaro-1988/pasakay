@@ -14,7 +14,9 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -29,8 +31,13 @@ class OnlineService : Service() {
         const val ACTION_STOP_RING = "stop_ring"
         const val ACTION_CHAT = "chat"
         private const val ONLINE_CHANNEL = "yp_online"
-        private const val OFFER_CHANNEL = "yp_job_offers_v3"
+        /** Bumped so soft vibration settings apply on devices that already had older channels. */
+        private const val OFFER_CHANNEL = "yp_job_offers_v4"
         private const val CHAT_CHANNEL = "yp_chat"
+        /** Soft double-tap; no long continuous buzz. */
+        private val OFFER_VIBE_TIMINGS = longArrayOf(0, 90, 70, 120)
+        private val OFFER_VIBE_AMPS = intArrayOf(0, 110, 0, 150)
+        private const val OFFER_PULSE_MS = 2800L
         private const val ONLINE_ID = 1001
         private const val OFFER_ID = 1002
         private const val CHAT_ID = 1003
@@ -118,10 +125,10 @@ class OnlineService : Service() {
                     .build()
                 nm.createNotificationChannel(
                     NotificationChannel(OFFER_CHANNEL, "Job offers", NotificationManager.IMPORTANCE_HIGH).apply {
-                        description = "Rings when a new booking is waiting."
+                        description = "Alerts when a new booking is waiting."
                         setSound(sound, attrs)
-                        enableVibration(true)
-                        vibrationPattern = longArrayOf(0, 600, 200, 600, 200, 600)
+                        // Vibration is driven by softPulse() so it stays smooth (not a continuous rattle).
+                        enableVibration(false)
                         lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     },
                 )
@@ -154,6 +161,15 @@ class OnlineService : Service() {
 
     private var player: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var ringing = false
+    private val pulseHandler = Handler(Looper.getMainLooper())
+    private val pulseRunnable = object : Runnable {
+        override fun run() {
+            if (!ringing) return
+            softPulse()
+            pulseHandler.postDelayed(this, OFFER_PULSE_MS)
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -253,7 +269,12 @@ class OnlineService : Service() {
         try {
             acquireWake()
             playAlarm()
-            vibrate()
+            if (!ringing) {
+                ringing = true
+                softPulse()
+                pulseHandler.removeCallbacks(pulseRunnable)
+                pulseHandler.postDelayed(pulseRunnable, OFFER_PULSE_MS)
+            }
             val open = openAppIntent()
             val notification = NotificationCompat.Builder(this, OFFER_CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_notify)
@@ -292,6 +313,8 @@ class OnlineService : Service() {
     }
 
     private fun stopRingInternal() {
+        ringing = false
+        pulseHandler.removeCallbacks(pulseRunnable)
         try {
             player?.stop()
         } catch (_: Throwable) {
@@ -332,7 +355,7 @@ class OnlineService : Service() {
             )
             next.setDataSource(this, Uri.parse("android.resource://$packageName/${R.raw.offer_alarm}"))
             next.isLooping = true
-            next.setVolume(1f, 1f)
+            next.setVolume(0.9f, 0.9f)
             next.prepare()
             next.start()
             player = next
@@ -345,15 +368,17 @@ class OnlineService : Service() {
         }
     }
 
-    private fun vibrate() {
+    /** Short soft double-tap once — never an infinite rattle loop. */
+    private fun softPulse() {
         try {
-            val pattern = longArrayOf(0, 700, 300, 700, 300, 700)
             val vibe = vibrator() ?: return
             if (Build.VERSION.SDK_INT >= 26) {
-                vibe.vibrate(VibrationEffect.createWaveform(pattern, 0))
+                vibe.vibrate(
+                    VibrationEffect.createWaveform(OFFER_VIBE_TIMINGS, OFFER_VIBE_AMPS, -1),
+                )
             } else {
                 @Suppress("DEPRECATION")
-                vibe.vibrate(pattern, 0)
+                vibe.vibrate(OFFER_VIBE_TIMINGS, -1)
             }
         } catch (_: Throwable) {
         }

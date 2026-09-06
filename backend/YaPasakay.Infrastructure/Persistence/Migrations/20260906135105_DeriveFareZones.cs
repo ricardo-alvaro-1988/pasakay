@@ -123,7 +123,7 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                 column: "DeriveFareZoneId",
                 principalTable: "DeriveFareZones",
                 principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
+                onDelete: ReferentialAction.Restrict);
         }
 
         /// <inheritdoc />

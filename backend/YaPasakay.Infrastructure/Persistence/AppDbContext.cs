@@ -272,7 +272,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.DeriveFareZone)
                 .WithMany()
                 .HasForeignKey(x => x.DeriveFareZoneId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.PickupBarangay)
                 .WithMany()
                 .HasForeignKey(x => x.PickupBarangayId)

@@ -27,6 +27,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _waitingOnHail = false;
   bool _sosBusy = false;
+  bool _offerSheetOpen = false;
 
   @override
   void initState() {
@@ -66,7 +67,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _waitingOnHail = false;
     }
     final offer = widget.session.takeIncomingOffer();
-    if (offer != null) {
+    if (offer != null && !_offerSheetOpen) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _showOffer(offer);
@@ -143,20 +144,25 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _showOffer(JobOffer offer) async {
+    if (_offerSheetOpen || !mounted) {
+      return;
+    }
+    _offerSheetOpen = true;
     final session = widget.session;
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: brandCanvas,
-      showDragHandle: true,
-      builder: (context) {
-        final bottom = MediaQuery.paddingOf(context).bottom;
-        return Padding(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottom),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: brandCanvas,
+        showDragHandle: true,
+        builder: (context) {
+          final bottom = MediaQuery.paddingOf(context).bottom;
+          return Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottom),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
               Row(
                 children: [
                   Container(
@@ -382,6 +388,9 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+    } finally {
+      _offerSheetOpen = false;
+    }
   }
 
   @override

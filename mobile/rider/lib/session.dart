@@ -15,6 +15,7 @@ class RiderSession extends ChangeNotifier {
   RiderSession(this.api)
       : _deskHub = DeskHubClient(api),
         _chatHub = TripChatHub(api) {
+    _deskHub.onLiveChanged = _onDeskHubLive;
     _chatHub.onState = (state, error) {
       chatLink = state;
       chatLinkError = error;
@@ -24,6 +25,7 @@ class RiderSession extends ChangeNotifier {
       if (state != ChatLinkState.live) {
         unawaited(_loadChat(silent: true));
       }
+      _scheduleChatPoll();
     };
   }
 
@@ -36,9 +38,11 @@ class RiderSession extends ChangeNotifier {
   Timer? _poll;
   Timer? _gps;
   Timer? _chatPoll;
+  Timer? _hubDebounce;
   String? _shownOfferId;
   String? _alarmingOfferId;
   String? _chatTripId;
+  String? _deskSignature;
   RiderTrip? lastTrip;
   final List<ChatMessage> chatMessages = [];
   int chatUnread = 0;
@@ -47,8 +51,24 @@ class RiderSession extends ChangeNotifier {
   String? chatLinkError;
   bool offerAlarmEnabled = true;
   bool _keepAlive = false;
+  bool _deskHubLive = false;
+  bool _refreshQueued = false;
+  Future<void>? _refreshInFlight;
+  DateTime? _lastGpsAt;
+  double? _lastGpsLat;
+  double? _lastGpsLng;
   final AudioPlayer _offerAlarm = AudioPlayer();
   static const _alarmKey = 'offerAlarmEnabled';
+
+  /// Fast fallback when live desk hub is down.
+  static const _pollFallback = Duration(seconds: 8);
+
+  /// Safety net while SignalR is connected (offers still push via hub).
+  static const _pollWhenLive = Duration(seconds: 30);
+
+  static const _gpsInterval = Duration(seconds: 25);
+  static const _chatPollFallback = Duration(seconds: 10);
+  static const _minGpsMoveMeters = 35.0;
 
   bool get loggedIn => api.accessToken != null && api.accessToken!.isNotEmpty;
 
@@ -61,6 +81,7 @@ class RiderSession extends ChangeNotifier {
     }
     try {
       desk = await api.desk().timeout(const Duration(seconds: 12));
+      _deskSignature = _signature(desk);
       error = null;
     } on ApiException catch (ex) {
       if (ex.message.toLowerCase().contains('unauthorized') ||
@@ -89,6 +110,7 @@ class RiderSession extends ChangeNotifier {
       await api.ping();
       await api.login(phone, password);
       desk = await api.desk();
+      _deskSignature = _signature(desk);
       error = null;
       busy = false;
       notifyListeners();
@@ -111,6 +133,7 @@ class RiderSession extends ChangeNotifier {
     _poll?.cancel();
     _gps?.cancel();
     _chatPoll?.cancel();
+    _hubDebounce?.cancel();
     try {
       if (desk?.isOnline == true) {
         await api.setOnline(false);
@@ -121,6 +144,7 @@ class RiderSession extends ChangeNotifier {
     _shownOfferId = null;
     _alarmingOfferId = null;
     _chatTripId = null;
+    _deskSignature = null;
     lastTrip = null;
     chatMessages.clear();
     chatUnread = 0;
@@ -129,6 +153,10 @@ class RiderSession extends ChangeNotifier {
     chatLinkError = null;
     desk = null;
     _keepAlive = false;
+    _deskHubLive = false;
+    _lastGpsAt = null;
+    _lastGpsLat = null;
+    _lastGpsLng = null;
     await api.clear();
     await _stopOfferAlarm();
     await RiderAlerts.stopOnline();
@@ -139,34 +167,64 @@ class RiderSession extends ChangeNotifier {
     if (!loggedIn) {
       return;
     }
+    if (_refreshInFlight != null) {
+      _refreshQueued = true;
+      return _refreshInFlight!;
+    }
+    _refreshInFlight = _refreshNow();
     try {
-      final previous = desk;
+      await _refreshInFlight;
+    } finally {
+      _refreshInFlight = null;
+      if (_refreshQueued) {
+        _refreshQueued = false;
+        unawaited(refresh());
+      }
+    }
+  }
+
+  Future<void> _refreshNow() async {
+    final previous = desk;
+    final previousSig = _deskSignature;
+    final previousError = error;
+    try {
       desk = await api.desk();
       error = null;
+      _deskSignature = _signature(desk);
       _rememberTrip();
       await _syncChat();
       await _syncOnlineService();
       await _syncOfferAlarm(previous);
+      if (desk?.isOnline == true) {
+        _scheduleGps();
+      } else {
+        _gps?.cancel();
+      }
     } on ApiException catch (ex) {
       error = ex.message;
     } catch (_) {
       error = 'Cannot reach Ya! Pasakay right now.';
     }
-    notifyListeners();
+    if (_deskSignature != previousSig || error != previousError) {
+      notifyListeners();
+    }
   }
 
   Future<void> setOnline(bool online) async {
     try {
       desk = await api.setOnline(online);
+      _deskSignature = _signature(desk);
       error = null;
       if (online) {
         await RiderAlerts.prepare(true);
         _keepAlive = await RiderAlerts.startOnline();
-        await _pingGps();
+        await _pingGps(force: true);
+        _scheduleGps();
       } else {
         await _stopOfferAlarm();
         await RiderAlerts.stopOnline();
         _keepAlive = false;
+        _gps?.cancel();
       }
     } on ApiException catch (ex) {
       error = ex.message;
@@ -176,6 +234,7 @@ class RiderSession extends ChangeNotifier {
 
   Future<void> setPaymentMethods(List<String> methods) async {
     desk = await api.setPayments(methods.map(paymentCode).toList());
+    _deskSignature = _signature(desk);
     error = null;
     notifyListeners();
   }
@@ -183,6 +242,7 @@ class RiderSession extends ChangeNotifier {
   Future<void> accept(String offerId) async {
     await _stopOfferAlarm();
     desk = await api.accept(offerId);
+    _deskSignature = _signature(desk);
     _shownOfferId = null;
     await _syncChat();
     notifyListeners();
@@ -191,12 +251,14 @@ class RiderSession extends ChangeNotifier {
   Future<void> decline(String offerId) async {
     await _stopOfferAlarm();
     desk = await api.decline(offerId);
+    _deskSignature = _signature(desk);
     _shownOfferId = null;
     notifyListeners();
   }
 
   Future<void> startTrip(String tripId) async {
     desk = await api.startTrip(tripId);
+    _deskSignature = _signature(desk);
     await _syncChat();
     notifyListeners();
   }
@@ -204,6 +266,7 @@ class RiderSession extends ChangeNotifier {
   Future<void> completeTrip(String tripId) async {
     _rememberTrip();
     desk = await api.completeTrip(tripId);
+    _deskSignature = _signature(desk);
     await _syncChat();
     notifyListeners();
   }
@@ -211,18 +274,21 @@ class RiderSession extends ChangeNotifier {
   Future<void> cancelTrip(String tripId) async {
     _rememberTrip();
     desk = await api.cancelTrip(tripId);
+    _deskSignature = _signature(desk);
     await _syncChat();
     notifyListeners();
   }
 
   Future<void> hail(String customerId) async {
     desk = await api.hail(customerId);
+    _deskSignature = _signature(desk);
     _shownOfferId = null;
     notifyListeners();
   }
 
   Future<void> cancelHail() async {
     desk = await api.cancelHail();
+    _deskSignature = _signature(desk);
     notifyListeners();
   }
 
@@ -328,23 +394,62 @@ class RiderSession extends ChangeNotifier {
     _poll?.cancel();
     _gps?.cancel();
     _chatPoll?.cancel();
+    _hubDebounce?.cancel();
     try {
-      await _deskHub.connect((_) => refresh(), onChat: _onIncomingChat);
+      await _deskHub.connect(_onHubDeskChanged, onChat: _onIncomingChat);
     } catch (_) {
       // Poll still keeps the desk current if the hub cannot connect.
     }
-    _poll = Timer.periodic(const Duration(seconds: 8), (_) => refresh());
-    _gps = Timer.periodic(const Duration(seconds: 12), (_) => _pingGps());
-    _chatPoll = Timer.periodic(const Duration(seconds: 3), (_) {
+    _deskHubLive = _deskHub.isLive;
+    _schedulePoll();
+    _scheduleGps();
+    _scheduleChatPoll();
+    unawaited(_syncOnlineService());
+    unawaited(RiderAlerts.prepare(desk?.isOnline == true));
+    unawaited(_syncOfferAlarm(null));
+    unawaited(_pingGps(force: true));
+    unawaited(_syncChat());
+  }
+
+  void _onHubDeskChanged(String? reason) {
+    _hubDebounce?.cancel();
+    _hubDebounce = Timer(const Duration(milliseconds: 280), () {
+      unawaited(refresh());
+    });
+  }
+
+  void _onDeskHubLive(bool live) {
+    if (_deskHubLive == live) {
+      return;
+    }
+    _deskHubLive = live;
+    _schedulePoll();
+  }
+
+  void _schedulePoll() {
+    _poll?.cancel();
+    final interval = _deskHubLive ? _pollWhenLive : _pollFallback;
+    _poll = Timer.periodic(interval, (_) => unawaited(refresh()));
+  }
+
+  void _scheduleGps() {
+    _gps?.cancel();
+    if (desk?.isOnline != true) {
+      return;
+    }
+    _gps = Timer.periodic(_gpsInterval, (_) => unawaited(_pingGps()));
+  }
+
+  void _scheduleChatPoll() {
+    _chatPoll?.cancel();
+    if (chatLink == ChatLinkState.live) {
+      return;
+    }
+    _chatPoll = Timer.periodic(_chatPollFallback, (_) {
       if (chatLink != ChatLinkState.live) {
         unawaited(_loadChat(silent: true));
       }
     });
-    unawaited(_syncOnlineService());
-    unawaited(RiderAlerts.prepare(desk?.isOnline == true));
-    unawaited(_syncOfferAlarm(null));
-    unawaited(_pingGps());
-    unawaited(_syncChat());
   }
 
   RiderTrip? get chatTrip => desk?.activeTrip;
@@ -393,6 +498,7 @@ class RiderSession extends ChangeNotifier {
         chatUnread = 0;
         notifyListeners();
       }
+      _scheduleChatPoll();
       return;
     }
     if (_chatTripId != trip.tripId) {
@@ -404,6 +510,7 @@ class RiderSession extends ChangeNotifier {
     if (!_chatHub.connectedTo(trip.tripId)) {
       await _chatHub.connect(trip.tripId, _onIncomingChat);
     }
+    _scheduleChatPoll();
   }
 
   Future<void> refreshChat(String tripId, {bool silent = true}) =>
@@ -422,6 +529,11 @@ class RiderSession extends ChangeNotifier {
       final rows = await api.chat(targetTripId);
       final previous = chatMessages.map((m) => m.id).toSet();
       final firstLoad = previous.isEmpty;
+      final same =
+          previous.length == rows.length && rows.every((m) => previous.contains(m.id));
+      if (same && !firstLoad) {
+        return;
+      }
       chatMessages
         ..clear()
         ..addAll(rows);
@@ -468,7 +580,7 @@ class RiderSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _pingGps() async {
+  Future<void> _pingGps({bool force = false}) async {
     if (desk?.isOnline != true) {
       return;
     }
@@ -481,17 +593,72 @@ class RiderSession extends ChangeNotifier {
           permission == LocationPermission.deniedForever) {
         return;
       }
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 8),
-        ),
-      );
+
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      final Position position;
+      if (lastKnown != null &&
+          DateTime.now().difference(lastKnown.timestamp) < const Duration(seconds: 45)) {
+        position = lastKnown;
+      } else {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.medium,
+            timeLimit: Duration(seconds: 5),
+          ),
+        );
+      }
+
+      // Stationary riders: skip network ping for a bit, but still heartbeat ~90s.
+      if (!force && _lastGpsLat != null && _lastGpsLng != null && _lastGpsAt != null) {
+        final age = DateTime.now().difference(_lastGpsAt!);
+        final moved = Geolocator.distanceBetween(
+          _lastGpsLat!,
+          _lastGpsLng!,
+          position.latitude,
+          position.longitude,
+        );
+        if (moved < _minGpsMoveMeters && age < const Duration(seconds: 90)) {
+          return;
+        }
+      }
+
+      final previousSig = _deskSignature;
       desk = await api.pingLocation(position.latitude, position.longitude);
-      notifyListeners();
+      _deskSignature = _signature(desk);
+      _lastGpsAt = DateTime.now();
+      _lastGpsLat = position.latitude;
+      _lastGpsLng = position.longitude;
+      if (_deskSignature != previousSig) {
+        notifyListeners();
+      }
     } catch (_) {
       // Keep the desk usable if GPS is off.
     }
+  }
+
+  static String _signature(RiderDesk? desk) {
+    if (desk == null) {
+      return '';
+    }
+    final trip = desk.activeTrip;
+    final offers = desk.offers.map((o) => '${o.offerId}:${o.fare}').join(',');
+    final hail = desk.pendingHail;
+    return [
+      desk.isOnline,
+      desk.walletBalance.toStringAsFixed(2),
+      desk.canReceiveBookings,
+      desk.walletLow,
+      desk.walletHighlight,
+      desk.paymentMethods.join(','),
+      trip?.tripId,
+      trip?.status,
+      trip?.fare,
+      trip?.canChat,
+      offers,
+      hail?.customerId,
+      desk.credibilityScore,
+      desk.riderCancelCount,
+    ].join('|');
   }
 
   @override
@@ -499,6 +666,7 @@ class RiderSession extends ChangeNotifier {
     _poll?.cancel();
     _gps?.cancel();
     _chatPoll?.cancel();
+    _hubDebounce?.cancel();
     unawaited(_deskHub.disconnect());
     unawaited(_chatHub.disconnect());
     unawaited(_offerAlarm.dispose());
