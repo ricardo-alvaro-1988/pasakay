@@ -50,8 +50,6 @@ import { TripChatPanel } from './trip-chat'
 import { createDeskConnection, startDeskHub, stopDeskHub, emitDeskChat } from './desk-hub'
 import type { HubConnection } from '@microsoft/signalr'
 import { RateRidePanel, usePendingRating } from './rate-ride'
-import { readTheme, setTheme, type Theme } from './theme'
-import { ThemeSwitch } from './theme-switch'
 import { ShareTripButton } from './share-trip-button'
 import { lastKnownGps, readBootGps, readPickupGps, readGps, watchTripGps } from './gps'
 import { applyBrand, DEFAULT_BRAND_NAME, type BrandingConfig } from './brand-themes'
@@ -256,7 +254,6 @@ function Home({
   const locateGen = useRef(0)
   const [locating, setLocating] = useState(false)
   const [mapReady, setMapReady] = useState(false)
-  const [theme, setThemeState] = useState<Theme>(readTheme)
   const trip = desk.activeTrip
   const hail = desk.hailedRider
   const pendingRate = usePendingRating(desk)
@@ -274,14 +271,6 @@ function Home({
   pickupRef.current = pickup
   const bootGpsDone = useRef(false)
 
-  useEffect(() => {
-    mapRef.current?.setOptions({ colorScheme: theme === 'dark' ? 'DARK' : 'LIGHT' })
-  }, [theme])
-
-  const toggleTheme = (next: Theme) => {
-    setTheme(next)
-    setThemeState(next)
-  }
   const lastPickup = desk.recent.find((item) => item.pickupLat && item.pickupLng)
   const mapCenter = pickup
     ?? (lastPickup?.pickupLat && lastPickup.pickupLng
@@ -328,7 +317,7 @@ function Home({
           disableDefaultUI: true,
           clickableIcons: false,
           gestureHandling: 'greedy',
-          colorScheme: theme === 'dark' ? 'DARK' : 'LIGHT',
+          colorScheme: 'LIGHT',
           styles: MAP_STYLE,
           padding: mapChromePadding(),
         })
@@ -872,7 +861,6 @@ function Home({
               <>
                 <div className="sheet-head">
                   <h2 className="where">Where to?</h2>
-                  <ThemeSwitch theme={theme} onChange={toggleTheme} />
                 </div>
                 {hail && (
                   <div className="hail">

@@ -27,20 +27,6 @@
   --shadow: 0 12px 28px rgba(22, 24, 29, 0.08);
 }
 
-:root[data-theme='dark'] {
-  --bg: #0d0f12;
-  --bg-elev: #171a1f;
-  --bg-soft: #20242c;
-  --line: #2a2f38;
-  --text: #f4f6f8;
-  --muted: #9aa3b2;
-  --chip: #262b34;
-  --input: #12151a;
-  --surface-on: #171a1f;
-  --accent-soft: var(--accent-soft);
-  --shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
-}
-
 :root:not([data-theme]) {
   --bg: #eef1f5;
   --bg-elev: #ffffff;
@@ -464,6 +450,24 @@ input:focus, select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
+
+/* Phone fields: always white/black so dark/rebrand themes stay readable */
+.login-form input[inputmode="tel"],
+.login-form input[autocomplete="tel"],
+.field input[inputmode="tel"] {
+  background: #ffffff !important;
+  color: #16181d !important;
+  -webkit-text-fill-color: #16181d;
+  caret-color: #16181d;
+  color-scheme: light;
+  border-color: #dce2ea;
+}
+.login-form input[inputmode="tel"]:-webkit-autofill,
+.field input[inputmode="tel"]:-webkit-autofill {
+  -webkit-text-fill-color: #16181d;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+}
+
 select {
   appearance: none;
   background-image:
@@ -1472,50 +1476,6 @@ button.brand-pill:active { transform: scale(.98); }
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
-}
-.ios-switch {
-  position: relative;
-  flex: 0 0 auto;
-  width: 51px;
-  height: 31px;
-  border: 0;
-  border-radius: 999px;
-  padding: 2px;
-  background: #e9e9ea;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
-  transition: background-color .28s ease;
-}
-.ios-switch.on {
-  background: #34c759;
-}
-.ios-switch-icons {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 7px;
-  color: #8e8e93;
-  pointer-events: none;
-}
-.ios-switch.on .ios-switch-icons {
-  color: rgba(255, 255, 255, 0.92);
-}
-.ios-switch-knob {
-  position: relative;
-  z-index: 1;
-  display: block;
-  width: 27px;
-  height: 27px;
-  border-radius: 50%;
-  background: #ffffff;
-  box-shadow:
-    0 3px 8px rgba(0, 0, 0, 0.15),
-    0 1px 1px rgba(0, 0, 0, 0.16);
-  transition: transform .28s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.ios-switch.on .ios-switch-knob {
-  transform: translateX(20px);
 }
 .book-sheet .primary { padding: 12px 14px; }
 .pay-ref { margin: 0 0 8px; gap: 4px; }
