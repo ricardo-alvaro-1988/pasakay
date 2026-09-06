@@ -58,6 +58,11 @@ export type CustomerTrip = {
   canRate?: boolean
   canViewChat?: boolean
   canChat?: boolean
+  customerFare?: number
+  promoDiscountAmount?: number
+  isPromoSponsored?: boolean
+  discountPercent?: number | null
+  promoCode?: string | null
 }
 
 export type Desk = {
@@ -90,6 +95,11 @@ export type Quote = {
   paymentMethod: PaymentMethod
   riderAvailable?: boolean
   bookingDispatchMode?: BookingDispatchMode
+  originalFare?: number
+  customerFare?: number
+  promoApplied?: boolean
+  discountPercent?: number | null
+  promoCode?: string | null
 }
 
 export type BookingDispatchMode = 'Broadcast' | 'Selection' | 'Both'
@@ -117,6 +127,7 @@ export type BookBody = {
   scheduledAtUtc?: string
   riderId?: string
   passengerCount?: number
+  promoCode?: string
 }
 
 export type HailRider = {

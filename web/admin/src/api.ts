@@ -28,6 +28,7 @@ export type PageId =
   | 'inbox'
   | 'company'
   | 'wallet'
+  | 'promos'
 
 export type Me = {
   id: string
@@ -331,6 +332,27 @@ export type OperatorCashInDestinations = {
   banks: OperatorCashInBank[]
 }
 
+export type OperatorPromoItem = {
+  id: string
+  code: string
+  displayCode: string
+  discountPercent: number
+  isActive: boolean
+  startsAtUtc: string | null
+  endsAtUtc: string | null
+  maxRedemptions: number | null
+  redemptionCount: number
+  createdAtUtc: string
+}
+
+export type SaveOperatorPromoBody = {
+  discountPercent: number
+  isActive: boolean
+  startsAtUtc: string | null
+  endsAtUtc: string | null
+  maxRedemptions: number | null
+}
+
 export type RideStop = {
   details: string
   barangay: string
@@ -363,6 +385,11 @@ export type RideListItem = {
   paymentMethod: PaymentMethod
   paymentMethodOther: string | null
   commission: RideCommissionBreakdown | null
+  customerFare?: number
+  promoDiscountAmount?: number
+  isPromoSponsored?: boolean
+  discountPercent?: number | null
+  promoCode?: string | null
 }
 
 export type RideDetail = {
@@ -402,6 +429,11 @@ export type RideDetail = {
   riderPhotoUrl: string | null
   chat: RideChatMessage[]
   commission: RideCommissionBreakdown | null
+  customerFare?: number
+  promoDiscountAmount?: number
+  isPromoSponsored?: boolean
+  discountPercent?: number | null
+  promoCode?: string | null
 }
 
 export type ChatSender = 'Customer' | 'Rider'
@@ -890,6 +922,11 @@ export type OperatorBookingListItem = {
   fare: number
   paymentMethod: PaymentMethod
   paymentMethodOther: string | null
+  customerFare?: number
+  promoDiscountAmount?: number
+  isPromoSponsored?: boolean
+  discountPercent?: number | null
+  promoCode?: string | null
 }
 
 export type OperatorInboxItem = {
@@ -1532,6 +1569,19 @@ export const api = {
     request<OperatorCashInDestinations>(`/api/operator/wallet/cash-in-destinations/banks/${id}`, {
       method: 'DELETE',
     }),
+  operatorPromos: () => request<{ items: OperatorPromoItem[] }>('/api/operator/promos'),
+  createOperatorPromo: (body: SaveOperatorPromoBody) =>
+    request<OperatorPromoItem>('/api/operator/promos', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateOperatorPromo: (id: string, body: SaveOperatorPromoBody) =>
+    request<OperatorPromoItem>(`/api/operator/promos/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  toggleOperatorPromo: (id: string) =>
+    request<OperatorPromoItem>(`/api/operator/promos/${id}/toggle`, { method: 'POST' }),
   operatorRiderWallet: (riderId: string) => request<RiderWalletDetail>(`/api/operator/wallet/riders/${riderId}`),
   approveWalletRequest: (id: string) =>
     request<{ transaction: WalletTransaction; balance: number }>(`/api/operator/wallet/requests/${id}/approve`, { method: 'POST' }),

@@ -77,7 +77,7 @@ export function RateRidePanel({
         </div>
       )}
       <p className="fareline" style={{ marginTop: 10 }}>
-        <b>{peso(trip.fare)}</b>
+        <b>{peso(trip.customerFare && trip.customerFare > 0 ? trip.customerFare : trip.fare)}</b>
         {kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}
       </p>
       <div className="star-rating">

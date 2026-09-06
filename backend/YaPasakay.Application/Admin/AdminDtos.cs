@@ -154,7 +154,12 @@ public record RideListItem(
     int PassengerCount,
     PaymentMethod PaymentMethod,
     string? PaymentMethodOther,
-    RideCommissionBreakdown? Commission);
+    RideCommissionBreakdown? Commission,
+    decimal CustomerFare = 0,
+    decimal PromoDiscountAmount = 0,
+    bool IsPromoSponsored = false,
+    int? DiscountPercent = null,
+    string? PromoCode = null);
 
 public record RideDetailResponse(
     Guid Id,
@@ -192,7 +197,12 @@ public record RideDetailResponse(
     string? VehicleModel,
     string? RiderPhotoUrl,
     IReadOnlyList<RideChatMessageItem> Chat,
-    RideCommissionBreakdown? Commission);
+    RideCommissionBreakdown? Commission,
+    decimal CustomerFare = 0,
+    decimal PromoDiscountAmount = 0,
+    bool IsPromoSponsored = false,
+    int? DiscountPercent = null,
+    string? PromoCode = null);
 
 public record RideChatMessageItem(
     Guid Id,
@@ -589,7 +599,12 @@ public record OperatorBookingListItem(
     TripStatus Status,
     decimal Fare,
     PaymentMethod PaymentMethod,
-    string? PaymentMethodOther);
+    string? PaymentMethodOther,
+    decimal CustomerFare = 0,
+    decimal PromoDiscountAmount = 0,
+    bool IsPromoSponsored = false,
+    int? DiscountPercent = null,
+    string? PromoCode = null);
 
 public record CommissionReportItem(
     Guid Id,
@@ -832,6 +847,27 @@ public record OperatorCashInDestinationsResponse(
     string? MayaQrUrl,
     bool MayaIsActive,
     IReadOnlyList<OperatorCashInBankItem> Banks);
+
+public record OperatorPromoItem(
+    Guid Id,
+    string Code,
+    string DisplayCode,
+    int DiscountPercent,
+    bool IsActive,
+    DateTime? StartsAtUtc,
+    DateTime? EndsAtUtc,
+    int? MaxRedemptions,
+    int RedemptionCount,
+    DateTime CreatedAtUtc);
+
+public record SaveOperatorPromoRequest(
+    int DiscountPercent,
+    bool IsActive,
+    DateTime? StartsAtUtc,
+    DateTime? EndsAtUtc,
+    int? MaxRedemptions);
+
+public record OperatorPromoListResponse(IReadOnlyList<OperatorPromoItem> Items);
 
 public static class UploadUrls
 {

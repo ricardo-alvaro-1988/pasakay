@@ -21,7 +21,7 @@ export function formatTripShare(trip: CustomerTrip, brandName = DEFAULT_BRAND_NA
     `Pickup: ${trip.pickup}`,
     `Drop-off: ${trip.dropoff}`,
     '',
-    `Fare: ${peso(trip.fare)}${kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · ${Math.max(1, trip.passengerCount || 1)} passenger${Math.max(1, trip.passengerCount || 1) === 1 ? '' : 's'} · ${paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}`,
+    `Fare: ${peso(trip.customerFare && trip.customerFare > 0 ? trip.customerFare : trip.fare)}${trip.isPromoSponsored && trip.fare > (trip.customerFare ?? trip.fare) ? ` (was ${peso(trip.fare)})` : ''}${kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · ${Math.max(1, trip.passengerCount || 1)} passenger${Math.max(1, trip.passengerCount || 1) === 1 ? '' : 's'} · ${paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}`,
     `Operator: ${trip.operatorName}`,
   ].filter(Boolean) as string[]
 

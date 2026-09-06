@@ -1314,6 +1314,54 @@ button.brand-pill:active { transform: scale(.98); }
   -webkit-appearance: none;
   margin: 0;
 }
+.promo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-soft);
+}
+.promo-field span {
+  font-size: 13px;
+  font-weight: 700;
+}
+.promo-field input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-on);
+  padding: 10px 12px;
+  font-weight: 700;
+  font-size: 15px;
+  color: #111;
+}
+.promo-hint {
+  margin: -2px 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--good, #0a7a3e);
+}
+.promo-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #059669 16%, transparent);
+  color: #047857;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  vertical-align: middle;
+}
+.fareline .promo-was {
+  font-weight: 600;
+  color: var(--muted);
+  text-decoration: line-through;
+  margin-left: 6px;
+}
 .passenger-input[type='number'] {
   -moz-appearance: textfield;
   appearance: textfield;

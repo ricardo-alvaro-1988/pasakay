@@ -12,7 +12,7 @@ namespace YaPasakay.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "Operator")]
 [Route("api/operator/bookings")]
-public class OperatorBookingsController(AppDbContext db, RiderWalletService wallets, TripBroadcastService broadcast) : ControllerBase
+public class OperatorBookingsController(AppDbContext db, RiderWalletService wallets, TripBroadcastService broadcast, OperatorPromoService promos) : ControllerBase
 {
     private const int ColumnSize = 40;
 
@@ -111,7 +111,12 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 x.Status,
                 x.Fare,
                 x.PaymentMethod,
-                x.PaymentMethodOther))
+                x.PaymentMethodOther,
+                x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
+                x.PromoDiscountAmount,
+                x.IsPromoSponsored,
+                x.DiscountPercent,
+                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null))
             .ToListAsync(cancellationToken);
 
         return Ok(new PagedResult<OperatorBookingListItem>(
@@ -251,6 +256,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         await db.SaveChangesAsync(cancellationToken);
         await broadcast.ExpireTripAsync(trip.Id, cancellationToken);
         await wallets.ApplyCommissionAsync(trip, cancellationToken);
+        await promos.RedeemOnCompleteAsync(trip, cancellationToken);
 
         var loaded = await OperatorMaps.RideDetailQuery(db)
             .FirstAsync(x => x.Id == trip.Id, cancellationToken);
@@ -351,7 +357,12 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 x.PassengerCount < 1 ? 1 : x.PassengerCount,
                 x.PaymentMethod,
                 x.PaymentMethodOther,
-                null))
+                null,
+                x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
+                x.PromoDiscountAmount,
+                x.IsPromoSponsored,
+                x.DiscountPercent,
+                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null))
             .ToListAsync(cancellationToken);
         return new OperatorBookingColumn(
             total,

@@ -80,6 +80,7 @@ import {
   OperatorWalletOverview,
   OperatorCashInBank,
   OperatorCashInDestinations,
+  OperatorPromoItem,
   OperatorOverview,
   OperatorNavAlerts,
   OperatorInboxItem,
@@ -735,6 +736,26 @@ function StatusTag({ active }: { active: boolean }) {
 function TripStatusTag({ status }: { status: TripStatus }) {
   const label = status === 'Completed' ? 'Complete' : status
   return <span className={`tag trip ${status.toLowerCase()}`}>{label}</span>
+}
+
+function PromoTag({
+  isPromoSponsored,
+  promoCode,
+  discountPercent,
+}: {
+  isPromoSponsored?: boolean
+  promoCode?: string | null
+  discountPercent?: number | null
+}) {
+  if (!isPromoSponsored) return null
+  const code = promoCode || (discountPercent != null ? `Save${discountPercent}` : null)
+  if (!code) return <span className="tag promo">Promo</span>
+  const pct = discountPercent != null ? discountPercent : null
+  return (
+    <span className="tag promo" title={pct != null ? `${pct}% off` : undefined}>
+      {code}{pct != null ? ` · ${pct}%` : ''}
+    </span>
+  )
 }
 
 const TRIP_STATUS_FILTERS: { value: TripStatus | ''; label: string }[] = [
@@ -3858,11 +3879,25 @@ function BookingRating({ score, comment, ratedAtUtc, status }: {
 }
 
 function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideDetail; commissionView?: CommissionView }) {
+  const customerPay = ride.customerFare && ride.customerFare > 0 ? ride.customerFare : ride.fare
+  const promoCode = ride.promoCode || (ride.isPromoSponsored && ride.discountPercent != null ? `Save${ride.discountPercent}` : null)
   return (
     <>
       <div className="detail-grid">
         <DetailItem label="Booking number" value={ride.reference} />
         <DetailItem label="Status" value={ride.status} />
+        {ride.isPromoSponsored ? (
+          <div className="detail-item">
+            <span>Promo</span>
+            <p>
+              <PromoTag isPromoSponsored promoCode={promoCode} discountPercent={ride.discountPercent} />
+            </p>
+            <small className="muted">
+              Code {promoCode || '—'}
+              {ride.discountPercent != null ? ` · ${ride.discountPercent}% off fare` : ''}
+            </small>
+          </div>
+        ) : null}
         <DetailItem label="Customer" value={ride.customerName} />
         <DetailItem label="Customer phone" value={ride.customerPhone} />
         <div className="detail-item wide">
@@ -3879,6 +3914,12 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
           value={`${Math.max(1, ride.passengerCount ?? 1)} passenger${(ride.passengerCount ?? 1) === 1 ? '' : 's'}`}
         />
         <DetailItem label="Fare" value={peso(ride.fare)} />
+        {ride.isPromoSponsored ? (
+          <>
+            <DetailItem label="Customer pays" value={peso(customerPay)} />
+            <DetailItem label="Operator owes rider" value={peso(ride.promoDiscountAmount ?? Math.max(0, ride.fare - customerPay))} />
+          </>
+        ) : null}
         <DetailItem label="Payment" value={paymentMethodLabel(ride.paymentMethod, ride.paymentMethodOther)} />
         <DetailItem label="Duration" value={ride.durationMinutes ? `${ride.durationMinutes} min` : '—'} />
         <DetailItem label="Vehicle" value={ride.vehicleModel ? `${ride.vehicleType} · ${ride.vehicleModel}` : ride.vehicleType} />
@@ -3985,6 +4026,11 @@ function BookingDetailPage({
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           {extra}
+          <PromoTag
+            isPromoSponsored={ride.isPromoSponsored}
+            promoCode={ride.promoCode}
+            discountPercent={ride.discountPercent}
+          />
           <PaymentMethodTag method={ride.paymentMethod} other={ride.paymentMethodOther} />
           <TripStatusTag status={ride.status} />
         </div>
@@ -7028,6 +7074,7 @@ function OperatorShell({
         )}
         {page === 'billing' && <OperatorBillingPage />}
         {page === 'wallet' && <OperatorWalletPage />}
+        {page === 'promos' && <OperatorPromosPage />}
         {page === 'commission' && <CommissionReportPage mode="operator" />}
         {page === 'company' && <OperatorCompanyPage />}
         {page === 'roles' && me.isMainOperator ? (
@@ -7403,7 +7450,16 @@ function OperatorBookingList({
                   <div><small>→ {stopAddress(row.dropoff)}</small></div>
                 </td>
                 <td><PaymentMethodTag method={row.paymentMethod} other={row.paymentMethodOther} /></td>
-                <td><TripStatusTag status={row.status} /></td>
+                <td>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                    <TripStatusTag status={row.status} />
+                    <PromoTag
+                      isPromoSponsored={row.isPromoSponsored}
+                      promoCode={row.promoCode}
+                      discountPercent={row.discountPercent}
+                    />
+                  </div>
+                </td>
                 <td>{peso(row.fare)}</td>
               </tr>
             ))}
@@ -7578,7 +7634,14 @@ function OperatorDashboardPage() {
                   >
                     <span className="booking-card-head">
                       <strong>{ride.reference || ride.customerName}</strong>
-                      <TripStatusTag status={ride.status} />
+                      <span className="booking-card-tags">
+                        <PromoTag
+                          isPromoSponsored={ride.isPromoSponsored}
+                          promoCode={ride.promoCode}
+                          discountPercent={ride.discountPercent}
+                        />
+                        <TripStatusTag status={ride.status} />
+                      </span>
                     </span>
                     <small>{ride.customerName}</small>
                     <small>{stopAddress(ride.pickup)} → {stopAddress(ride.dropoff)}</small>
@@ -10019,6 +10082,254 @@ function OperatorBillingPage() {
         <h3 style={{ margin: 0 }}>Billing records</h3>
       </div>
       <BillRecordsList bills={data.bills} onOpen={setBillId} />
+    </div>
+  )
+}
+
+function OperatorPromosPage() {
+  const [items, setItems] = useState<OperatorPromoItem[] | null>(null)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState<OperatorPromoItem | null>(null)
+  const [discountPercent, setDiscountPercent] = useState('50')
+  const [isActive, setIsActive] = useState(true)
+  const [startsAt, setStartsAt] = useState('')
+  const [endsAt, setEndsAt] = useState('')
+  const [maxRedemptions, setMaxRedemptions] = useState('')
+  const [formError, setFormError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const previewPercent = (() => {
+    const n = Math.floor(Number(discountPercent))
+    return Number.isFinite(n) && n >= 1 && n <= 100 ? n : null
+  })()
+
+  function load(rows: OperatorPromoItem[]) {
+    setItems(rows)
+  }
+
+  useEffect(() => {
+    api.operatorPromos()
+      .then((res) => load(res.items))
+      .catch((err: Error) => setError(err.message))
+  }, [])
+
+  function openCreate() {
+    setEditing(null)
+    setDiscountPercent('50')
+    setIsActive(true)
+    setStartsAt('')
+    setEndsAt('')
+    setMaxRedemptions('')
+    setFormError('')
+    setOpen(true)
+  }
+
+  function openEdit(item: OperatorPromoItem) {
+    setEditing(item)
+    setDiscountPercent(String(item.discountPercent))
+    setIsActive(item.isActive)
+    setStartsAt(toPhInput(item.startsAtUtc))
+    setEndsAt(toPhInput(item.endsAtUtc))
+    setMaxRedemptions(item.maxRedemptions != null ? String(item.maxRedemptions) : '')
+    setFormError('')
+    setOpen(true)
+  }
+
+  function closeModal() {
+    setOpen(false)
+    setEditing(null)
+    setFormError('')
+  }
+
+  function body() {
+    const percent = Math.floor(Number(discountPercent))
+    const maxRaw = maxRedemptions.trim()
+    const max = maxRaw ? Math.floor(Number(maxRaw)) : null
+    return {
+      discountPercent: percent,
+      isActive,
+      startsAtUtc: fromPhInput(startsAt),
+      endsAtUtc: fromPhInput(endsAt),
+      maxRedemptions: max != null && Number.isFinite(max) && max > 0 ? max : null,
+    }
+  }
+
+  async function save() {
+    const percent = Math.floor(Number(discountPercent))
+    if (!Number.isFinite(percent) || percent < 1 || percent > 100) {
+      setFormError('Discount must be between 1 and 100.')
+      return
+    }
+    setBusy(true)
+    setFormError('')
+    try {
+      const payload = body()
+      if (editing) {
+        const row = await api.updateOperatorPromo(editing.id, payload)
+        setItems((prev) => (prev ?? []).map((x) => (x.id === row.id ? row : x)).sort((a, b) => b.discountPercent - a.discountPercent))
+        setNotice(`${row.displayCode} updated.`)
+      } else {
+        const row = await api.createOperatorPromo(payload)
+        setItems((prev) => [row, ...(prev ?? [])].sort((a, b) => b.discountPercent - a.discountPercent))
+        setNotice(`${row.displayCode} created.`)
+      }
+      closeModal()
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Could not save promo.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function toggle(item: OperatorPromoItem) {
+    setError('')
+    try {
+      const row = await api.toggleOperatorPromo(item.id)
+      setItems((prev) => (prev ?? []).map((x) => (x.id === row.id ? row : x)))
+      setNotice(`${row.displayCode} is now ${row.isActive ? 'active' : 'inactive'}.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not toggle promo.')
+    }
+  }
+
+  if (!items) return error ? <p className="error">{error}</p> : <p>Loading promos…</p>
+
+  return (
+    <div className="card">
+      <div className="toolbar">
+        <div>
+          <h2 style={{ margin: 0 }}>Promos</h2>
+          <p className="muted" style={{ margin: '6px 0 0', maxWidth: 520 }}>
+            Set any discount from 1–100%. The code is always <strong>Save</strong> plus the percent (Save10, Save50, Save100).
+            Customer pays the rest; you settle the discount with the rider offline. Commission stays on the full fare.
+          </p>
+        </div>
+        <button className="btn" type="button" style={{ width: 'auto', whiteSpace: 'nowrap' }} onClick={openCreate}>
+          Add promo
+        </button>
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      {notice ? <p className="ok">{notice}</p> : null}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Discount</th>
+              <th>Status</th>
+              <th>Dates</th>
+              <th>Redemptions</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 ? (
+              <tr>
+                <td colSpan={6}>No promos yet. Add one like Save50 for 50% off.</td>
+              </tr>
+            ) : items.map((item) => (
+              <tr key={item.id}>
+                <td><strong>{item.displayCode}</strong></td>
+                <td>{item.discountPercent}%</td>
+                <td>
+                  <span className={`tag ${item.isActive ? 'active' : 'rejected'}`}>
+                    {item.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+                <td>
+                  {item.startsAtUtc || item.endsAtUtc
+                    ? `${item.startsAtUtc ? phDateTime(item.startsAtUtc) : '—'} → ${item.endsAtUtc ? phDateTime(item.endsAtUtc) : '—'}`
+                    : 'Always'}
+                </td>
+                <td>
+                  {item.redemptionCount}
+                  {item.maxRedemptions != null ? ` / ${item.maxRedemptions}` : ''}
+                </td>
+                <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                  <button className="btn tiny" type="button" onClick={() => openEdit(item)}>Edit</button>
+                  {' '}
+                  <button className={`btn tiny${item.isActive ? ' danger' : ''}`} type="button" onClick={() => void toggle(item)}>
+                    {item.isActive ? 'Deactivate' : 'Activate'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {open ? (
+        <div className="modal-backdrop" role="presentation" onClick={closeModal}>
+          <div
+            className="modal-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="promo-modal-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-head">
+              <div>
+                <h2 id="promo-modal-title">{editing ? 'Edit promo' : 'Add promo'}</h2>
+                <p className="muted" style={{ margin: '6px 0 0' }}>
+                  Code is generated from the percent. Optional dates use Philippine time.
+                </p>
+              </div>
+              <button className="btn tiny" type="button" onClick={closeModal}>Close</button>
+            </div>
+            <div className="form-grid">
+              <label className="field">
+                <span>Discount %</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  inputMode="numeric"
+                  value={discountPercent}
+                  onChange={(e) => setDiscountPercent(e.target.value)}
+                  placeholder="50"
+                />
+              </label>
+              <div className="field">
+                <span>Code</span>
+                <input readOnly value={previewPercent != null ? `Save${previewPercent}` : 'Save…'} />
+              </div>
+              <label className="field">
+                <span>Status</span>
+                <select value={isActive ? 'active' : 'inactive'} onChange={(e) => setIsActive(e.target.value === 'active')}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>Max redemptions (optional)</span>
+                <input
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  value={maxRedemptions}
+                  onChange={(e) => setMaxRedemptions(e.target.value)}
+                  placeholder="Unlimited"
+                />
+              </label>
+              <label className="field">
+                <span>Starts (optional)</span>
+                <input type="datetime-local" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+              </label>
+              <label className="field">
+                <span>Ends (optional)</span>
+                <input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+              </label>
+            </div>
+            {formError ? <p className="error">{formError}</p> : null}
+            <div className="modal-actions">
+              <button className="btn" type="button" disabled={busy} onClick={() => void save()}>
+                {busy ? 'Saving…' : editing ? 'Save changes' : 'Create promo'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

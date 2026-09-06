@@ -242,6 +242,10 @@ class JobOffer {
     this.riderDistanceKm,
     this.paymentMethodOther,
     this.scheduledAt,
+    this.customerFare = 0,
+    this.promoDiscountAmount = 0,
+    this.isPromoSponsored = false,
+    this.discountPercent,
   });
 
   final String offerId;
@@ -262,6 +266,21 @@ class JobOffer {
   final DateTime? scheduledAt;
   final bool isPreferred;
   final bool highlighted;
+  final double customerFare;
+  final double promoDiscountAmount;
+  final bool isPromoSponsored;
+  final int? discountPercent;
+
+  double get collectFromCustomer =>
+      customerFare > 0 ? customerFare : fare;
+
+  double get collectFromOperator {
+    if (!isPromoSponsored) return 0;
+    if (promoDiscountAmount > 0) return promoDiscountAmount;
+    final diff = fare - collectFromCustomer;
+    if (diff <= 0) return 0;
+    return diff > fare ? fare : diff;
+  }
 
   factory JobOffer.fromJson(Map<String, dynamic> json) => JobOffer(
         offerId: asText(json['offerId']),
@@ -282,6 +301,10 @@ class JobOffer {
         scheduledAt: parseUtc(json['scheduledAtUtc']),
         isPreferred: asFlag(json['isPreferred']),
         highlighted: asFlag(json['highlighted']),
+        customerFare: (json['customerFare'] as num?)?.toDouble() ?? 0,
+        promoDiscountAmount: (json['promoDiscountAmount'] as num?)?.toDouble() ?? 0,
+        isPromoSponsored: asFlag(json['isPromoSponsored']),
+        discountPercent: json['discountPercent'] is num ? (json['discountPercent'] as num).toInt() : null,
       );
 }
 
@@ -313,6 +336,10 @@ class RiderTrip {
     this.paymentMethodOther,
     this.canViewChat = true,
     this.canSendChat = false,
+    this.customerFare = 0,
+    this.promoDiscountAmount = 0,
+    this.isPromoSponsored = false,
+    this.discountPercent,
   });
 
   final String tripId;
@@ -341,10 +368,25 @@ class RiderTrip {
   final bool canSos;
   final bool canViewChat;
   final bool canSendChat;
+  final double customerFare;
+  final double promoDiscountAmount;
+  final bool isPromoSponsored;
+  final int? discountPercent;
 
   bool get isNewCustomer => previousBookingCount == 0;
 
   bool get canChat => canSendChat;
+
+  double get collectFromCustomer =>
+      customerFare > 0 ? customerFare : fare;
+
+  double get collectFromOperator {
+    if (!isPromoSponsored) return 0;
+    if (promoDiscountAmount > 0) return promoDiscountAmount;
+    final diff = fare - collectFromCustomer;
+    if (diff <= 0) return 0;
+    return diff > fare ? fare : diff;
+  }
 
   factory RiderTrip.fromJson(Map<String, dynamic> json) => RiderTrip(
         tripId: asText(json['tripId']),
@@ -377,6 +419,10 @@ class RiderTrip {
         canSendChat: json['canChat'] is bool
             ? json['canChat'] as bool
             : _chatStatus(asText(json['status'])),
+        customerFare: (json['customerFare'] as num?)?.toDouble() ?? 0,
+        promoDiscountAmount: (json['promoDiscountAmount'] as num?)?.toDouble() ?? 0,
+        isPromoSponsored: asFlag(json['isPromoSponsored']),
+        discountPercent: json['discountPercent'] is num ? (json['discountPercent'] as num).toInt() : null,
       );
 }
 

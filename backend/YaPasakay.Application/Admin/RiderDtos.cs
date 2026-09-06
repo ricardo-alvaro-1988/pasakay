@@ -42,7 +42,11 @@ public record RiderOfferItem(
     DateTime? ScheduledAtUtc,
     DateTime ExpiresAtUtc,
     bool IsPreferred,
-    bool Highlighted);
+    bool Highlighted,
+    decimal CustomerFare = 0,
+    decimal PromoDiscountAmount = 0,
+    bool IsPromoSponsored = false,
+    int? DiscountPercent = null);
 
 public record RiderActiveTrip(
     Guid TripId,
@@ -73,7 +77,11 @@ public record RiderActiveTrip(
     bool CanCancel,
     bool CanSos,
     bool CanViewChat,
-    bool CanChat);
+    bool CanChat,
+    decimal CustomerFare = 0,
+    decimal PromoDiscountAmount = 0,
+    bool IsPromoSponsored = false,
+    int? DiscountPercent = null);
 
 public record RiderDeskResponse(
     Guid RiderId,

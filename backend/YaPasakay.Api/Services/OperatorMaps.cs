@@ -149,7 +149,14 @@ public static class OperatorMaps
                 .OrderBy(x => x.SentAtUtc)
                 .Select(TripChatService.Map)
                 .ToList(),
-            RideCommissionCalculator.ForTrip(trip, fareMatrix));
+            RideCommissionCalculator.ForTrip(trip, fareMatrix),
+            trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,
+            trip.PromoDiscountAmount,
+            trip.IsPromoSponsored,
+            trip.DiscountPercent,
+            trip.IsPromoSponsored && trip.DiscountPercent is int pct
+                ? $"Save{pct}"
+                : null);
     }
 
     public static async Task<RideDetailResponse> RideDetailAsync(
@@ -410,7 +417,12 @@ public static class OperatorMaps
                     Math.Max(1, x.PassengerCount),
                     x.PaymentMethod,
                     x.PaymentMethodOther,
-                    RideCommissionCalculator.ForTrip(x, fare));
+                    RideCommissionCalculator.ForTrip(x, fare),
+                    x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
+                    x.PromoDiscountAmount,
+                    x.IsPromoSponsored,
+                    x.DiscountPercent,
+                    x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null);
             })
             .ToList();
 

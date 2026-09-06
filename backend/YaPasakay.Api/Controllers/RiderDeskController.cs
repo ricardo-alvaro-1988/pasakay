@@ -13,7 +13,7 @@ namespace YaPasakay.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "Rider")]
 [Route("api/rider")]
-public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast, RiderWalletService wallets, TripChatRealtime chatRealtime, LiveNotify live, UploadStore uploads) : ControllerBase
+public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast, RiderWalletService wallets, TripChatRealtime chatRealtime, LiveNotify live, UploadStore uploads, OperatorPromoService promos) : ControllerBase
 {
     [HttpGet("desk")]
     public async Task<ActionResult<RiderDeskResponse>> Desk(CancellationToken cancellationToken)
@@ -405,7 +405,12 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
                 x.PassengerCount < 1 ? 1 : x.PassengerCount,
                 x.PaymentMethod,
                 x.PaymentMethodOther,
-                null))
+                null,
+                x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
+                x.PromoDiscountAmount,
+                x.IsPromoSponsored,
+                x.DiscountPercent,
+                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null))
             .ToListAsync(cancellationToken);
         return Ok(trips.Select(x => x with
         {
@@ -549,6 +554,7 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
         trip.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         await wallets.ApplyCommissionAsync(trip, cancellationToken);
+        await promos.RedeemOnCompleteAsync(trip, cancellationToken);
         await broadcast.ExpireTripAsync(trip.Id, cancellationToken);
         if (trip.CustomerId is Guid customerId)
         {

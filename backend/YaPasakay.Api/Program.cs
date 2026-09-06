@@ -25,6 +25,7 @@ builder.Services.AddSingleton<YaPasakay.Api.Services.BrandShell>();
 builder.Services.AddScoped<YaPasakay.Api.Services.RiderWalletService>();
 builder.Services.AddScoped<YaPasakay.Api.Services.TripBroadcastService>();
 builder.Services.AddSingleton<YaPasakay.Api.Services.TripChatRealtime>();
+builder.Services.AddScoped<YaPasakay.Api.Services.OperatorPromoService>();
 builder.Services.AddScoped<YaPasakay.Api.Services.LiveNotify>();
 builder.Services.AddSingleton<YaPasakay.Api.Services.GoogleDrivingDistance>();
 builder.Services.AddScoped<YaPasakay.Api.Services.AdminAccessFilter>();

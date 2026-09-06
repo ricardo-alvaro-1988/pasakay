@@ -36,4 +36,5 @@ public class Operator : BaseEntity
     public ICollection<OperatorBill> Bills { get; set; } = new List<OperatorBill>();
     public ICollection<OperatorNotification> Notifications { get; set; } = new List<OperatorNotification>();
     public ICollection<OperatorCashInBankAccount> CashInBankAccounts { get; set; } = new List<OperatorCashInBankAccount>();
+    public ICollection<OperatorPromo> Promos { get; set; } = new List<OperatorPromo>();
 }

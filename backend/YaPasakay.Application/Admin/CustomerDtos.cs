@@ -27,7 +27,8 @@ public record CustomerBookRequest(
     DateTime? ScheduledAtUtc,
     Guid? RiderId,
     bool HailQr,
-    int PassengerCount = 1);
+    int PassengerCount = 1,
+    string? PromoCode = null);
 
 public record CustomerHailRider(
     Guid RiderId,
@@ -53,7 +54,12 @@ public record CustomerQuoteResponse(
     VehicleType VehicleType,
     PaymentMethod PaymentMethod,
     bool RiderAvailable,
-    BookingDispatchMode BookingDispatchMode);
+    BookingDispatchMode BookingDispatchMode,
+    decimal OriginalFare = 0,
+    decimal CustomerFare = 0,
+    bool PromoApplied = false,
+    int? DiscountPercent = null,
+    string? PromoCode = null);
 
 public record CustomerServiceCheckRequest(
     Guid? PickupBarangayId,
@@ -100,7 +106,12 @@ public record CustomerTripItem(
     string? RatingComment,
     bool CanRate,
     bool CanViewChat,
-    bool CanChat);
+    bool CanChat,
+    decimal CustomerFare = 0,
+    decimal PromoDiscountAmount = 0,
+    bool IsPromoSponsored = false,
+    int? DiscountPercent = null,
+    string? PromoCode = null);
 
 public record CustomerRateRequest(int Rating, string? Comment);
 

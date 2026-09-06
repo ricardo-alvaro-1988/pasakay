@@ -412,7 +412,11 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.ScheduledAtUtc is DateTime scheduled ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc) : null,
             DateTime.SpecifyKind(offer.ExpiresAtUtc, DateTimeKind.Utc),
             offer.IsPreferred,
-            offer.IsPreferred);
+            offer.IsPreferred,
+            trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,
+            trip.PromoDiscountAmount,
+            trip.IsPromoSponsored,
+            trip.DiscountPercent);
 
     public static RiderActiveTrip MapTrip(
         Trip trip,
@@ -449,7 +453,11 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.Status is TripStatus.Pending or TripStatus.Waiting,
             trip.Status is TripStatus.Waiting or TripStatus.Ongoing,
             TripChatService.CanView(trip),
-            TripChatService.CanChat(trip));
+            TripChatService.CanChat(trip),
+            trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,
+            trip.PromoDiscountAmount,
+            trip.IsPromoSponsored,
+            trip.DiscountPercent);
 
     public async Task<HashSet<Guid>> LiveHailedRiderIdsAsync(CancellationToken cancellationToken)
     {

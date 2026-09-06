@@ -19,7 +19,8 @@ public class CustomerBookingsController(
     TripChatRealtime chatRealtime,
     LiveNotify live,
     GoogleDrivingDistance driving,
-    UploadStore uploads) : ControllerBase
+    UploadStore uploads,
+    OperatorPromoService promos) : ControllerBase
 {
 
     [HttpGet("desk")]
@@ -251,21 +252,28 @@ public class CustomerBookingsController(
         }
 
         var body = BindHail(customer, request);
-        var prepared = await PrepareAsync(body, requireHailReady: false, requireRider: false, cancellationToken);
+        var prepared = await PrepareAsync(body, requireHailReady: false, requireRider: false, customer.Id, cancellationToken);
         if (prepared.Error is not null)
         {
             return BadRequest(new { message = prepared.Error });
         }
 
+        var original = prepared.Fare;
+        var customerFare = prepared.CustomerFare;
         return Ok(new CustomerQuoteResponse(
-            prepared.Fare,
+            customerFare,
             prepared.DistanceKm,
             prepared.EtaMinutes,
             prepared.Operator!.CompanyName,
             prepared.VehicleType,
             body.PaymentMethod,
             prepared.Rider is not null || prepared.Operator.BookingDispatchMode != BookingDispatchMode.Broadcast,
-            prepared.Operator.BookingDispatchMode));
+            prepared.Operator.BookingDispatchMode,
+            original,
+            customerFare,
+            prepared.PromoApplied,
+            prepared.DiscountPercent,
+            prepared.PromoDisplayCode));
     }
 
     [HttpPost("service-check")]
@@ -356,6 +364,7 @@ public class CustomerBookingsController(
             body with { RiderId = isDirectHail ? body.RiderId : null },
             requireHailReady: false,
             requireRider: false,
+            customer.Id,
             cancellationToken);
         if (preview.Error is not null || preview.Operator is null)
         {
@@ -381,6 +390,7 @@ public class CustomerBookingsController(
             body,
             requireHailReady: isDirectHail,
             requireRider: true,
+            customer.Id,
             cancellationToken);
         if (prepared.Error is not null || prepared.Operator is null || prepared.Rider is null || prepared.Pickup is null || prepared.Dropoff is null)
         {
@@ -436,6 +446,11 @@ public class CustomerBookingsController(
                     ? TripBroadcastService.CustomerPickNote
                     : string.IsNullOrWhiteSpace(body.Notes) ? null : body.Notes.Trim(),
             Fare = prepared.Fare,
+            CustomerFare = prepared.CustomerFare,
+            PromoDiscountAmount = prepared.PromoDiscountAmount,
+            IsPromoSponsored = prepared.PromoApplied,
+            PromoId = prepared.PromoId,
+            DiscountPercent = prepared.DiscountPercent,
             DistanceKm = prepared.DistanceKm,
             PassengerCount = prepared.PassengerCount,
             PaymentMethod = body.PaymentMethod,
@@ -573,7 +588,12 @@ public class CustomerBookingsController(
         return Ok(await CustomerDeskBuilder.BuildAsync(db, customer, cancellationToken));
     }
 
-    private async Task<PreparedBooking> PrepareAsync(CustomerBookRequest request, bool requireHailReady, bool requireRider, CancellationToken cancellationToken)
+    private async Task<PreparedBooking> PrepareAsync(
+        CustomerBookRequest request,
+        bool requireHailReady,
+        bool requireRider,
+        Guid? customerId,
+        CancellationToken cancellationToken)
     {
         var pickupDetails = (request.PickupDetails ?? string.Empty).Trim();
         var dropoffDetails = (request.DropoffDetails ?? string.Empty).Trim();
@@ -651,6 +671,24 @@ public class CustomerBookingsController(
 
         var fare = FareQuote.ComputeForPassengers(fareRow, passengers, distance);
 
+        OperatorPromo? promo = null;
+        var customerFare = fare;
+        var promoDiscount = 0m;
+        if (!string.IsNullOrWhiteSpace(request.PromoCode))
+        {
+            var resolved = await promos.ResolveForBookingAsync(op.Id, customerId, request.PromoCode, cancellationToken);
+            if (resolved.Error is not null)
+            {
+                return new PreparedBooking { Error = resolved.Error };
+            }
+
+            promo = resolved.Promo;
+            if (promo is not null)
+            {
+                (customerFare, promoDiscount) = OperatorPromoRules.SplitFare(fare, promo.DiscountPercent);
+            }
+        }
+
         var rider = hail.Rider ?? await PickRiderAsync(
             op.Id,
             vehicle,
@@ -688,6 +726,12 @@ public class CustomerBookingsController(
             DropoffLng = dropoffLng,
             DistanceKm = distance,
             Fare = fare,
+            CustomerFare = customerFare,
+            PromoDiscountAmount = promoDiscount,
+            PromoApplied = promo is not null,
+            PromoId = promo?.Id,
+            DiscountPercent = promo?.DiscountPercent,
+            PromoDisplayCode = promo is not null ? OperatorPromoRules.DisplayCode(promo.DiscountPercent) : null,
             PassengerCount = passengers,
             EtaMinutes = eta,
             VehicleType = vehicle
@@ -836,6 +880,12 @@ public class CustomerBookingsController(
         public double DropoffLng { get; set; }
         public decimal DistanceKm { get; set; }
         public decimal Fare { get; set; }
+        public decimal CustomerFare { get; set; }
+        public decimal PromoDiscountAmount { get; set; }
+        public bool PromoApplied { get; set; }
+        public Guid? PromoId { get; set; }
+        public int? DiscountPercent { get; set; }
+        public string? PromoDisplayCode { get; set; }
         public int PassengerCount { get; set; } = 1;
         public int EtaMinutes { get; set; }
         public VehicleType VehicleType { get; set; }

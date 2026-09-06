@@ -206,7 +206,7 @@ function BookingSummary({ trip, chevron }: { trip: CustomerTrip | CustomerTripDe
     <>
       <div className="card-head">
         <span className="booking-ref">{trip.reference}</span>
-        <b className="price">{peso(trip.fare)}</b>
+        <b className="price">{peso('customerFare' in trip && typeof trip.customerFare === 'number' && trip.customerFare > 0 ? trip.customerFare : trip.fare)}</b>
       </div>
       <div className="booking-summary-meta">
         <span className={`tag ${String(trip.status).toLowerCase()}`}>{tripHeadline(String(trip.status))}</span>

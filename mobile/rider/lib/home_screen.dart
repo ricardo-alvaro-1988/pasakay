@@ -234,6 +234,19 @@ class _HomeScreenState extends State<HomeScreen> {
                                 offer.customerPhone,
                                 style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
                               ),
+                              if (offer.isPromoSponsored) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  offer.discountPercent != null
+                                      ? 'Save${offer.discountPercent} · ${offer.discountPercent}% off'
+                                      : 'Promo ride',
+                                  style: const TextStyle(
+                                    color: Color(0xFF047857),
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -275,25 +288,47 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 12),
               BrandPanel(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                child: Row(
+                child: Column(
                   children: [
-                    Expanded(
-                      child: _OfferStat(label: 'FARE', value: peso(offer.fare), emphasize: true),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _OfferStat(label: 'FARE', value: peso(offer.fare), emphasize: true),
+                        ),
+                        Container(width: 1, height: 36, color: brandLine),
+                        Expanded(
+                          child: _OfferStat(
+                            label: 'TRIP',
+                            value: '${offer.distanceKm.toStringAsFixed(1)} km',
+                          ),
+                        ),
+                        Container(width: 1, height: 36, color: brandLine),
+                        Expanded(
+                          child: _OfferStat(
+                            label: 'PAY',
+                            value: paymentLabel(offer.paymentMethod),
+                          ),
+                        ),
+                      ],
                     ),
-                    Container(width: 1, height: 36, color: brandLine),
-                    Expanded(
-                      child: _OfferStat(
-                        label: 'TRIP',
-                        value: '${offer.distanceKm.toStringAsFixed(1)} km',
+                    if (offer.isPromoSponsored) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                        ),
+                        child: Text(
+                          offer.discountPercent != null
+                              ? 'Save${offer.discountPercent} · ${offer.discountPercent}%: collect ${peso(offer.collectFromCustomer)} from customer · ${peso(offer.collectFromOperator)} from operator'
+                              : 'Promo: collect ${peso(offer.collectFromCustomer)} from customer · ${peso(offer.collectFromOperator)} from operator',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                        ),
                       ),
-                    ),
-                    Container(width: 1, height: 36, color: brandLine),
-                    Expanded(
-                      child: _OfferStat(
-                        label: 'PAY',
-                        value: paymentLabel(offer.paymentMethod),
-                      ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -495,6 +530,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       'BOOKING : ${activeTrip.reference}',
                       style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
                     ),
+                    if (activeTrip.isPromoSponsored) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                        ),
+                        child: Text(
+                          activeTrip.discountPercent != null
+                              ? 'Save${activeTrip.discountPercent} · ${activeTrip.discountPercent}%'
+                              : 'PROMO',
+                          style: const TextStyle(
+                            color: Color(0xFF047857),
+                            fontWeight: FontWeight.w900,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
                       '${activeTrip.status} · ${activeTrip.customerName}',
@@ -523,6 +579,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800, color: brandRed),
                     ),
+                    if (activeTrip.isPromoSponsored) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Promo: collect ${peso(activeTrip.collectFromCustomer)} from customer · ${peso(activeTrip.collectFromOperator)} from operator',
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF047857)),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     Row(
                       children: [

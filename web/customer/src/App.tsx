@@ -232,6 +232,7 @@ function Home({
   const [passengers, setPassengers] = useState(1)
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
   const [paymentRef, setPaymentRef] = useState('')
+  const [promoCode, setPromoCode] = useState('')
   const [quotes, setQuotes] = useState<Record<VehicleType, Quote | null>>({ Motorcycle: null, Tricycle: null })
   const [quoting, setQuoting] = useState(false)
   const [coverageHint, setCoverageHint] = useState(false)
@@ -480,7 +481,7 @@ function Home({
     let ignore = false
     async function quoteOne(type: VehicleType): Promise<{ quote: Quote | null; error: string }> {
       try {
-        return { quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, type === 'Tricycle' ? passengers : 1)), error: '' }
+        return { quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, type === 'Tricycle' ? passengers : 1, promoCode)), error: '' }
       } catch (err) {
         return { quote: null, error: err instanceof Error ? err.message : 'Could not quote fare.' }
       }
@@ -520,7 +521,7 @@ function Home({
     }
     void load()
     return () => { ignore = true }
-  }, [pickup, dropoff, payment, paymentRef, trip, hail?.riderId, hail?.vehicleType, passengers])
+  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers])
 
   const dispatchMode = quotes[vehicle]?.bookingDispatchMode ?? 'Broadcast'
   const needsRiderPick = !hail && (dispatchMode === 'Selection' || (dispatchMode === 'Both' && dispatchChoice === 'pick'))
@@ -716,7 +717,7 @@ function Home({
     setError('')
     try {
       const riderId = hail?.riderId ?? (needsRiderPick ? selectedRiderId ?? undefined : undefined)
-      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, vehicle === 'Tricycle' ? passengers : 1)))
+      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, vehicle === 'Tricycle' ? passengers : 1, promoCode)))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not book.'
       setError(isOperatorCoverageError(message) ? '' : message)
@@ -785,6 +786,8 @@ function Home({
   }
 
   const quote = quotes[vehicle]
+  const quotePay = quote ? (quote.customerFare ?? quote.fare) : 0
+  const quoteOriginal = quote?.originalFare && quote.originalFare > quotePay ? quote.originalFare : null
   const searchingArea = noOperator.searching
   const canBook = !!pickup && !!dropoff && !quoting && !searchingArea && !noOperator.uncovered && !!quote && quote.riderAvailable !== false && !hail?.isBusy && (payment !== 'Other' || !!paymentRef.trim())
     && (!needsRiderPick || !!selectedRiderId)
@@ -808,10 +811,10 @@ function Home({
                 : needsRiderPick && !selectedRiderId
                   ? 'Choose a rider'
                   : hail
-                    ? `Request ${hail.fullName.split(' ')[0]} · ${peso(quote.fare)}`
+                    ? `Request ${hail.fullName.split(' ')[0]} · ${peso(quotePay)}`
                     : needsRiderPick && selectedRiderId
-                      ? `Book ${availableRiders.find((r) => r.riderId === selectedRiderId)?.fullName.split(' ')[0] ?? 'rider'} · ${peso(quote.fare)}`
-                      : `Confirm ${vehicle} · ${peso(quote.fare)} · ${kmLabel(quote.distanceKm)}`
+                      ? `Book ${availableRiders.find((r) => r.riderId === selectedRiderId)?.fullName.split(' ')[0] ?? 'rider'} · ${peso(quotePay)}`
+                      : `Confirm ${vehicle} · ${peso(quotePay)} · ${kmLabel(quote.distanceKm)}`
 
   return (
     <>
@@ -902,14 +905,14 @@ function Home({
                     <span className="icon moto"><img src={VEHICLE_ART.Motorcycle} alt="" /></span>
                     <span className="copy">
                       <b>Motorcycle</b>
-                      <b className="price">{quotes.Motorcycle ? `${peso(quotes.Motorcycle.fare)} · ${kmLabel(quotes.Motorcycle.distanceKm)}` : '—'}</b>
+                      <b className="price">{quotes.Motorcycle ? quotePriceLabel(quotes.Motorcycle) : '—'}</b>
                     </span>
                   </button>
                   <button type="button" disabled={!!hail && hail.vehicleType !== 'Tricycle'} className={`vehicle ${vehicle === 'Tricycle' ? 'on' : ''}`} onClick={() => setVehicle('Tricycle')}>
                     <span className="icon"><img src={VEHICLE_ART.Tricycle} alt="" /></span>
                     <span className="copy">
                       <b>Tricycle</b>
-                      <b className="price">{quotes.Tricycle ? `${peso(quotes.Tricycle.fare)} · ${kmLabel(quotes.Tricycle.distanceKm)}` : '—'}</b>
+                      <b className="price">{quotes.Tricycle ? quotePriceLabel(quotes.Tricycle) : '—'}</b>
                     </span>
                   </button>
                 </div>
@@ -965,6 +968,25 @@ function Home({
                   }}
                   onRefNo={setPaymentRef}
                 />
+                <label className="promo-field">
+                  <span>Promo code</span>
+                  <input
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="Save50"
+                    value={promoCode}
+                    onChange={(e) => setPromoCode(e.target.value)}
+                  />
+                </label>
+                {quote?.promoApplied && quote.promoCode ? (
+                  <p className="promo-hint">
+                    {quote.promoCode}
+                    {quote.discountPercent != null ? ` · ${quote.discountPercent}% off` : ' applied'}
+                    {quoteOriginal ? ` · Was ${peso(quoteOriginal)}, you pay ${peso(quotePay)}` : ''}
+                  </p>
+                ) : null}
                 {!hail && dispatchMode === 'Both' && (
                   <div className="dispatch-choice" role="group" aria-label="How to find a rider">
                     <button
@@ -1191,7 +1213,19 @@ function TripPanel({
           <div className="addr"><small>Drop-off</small>{trip.dropoff}</div>
         </div>
       </div>
-      <p className="fareline"><b>{peso(trip.fare)}</b>{kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · {passengerLabel(trip.passengerCount)} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}</p>
+      <p className="fareline">
+        {trip.isPromoSponsored ? (
+          <span className="promo-tag">
+            {trip.promoCode || (trip.discountPercent != null ? `Save${trip.discountPercent}` : 'Promo')}
+            {trip.discountPercent != null ? ` · ${trip.discountPercent}%` : ''}
+          </span>
+        ) : null}
+        <b>{peso(tripPay(trip))}</b>
+        {trip.isPromoSponsored && trip.fare > tripPay(trip) ? (
+          <span className="promo-was"> was {peso(trip.fare)}</span>
+        ) : null}
+        {kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · {passengerLabel(trip.passengerCount)} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}
+      </p>
       {trip.canCancel && (
         <div className="actions">
           <button className="danger" onClick={() => void cancel()}>Cancel ride</button>
@@ -1251,7 +1285,9 @@ function mapChromePadding() {
   return { top, right: 16, bottom, left: 16 }
 }
 
-function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', riderId?: string, passengerCount = 1): BookBody {
+function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', riderId?: string, passengerCount = 1, promoCode = ''): BookBody {
+  const code = promoCode.trim()
+  const looksComplete = /^save([1-9]|[1-9]\d|100)$/i.test(code)
   return {
     vehicleType: vehicle,
     pickupBarangayId: pickup.barangayId,
@@ -1266,7 +1302,20 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
     riderId,
     passengerCount: vehicle === 'Motorcycle' ? 1 : Math.min(4, Math.max(1, passengerCount)),
+    promoCode: looksComplete ? code : undefined,
   }
+}
+
+function quotePriceLabel(quote: Quote) {
+  const pay = quote.customerFare ?? quote.fare
+  const original = quote.originalFare && quote.originalFare > pay ? quote.originalFare : null
+  const main = original ? `${peso(pay)} (was ${peso(original)})` : peso(pay)
+  return `${main} · ${kmLabel(quote.distanceKm)}`
+}
+
+function tripPay(trip: CustomerTrip) {
+  if (trip.customerFare != null && trip.customerFare > 0) return trip.customerFare
+  return trip.fare
 }
 
 const INSTALLED_KEY = 'yp-installed'

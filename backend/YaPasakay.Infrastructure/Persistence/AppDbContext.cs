@@ -36,6 +36,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RiderInviteLink> RiderInviteLinks => Set<RiderInviteLink>();
     public DbSet<RiderApplication> RiderApplications => Set<RiderApplication>();
     public DbSet<OperatorCashInBankAccount> OperatorCashInBankAccounts => Set<OperatorCashInBankAccount>();
+    public DbSet<OperatorPromo> OperatorPromos => Set<OperatorPromo>();
+    public DbSet<PromoRedemption> PromoRedemptions => Set<PromoRedemption>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -257,7 +259,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.RatingComment).HasMaxLength(200);
             entity.Property(x => x.PaymentMethodOther).HasMaxLength(80);
             entity.Property(x => x.Fare).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.CustomerFare).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.PromoDiscountAmount).HasColumnType("decimal(18,2)");
             entity.Property(x => x.DistanceKm).HasColumnType("decimal(8,2)");
+            entity.HasOne(x => x.Promo)
+                .WithMany()
+                .HasForeignKey(x => x.PromoId)
+                .OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(x => x.PickupBarangay)
                 .WithMany()
                 .HasForeignKey(x => x.PickupBarangayId)
@@ -529,6 +537,34 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(x => x.CashInBankAccounts)
                 .HasForeignKey(x => x.OperatorId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OperatorPromo>(entity =>
+        {
+            entity.HasIndex(x => new { x.OperatorId, x.Code }).IsUnique();
+            entity.Property(x => x.Code).HasMaxLength(16).IsRequired();
+            entity.HasOne(x => x.Operator)
+                .WithMany(x => x.Promos)
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PromoRedemption>(entity =>
+        {
+            entity.HasIndex(x => new { x.PromoId, x.CustomerId }).IsUnique();
+            entity.HasIndex(x => x.TripId).IsUnique();
+            entity.HasOne(x => x.Promo)
+                .WithMany(x => x.Redemptions)
+                .HasForeignKey(x => x.PromoId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Customer)
+                .WithMany()
+                .HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Trip)
+                .WithMany()
+                .HasForeignKey(x => x.TripId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

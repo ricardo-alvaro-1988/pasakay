@@ -17,6 +17,7 @@ public static class CustomerDeskBuilder
         var now = DateTime.UtcNow;
         var trips = await db.Trips
             .Include(x => x.Operator)
+            .Include(x => x.Promo)
             .Include(x => x.Rider)
                 .ThenInclude(x => x.AppUser)
             .Where(x => x.CustomerId == customer.Id)
@@ -190,6 +191,13 @@ public static class CustomerDeskBuilder
             trip.RatingComment,
             trip.Status == TripStatus.Completed && trip.Rating is null,
             TripChatService.CanView(trip),
-            TripChatService.CanChat(trip));
+            TripChatService.CanChat(trip),
+            trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,
+            trip.PromoDiscountAmount,
+            trip.IsPromoSponsored,
+            trip.DiscountPercent,
+            trip.IsPromoSponsored && trip.DiscountPercent is int pct
+                ? OperatorPromoRules.DisplayCode(pct)
+                : null);
     }
 }

@@ -754,7 +754,12 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 x.Status,
                 x.Fare,
                 x.PaymentMethod,
-                x.PaymentMethodOther))
+                x.PaymentMethodOther,
+                x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
+                x.PromoDiscountAmount,
+                x.IsPromoSponsored,
+                x.DiscountPercent,
+                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null))
             .ToListAsync(cancellationToken);
 
         return Ok(new PagedResult<OperatorBookingListItem>(
@@ -1243,7 +1248,12 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 .OrderBy(x => x.SentAtUtc)
                 .Select(TripChatService.Map)
                 .ToList(),
-            RideCommissionCalculator.ForTrip(trip, fare));
+            RideCommissionCalculator.ForTrip(trip, fare),
+            trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,
+            trip.PromoDiscountAmount,
+            trip.IsPromoSponsored,
+            trip.DiscountPercent,
+            trip.IsPromoSponsored && trip.DiscountPercent is int pct ? $"Save{pct}" : null);
     }
 
     private static RideStopItem MapRideStop(string details, string fullAddress, Barangay? barangay)
@@ -1384,7 +1394,12 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                     Math.Max(1, x.PassengerCount),
                     x.PaymentMethod,
                     x.PaymentMethodOther,
-                    RideCommissionCalculator.ForTrip(x, fare));
+                    RideCommissionCalculator.ForTrip(x, fare),
+                    x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
+                    x.PromoDiscountAmount,
+                    x.IsPromoSponsored,
+                    x.DiscountPercent,
+                    x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null);
             })
             .ToList();
 

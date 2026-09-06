@@ -224,6 +224,24 @@ class TripScreen extends StatelessWidget {
                       '${peso(trip.fare)}  ·  ${trip.distanceKm.toStringAsFixed(1)} km  ·  ${paymentLabel(trip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
+                    if (trip.isPromoSponsored) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                        ),
+                        child: Text(
+                          trip.discountPercent != null
+                              ? 'Save${trip.discountPercent} · ${trip.discountPercent}% off: collect ${peso(trip.collectFromCustomer)} from customer · ${peso(trip.collectFromOperator)} from operator'
+                              : 'Promo: collect ${peso(trip.collectFromCustomer)} from customer · ${peso(trip.collectFromOperator)} from operator',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

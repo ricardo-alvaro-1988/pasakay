@@ -98,6 +98,11 @@ public static class OperatorAccess
             return "wallet";
         }
 
+        if (value.StartsWith("/api/operator/promos"))
+        {
+            return "promos";
+        }
+
         if (value.StartsWith("/api/operator/reports/commission"))
         {
             return "commission";

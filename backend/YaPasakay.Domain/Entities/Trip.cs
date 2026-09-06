@@ -29,7 +29,15 @@ public class Trip : BaseEntity
     public CustomerProfile? Customer { get; set; }
     public string Reference { get; set; } = string.Empty;
     public string? Notes { get; set; }
+    /// <summary>Full quoted fare (used for commission).</summary>
     public decimal Fare { get; set; }
+    /// <summary>What the customer should pay after promo (equals Fare when no promo).</summary>
+    public decimal CustomerFare { get; set; }
+    public decimal PromoDiscountAmount { get; set; }
+    public bool IsPromoSponsored { get; set; }
+    public Guid? PromoId { get; set; }
+    public OperatorPromo? Promo { get; set; }
+    public int? DiscountPercent { get; set; }
     public decimal DistanceKm { get; set; }
     public int PassengerCount { get; set; } = 1;
     public DateTime RequestedAtUtc { get; set; }
