@@ -1,33 +1,53 @@
-let audio: HTMLAudioElement | null = null
-let unlocked = false
-let looping = false
-let pendingPlay = false
-let unlockBound = false
+type AlarmListener = () => void
+
 let audioCtx: AudioContext | null = null
 let oscillator: OscillatorNode | null = null
 let gainNode: GainNode | null = null
 let sirenTimer: number | null = null
-let usingSynth = false
+let looping = false
+let pendingPlay = false
+let armed = false
+let unlockBound = false
+const listeners = new Set<AlarmListener>()
 
-function alarmSrc() {
-  const base = import.meta.env.BASE_URL || '/'
-  return `${base.endsWith('/') ? base : `${base}/`}sos-alarm.wav`
+function notify() {
+  for (const listener of listeners) {
+    listener()
+  }
 }
 
-function ensureAudio() {
-  if (!audio) {
-    audio = new Audio(alarmSrc())
-    audio.preload = 'auto'
-    audio.loop = true
+export function subscribeSosAlarm(listener: AlarmListener) {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
   }
-  return audio
+}
+
+export function isSosAudioArmed() {
+  return armed
+}
+
+export function isSosAlarmPlaying() {
+  return looping && !!oscillator
 }
 
 function ensureAudioContext() {
+  const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!AC) {
+    throw new Error('Web Audio is not supported in this browser.')
+  }
   if (!audioCtx) {
-    audioCtx = new AudioContext()
+    audioCtx = new AC()
   }
   return audioCtx
+}
+
+async function resumeContext() {
+  const ctx = ensureAudioContext()
+  if (ctx.state === 'suspended') {
+    await ctx.resume()
+  }
+  return ctx
 }
 
 function stopSynth() {
@@ -40,67 +60,85 @@ function stopSynth() {
   } catch {
     /* ignore */
   }
-  oscillator?.disconnect()
-  gainNode?.disconnect()
+  try {
+    oscillator?.disconnect()
+  } catch {
+    /* ignore */
+  }
+  try {
+    gainNode?.disconnect()
+  } catch {
+    /* ignore */
+  }
   oscillator = null
   gainNode = null
-  usingSynth = false
 }
 
-function startSynthSiren() {
+function startSynthSiren(ctx: AudioContext) {
   stopSynth()
-  const ctx = ensureAudioContext()
   const osc = ctx.createOscillator()
   const gain = ctx.createGain()
-  osc.type = 'square'
-  osc.frequency.value = 880
-  gain.gain.value = 0.18
+  osc.type = 'sawtooth'
+  osc.frequency.value = 920
+  gain.gain.value = 0.28
   osc.connect(gain)
   gain.connect(ctx.destination)
   osc.start()
   oscillator = osc
   gainNode = gain
-  usingSynth = true
+
   let high = true
   sirenTimer = window.setInterval(() => {
     high = !high
-    if (oscillator) {
-      oscillator.frequency.setTargetAtTime(high ? 880 : 560, ctx.currentTime, 0.02)
+    if (oscillator && audioCtx) {
+      oscillator.frequency.setTargetAtTime(high ? 980 : 520, audioCtx.currentTime, 0.015)
     }
-  }, 420)
+  }, 380)
 }
 
-async function resumeContext() {
-  const ctx = ensureAudioContext()
-  if (ctx.state === 'suspended') {
-    await ctx.resume()
+/** Silent unlock from any click so later SOS can ring without another prompt. */
+export async function unlockSosAudio(): Promise<boolean> {
+  try {
+    const ctx = await resumeContext()
+    if (ctx.state !== 'running') {
+      return false
+    }
+    armed = true
+    notify()
+    if (pendingPlay) {
+      pendingPlay = false
+      await playSosAlarm()
+    }
+    return true
+  } catch {
+    return false
   }
 }
 
-export function unlockSosAudio() {
-  void resumeContext().catch(() => {})
-  if (unlocked) {
-    if (pendingPlay) {
-      pendingPlay = false
-      playSosAlarm()
-    }
-    return
+/** Must be called from a user click/tap. Plays a short confirm beep. */
+export async function armSosAudio(): Promise<boolean> {
+  const ok = await unlockSosAudio()
+  if (!ok || !audioCtx) {
+    armed = false
+    notify()
+    return false
   }
-
-  const clip = ensureAudio()
-  clip.volume = 0
-  void clip.play().then(() => {
-    clip.pause()
-    clip.currentTime = 0
-    clip.volume = 1
-    unlocked = true
-    if (pendingPlay) {
-      pendingPlay = false
-      playSosAlarm()
-    }
-  }).catch(() => {
-    unlocked = false
-  })
+  try {
+    const ctx = audioCtx
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'square'
+    osc.frequency.value = 880
+    gain.gain.value = 0.12
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start()
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.18)
+    osc.stop(ctx.currentTime + 0.2)
+    return true
+  } catch {
+    return armed
+  }
 }
 
 export function bindSosAudioUnlock() {
@@ -109,57 +147,53 @@ export function bindSosAudioUnlock() {
   }
   unlockBound = true
   const unlock = () => {
-    unlockSosAudio()
+    void unlockSosAudio().then((ok) => {
+      if (ok) {
+        window.removeEventListener('pointerdown', unlock)
+        window.removeEventListener('keydown', unlock)
+        window.removeEventListener('touchstart', unlock)
+        unlockBound = false
+      }
+    })
   }
   window.addEventListener('pointerdown', unlock)
   window.addEventListener('keydown', unlock)
   window.addEventListener('touchstart', unlock, { passive: true })
 }
 
-export function playSosAlarm() {
+export async function playSosAlarm() {
   looping = true
   pendingPlay = false
-  const clip = ensureAudio()
-  clip.loop = true
-  clip.volume = 1
-  clip.currentTime = 0
+  notify()
 
-  void resumeContext()
-    .then(() => clip.play())
-    .then(() => {
-      unlocked = true
-      stopSynth()
-    })
-    .catch(() => {
-      // Autoplay blocked or file missing — try synthesized siren, else wait for gesture.
-      try {
-        startSynthSiren()
-        unlocked = true
-      } catch {
-        pendingPlay = true
-        unlocked = false
-        bindSosAudioUnlock()
-      }
-    })
+  try {
+    const ctx = await resumeContext()
+    if (ctx.state !== 'running') {
+      pendingPlay = true
+      looping = false
+      bindSosAudioUnlock()
+      notify()
+      return
+    }
+    armed = true
+    startSynthSiren(ctx)
+    notify()
+  } catch {
+    pendingPlay = true
+    looping = false
+    stopSynth()
+    bindSosAudioUnlock()
+    notify()
+  }
 }
 
 export function stopSosAlarm() {
   looping = false
   pendingPlay = false
   stopSynth()
-  if (!audio) {
-    return
-  }
-  audio.pause()
-  audio.currentTime = 0
+  notify()
 }
 
-export function isSosAlarmPlaying() {
-  if (!looping) {
-    return false
-  }
-  if (usingSynth) {
-    return true
-  }
-  return !!audio && !audio.paused
+export function isSosAlarmPending() {
+  return pendingPlay
 }

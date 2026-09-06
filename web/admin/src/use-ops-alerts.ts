@@ -6,7 +6,7 @@ import {
   startOpsConnection,
   stopOpsConnection,
 } from './ops-hub'
-import { bindSosAudioUnlock, playSosAlarm, unlockSosAudio } from './sos-alert'
+import { bindSosAudioUnlock, playSosAlarm } from './sos-alert'
 import type { HubConnection } from '@microsoft/signalr'
 import { HubConnectionState } from '@microsoft/signalr'
 
@@ -27,11 +27,10 @@ export function useOpsAlerts(onRefresh: () => void) {
 
   useEffect(() => {
     bindSosAudioUnlock()
-    unlockSosAudio()
 
     const connection = createOpsConnection((payload: OpsAlert) => {
       if (payload.reason === 'sos') {
-        playSosAlarm()
+        void playSosAlarm()
         dispatchSosAlert(payload)
       }
       refreshRef.current()

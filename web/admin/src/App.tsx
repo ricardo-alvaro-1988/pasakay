@@ -100,7 +100,15 @@ import {
 import { readSidebarCollapsed, readTheme, setSidebarCollapsed, setTheme, Theme } from './theme'
 import { useOpsAlerts } from './use-ops-alerts'
 import { SOS_ALERT_EVENT, type OpsAlert } from './ops-hub'
-import { playSosAlarm, stopSosAlarm, unlockSosAudio } from './sos-alert'
+import {
+  armSosAudio,
+  isSosAlarmPending,
+  isSosAlarmPlaying,
+  isSosAudioArmed,
+  playSosAlarm,
+  stopSosAlarm,
+  subscribeSosAlarm,
+} from './sos-alert'
 import logoCircle from './asset/logo-circle.png'
 import FleetMap from './FleetMap'
 import TripLiveMap from './TripLiveMap'
@@ -371,11 +379,21 @@ function SosBanner({
   onOpenSupport?: () => void
 }) {
   const [hidden, setHidden] = useState(false)
+  const [armed, setArmed] = useState(isSosAudioArmed)
+  const [playing, setPlaying] = useState(isSosAlarmPlaying)
+  const [pending, setPending] = useState(isSosAlarmPending)
   const flashKey = `${flash?.ticketId ?? ''}:${flash?.reference ?? ''}:${flash?.atUtc ?? ''}`
+
+  useEffect(() => subscribeSosAlarm(() => {
+    setArmed(isSosAudioArmed())
+    setPlaying(isSosAlarmPlaying())
+    setPending(isSosAlarmPending())
+  }), [])
 
   useEffect(() => {
     if (flashKey !== '::') {
       setHidden(false)
+      void playSosAlarm()
     }
   }, [flashKey])
 
@@ -388,6 +406,11 @@ function SosBanner({
     setHidden(true)
   }
 
+  async function enableAndPlay() {
+    await armSosAudio()
+    await playSosAlarm()
+  }
+
   return (
     <div className="card sos-alert sos-alert-blink">
       <div className="panel-head">
@@ -397,9 +420,20 @@ function SosBanner({
             {detail}
             {flash?.reference ? ` Latest: ${flash.reference}.` : ''}
           </p>
+          {!armed || pending || !playing ? (
+            <p style={{ margin: '8px 0 0', color: '#b42318', fontWeight: 700 }}>
+              Alarm sound is off. Click “Enable alarm sound” (browser requires a click).
+            </p>
+          ) : (
+            <p style={{ margin: '8px 0 0', color: '#b42318', fontWeight: 700 }}>
+              Alarm sounding…
+            </p>
+          )}
         </div>
         <div className="sos-alert-actions">
-          <button className="btn tiny" type="button" onClick={() => { unlockSosAudio(); playSosAlarm() }}>Test / restart alarm</button>
+          <button className="btn tiny" type="button" onClick={() => void enableAndPlay()}>
+            Enable alarm sound
+          </button>
           <button className="btn tiny" type="button" onClick={stopSosAlarm}>Stop alarm</button>
           {onOpenSupport ? (
             <button className="btn tiny" type="button" onClick={onOpenSupport}>Open Support</button>
@@ -408,6 +442,32 @@ function SosBanner({
             ×
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function SosSoundArmBanner() {
+  const [armed, setArmed] = useState(isSosAudioArmed)
+
+  useEffect(() => subscribeSosAlarm(() => setArmed(isSosAudioArmed())), [])
+
+  if (armed) {
+    return null
+  }
+
+  return (
+    <div className="card" style={{ borderColor: '#f04438', marginBottom: 12 }}>
+      <div className="panel-head">
+        <div>
+          <h2 style={{ margin: 0 }}>Enable SOS alarm sound</h2>
+          <p className="muted" style={{ margin: '6px 0 0' }}>
+            Browsers block sound until you click once. Enable this so SOS alerts ring automatically.
+          </p>
+        </div>
+        <button className="btn" type="button" onClick={() => void armSosAudio()}>
+          Enable alarm sound
+        </button>
       </div>
     </div>
   )
@@ -606,6 +666,7 @@ function Shell({
             </button>
           </div>
         </header>
+        <SosSoundArmBanner />
         {(sosAlerts > 0 || sosFlash) ? (
           <SosBanner
             count={sosAlerts}
@@ -6940,6 +7001,7 @@ function OperatorShell({
             </div>
           </div>
         </header>
+        <SosSoundArmBanner />
         {alerts.openSos > 0 || sosFlash ? (
           <SosBanner
             count={alerts.openSos}
