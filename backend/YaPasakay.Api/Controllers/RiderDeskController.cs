@@ -410,7 +410,8 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
                 x.PromoDiscountAmount,
                 x.IsPromoSponsored,
                 x.DiscountPercent,
-                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null))
+                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null,
+                x.CustomerBoostAmount))
             .ToListAsync(cancellationToken);
         return Ok(trips.Select(x => x with
         {

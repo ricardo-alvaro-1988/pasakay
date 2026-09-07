@@ -116,7 +116,8 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 x.PromoDiscountAmount,
                 x.IsPromoSponsored,
                 x.DiscountPercent,
-                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null))
+                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null,
+                x.CustomerBoostAmount))
             .ToListAsync(cancellationToken);
 
         return Ok(new PagedResult<OperatorBookingListItem>(
@@ -362,7 +363,8 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 x.PromoDiscountAmount,
                 x.IsPromoSponsored,
                 x.DiscountPercent,
-                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null))
+                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null,
+                x.CustomerBoostAmount))
             .ToListAsync(cancellationToken);
         return new OperatorBookingColumn(
             total,

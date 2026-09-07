@@ -46,7 +46,8 @@ public record RiderOfferItem(
     decimal CustomerFare = 0,
     decimal PromoDiscountAmount = 0,
     bool IsPromoSponsored = false,
-    int? DiscountPercent = null);
+    int? DiscountPercent = null,
+    decimal CustomerBoostAmount = 0);
 
 public record RiderActiveTrip(
     Guid TripId,
@@ -81,7 +82,8 @@ public record RiderActiveTrip(
     decimal CustomerFare = 0,
     decimal PromoDiscountAmount = 0,
     bool IsPromoSponsored = false,
-    int? DiscountPercent = null);
+    int? DiscountPercent = null,
+    decimal CustomerBoostAmount = 0);
 
 public record RiderDeskResponse(
     Guid RiderId,

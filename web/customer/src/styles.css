@@ -1343,6 +1343,77 @@ button.brand-pill:active { transform: scale(.98); }
   font-weight: 600;
   color: var(--good, #0a7a3e);
 }
+.boost-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-soft);
+}
+.boost-field > span {
+  font-size: 13px;
+  font-weight: 700;
+}
+.boost-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.boost-presets button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-on);
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #111;
+}
+.boost-presets button.on {
+  border-color: var(--brand, #0f766e);
+  background: color-mix(in srgb, var(--brand, #0f766e) 14%, white);
+  color: var(--brand, #0f766e);
+}
+.boost-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.boost-custom span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted, #64748b);
+}
+.boost-custom input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-on);
+  padding: 10px 12px;
+  font-weight: 700;
+  font-size: 15px;
+  color: #111;
+  max-width: 140px;
+}
+.boost-hint {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted, #475569);
+}
+.boost-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #c2410c;
+  font-size: 12px;
+  font-weight: 800;
+}
 .promo-tag {
   display: inline-flex;
   align-items: center;

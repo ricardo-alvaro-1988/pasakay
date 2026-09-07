@@ -224,6 +224,28 @@ class TripScreen extends StatelessWidget {
                       '${peso(trip.fare)}  ·  ${trip.distanceKm.toStringAsFixed(1)} km  ·  ${paymentLabel(trip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
+                    if (trip.customerBoostAmount > 0) ...[
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF7ED),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFFFDBA74)),
+                          ),
+                          child: Text(
+                            '+₱${trip.customerBoostAmount.round()} boost',
+                            style: const TextStyle(
+                              color: Color(0xFFC2410C),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                     if (trip.isPromoSponsored) ...[
                       const SizedBox(height: 10),
                       Container(

@@ -391,6 +391,7 @@ export type RideListItem = {
   isPromoSponsored?: boolean
   discountPercent?: number | null
   promoCode?: string | null
+  customerBoostAmount?: number
 }
 
 export type RideDetail = {
@@ -435,6 +436,7 @@ export type RideDetail = {
   isPromoSponsored?: boolean
   discountPercent?: number | null
   promoCode?: string | null
+  customerBoostAmount?: number
 }
 
 export type ChatSender = 'Customer' | 'Rider'

@@ -350,13 +350,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${peso(activeTrip.fare)} Â· ${paymentLabel(activeTrip.paymentMethod)}',
+                      '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800, color: brandRed),
                     ),
+                    if (activeTrip.customerBoostAmount > 0) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        '+₱${activeTrip.customerBoostAmount.round()} boost',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                          color: Color(0xFFC2410C),
+                        ),
+                      ),
+                    ],
                     if (activeTrip.isPromoSponsored) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Promo: collect ${peso(activeTrip.collectFromCustomer)} from customer Â· ${peso(activeTrip.collectFromOperator)} from operator',
+                        'Promo: collect ${peso(activeTrip.collectFromCustomer)} from customer · ${peso(activeTrip.collectFromOperator)} from operator',
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF047857)),
                       ),
                     ],

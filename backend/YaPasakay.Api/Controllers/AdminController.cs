@@ -759,7 +759,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 x.PromoDiscountAmount,
                 x.IsPromoSponsored,
                 x.DiscountPercent,
-                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null))
+                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null,
+                x.CustomerBoostAmount))
             .ToListAsync(cancellationToken);
 
         return Ok(new PagedResult<OperatorBookingListItem>(
@@ -1258,7 +1259,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             trip.PromoDiscountAmount,
             trip.IsPromoSponsored,
             trip.DiscountPercent,
-            trip.IsPromoSponsored && trip.DiscountPercent is int pct ? $"Save{pct}" : null);
+            trip.IsPromoSponsored && trip.DiscountPercent is int pct ? $"Save{pct}" : null,
+            trip.CustomerBoostAmount);
     }
 
     private static RideStopItem MapRideStop(string details, string fullAddress, Barangay? barangay)
@@ -1404,7 +1406,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                     x.PromoDiscountAmount,
                     x.IsPromoSponsored,
                     x.DiscountPercent,
-                    x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null);
+                    x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
+                    x.CustomerBoostAmount);
             })
             .ToList();
 

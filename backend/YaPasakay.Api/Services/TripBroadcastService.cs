@@ -416,7 +416,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,
             trip.PromoDiscountAmount,
             trip.IsPromoSponsored,
-            trip.DiscountPercent);
+            trip.DiscountPercent,
+            trip.CustomerBoostAmount);
 
     public static RiderActiveTrip MapTrip(
         Trip trip,
@@ -457,7 +458,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,
             trip.PromoDiscountAmount,
             trip.IsPromoSponsored,
-            trip.DiscountPercent);
+            trip.DiscountPercent,
+            trip.CustomerBoostAmount);
 
     public async Task<HashSet<Guid>> LiveHailedRiderIdsAsync(CancellationToken cancellationToken)
     {

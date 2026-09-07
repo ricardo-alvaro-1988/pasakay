@@ -33,6 +33,8 @@ public class Trip : BaseEntity
     public decimal Fare { get; set; }
     /// <summary>What the customer should pay after promo (equals Fare when no promo).</summary>
     public decimal CustomerFare { get; set; }
+    /// <summary>Optional customer-added fare included in Fare and CustomerFare.</summary>
+    public decimal CustomerBoostAmount { get; set; }
     public decimal PromoDiscountAmount { get; set; }
     public bool IsPromoSponsored { get; set; }
     public Guid? PromoId { get; set; }

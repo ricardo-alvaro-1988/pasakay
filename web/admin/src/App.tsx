@@ -3919,6 +3919,9 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
           value={`${Math.max(1, ride.passengerCount ?? 1)} passenger${(ride.passengerCount ?? 1) === 1 ? '' : 's'}`}
         />
         <DetailItem label="Fare" value={peso(ride.fare)} />
+        {(ride.customerBoostAmount ?? 0) > 0 ? (
+          <DetailItem label="Customer boost" value={`+${peso(ride.customerBoostAmount!)}`} />
+        ) : null}
         {ride.isPromoSponsored ? (
           <>
             <DetailItem label="Customer pays" value={peso(customerPay)} />

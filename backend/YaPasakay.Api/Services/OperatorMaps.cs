@@ -156,7 +156,8 @@ public static class OperatorMaps
             trip.DiscountPercent,
             trip.IsPromoSponsored && trip.DiscountPercent is int pct
                 ? $"Save{pct}"
-                : null);
+                : null,
+            trip.CustomerBoostAmount);
     }
 
     public static async Task<RideDetailResponse> RideDetailAsync(
@@ -443,7 +444,8 @@ public static class OperatorMaps
                     x.PromoDiscountAmount,
                     x.IsPromoSponsored,
                     x.DiscountPercent,
-                    x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null);
+                    x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
+                    x.CustomerBoostAmount);
             })
             .ToList();
 

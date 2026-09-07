@@ -233,6 +233,8 @@ function Home({
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
   const [paymentRef, setPaymentRef] = useState('')
   const [promoCode, setPromoCode] = useState('')
+  const [addedFare, setAddedFare] = useState(0)
+  const [boostCustom, setBoostCustom] = useState('')
   const [quotes, setQuotes] = useState<Record<VehicleType, Quote | null>>({ Motorcycle: null, Tricycle: null })
   const [quoting, setQuoting] = useState(false)
   const [coverageHint, setCoverageHint] = useState(false)
@@ -481,7 +483,7 @@ function Home({
     let ignore = false
     async function quoteOne(type: VehicleType): Promise<{ quote: Quote | null; error: string }> {
       try {
-        return { quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, type === 'Tricycle' ? passengers : 1, promoCode)), error: '' }
+        return { quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, type === 'Tricycle' ? passengers : 1, promoCode, addedFare)), error: '' }
       } catch (err) {
         return { quote: null, error: err instanceof Error ? err.message : 'Could not quote fare.' }
       }
@@ -521,7 +523,7 @@ function Home({
     }
     void load()
     return () => { ignore = true }
-  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers])
+  }, [pickup, dropoff, payment, paymentRef, promoCode, addedFare, trip, hail?.riderId, hail?.vehicleType, passengers])
 
   useEffect(() => {
     const available = !!(quotes.Motorcycle?.hasActivePromos || quotes.Tricycle?.hasActivePromos)
@@ -722,7 +724,7 @@ function Home({
     setError('')
     try {
       const riderId = hail?.riderId ?? (needsRiderPick ? selectedRiderId ?? undefined : undefined)
-      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, vehicle === 'Tricycle' ? passengers : 1, promoCode)))
+      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, vehicle === 'Tricycle' ? passengers : 1, promoCode, addedFare)))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not book.'
       setError(isOperatorCoverageError(message) ? '' : message)
@@ -791,8 +793,10 @@ function Home({
   }
 
   const quote = quotes[vehicle]
+  const boost = Math.max(0, Math.floor(quote?.customerBoostAmount ?? addedFare))
   const quotePay = quote ? (quote.customerFare ?? quote.fare) : 0
-  const quoteOriginal = quote?.originalFare && quote.originalFare > quotePay ? quote.originalFare : null
+  const quoteBase = Math.max(0, quotePay - boost)
+  const quoteOriginal = quote?.originalFare && quote.originalFare > quoteBase ? quote.originalFare : null
   const showPromoField = !!(quotes.Motorcycle?.hasActivePromos || quotes.Tricycle?.hasActivePromos || quote?.hasActivePromos)
   const searchingArea = noOperator.searching
   const canBook = !!pickup && !!dropoff && !quoting && !searchingArea && !noOperator.uncovered && !!quote && quote.riderAvailable !== false && !hail?.isBusy && (payment !== 'Other' || !!paymentRef.trim())
@@ -992,10 +996,63 @@ function Home({
                       <p className="promo-hint">
                         {quote.promoCode}
                         {quote.discountPercent != null ? ` · ${quote.discountPercent}% off` : ' applied'}
-                        {quoteOriginal ? ` · Was ${peso(quoteOriginal)}, you pay ${peso(quotePay)}` : ''}
+                        {quoteOriginal ? ` · Was ${peso(quoteOriginal)}, base ${peso(quoteBase)}` : ''}
                       </p>
                     ) : null}
                   </>
+                ) : null}
+                {quote ? (
+                  <div className="boost-field" role="group" aria-label="Add fare">
+                    <span>Add fare</span>
+                    <div className="boost-presets">
+                      <button
+                        type="button"
+                        className={addedFare === 0 && !boostCustom ? 'on' : ''}
+                        onClick={() => { setAddedFare(0); setBoostCustom('') }}
+                      >
+                        None
+                      </button>
+                      {BOOST_PRESETS.map((amount) => (
+                        <button
+                          key={amount}
+                          type="button"
+                          className={addedFare === amount && !boostCustom ? 'on' : ''}
+                          onClick={() => { setAddedFare(amount); setBoostCustom('') }}
+                        >
+                          +₱{amount}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="boost-custom">
+                      <span>Custom</span>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        max={500}
+                        step={1}
+                        placeholder="0"
+                        value={boostCustom}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          setBoostCustom(raw)
+                          if (raw.trim() === '') {
+                            setAddedFare(0)
+                            return
+                          }
+                          const n = Math.min(500, Math.max(0, Math.floor(Number(raw) || 0)))
+                          setAddedFare(n)
+                        }}
+                      />
+                    </label>
+                    <p className="boost-hint">
+                      {boost > 0
+                        ? `${peso(quoteBase)}${quoteOriginal ? ` (was ${peso(quoteOriginal)})` : ''} + ${peso(boost)} boost = ${peso(quotePay)}`
+                        : quoteOriginal
+                          ? `Was ${peso(quoteOriginal)}, you pay ${peso(quotePay)}`
+                          : `You pay ${peso(quotePay)}`}
+                    </p>
+                  </div>
                 ) : null}
                 {!hail && dispatchMode === 'Both' && (
                   <div className="dispatch-choice" role="group" aria-label="How to find a rider">
@@ -1230,6 +1287,9 @@ function TripPanel({
             {trip.discountPercent != null ? ` · ${trip.discountPercent}%` : ''}
           </span>
         ) : null}
+        {(trip.customerBoostAmount ?? 0) > 0 ? (
+          <span className="boost-tag">+₱{Math.floor(trip.customerBoostAmount!)} boost</span>
+        ) : null}
         <b>{peso(tripPay(trip))}</b>
         {trip.isPromoSponsored && trip.fare > tripPay(trip) ? (
           <span className="promo-was"> was {peso(trip.fare)}</span>
@@ -1295,9 +1355,10 @@ function mapChromePadding() {
   return { top, right: 16, bottom, left: 16 }
 }
 
-function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', riderId?: string, passengerCount = 1, promoCode = ''): BookBody {
+function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', riderId?: string, passengerCount = 1, promoCode = '', customerBoostAmount = 0): BookBody {
   const code = promoCode.trim()
   const looksComplete = /^save([1-9]|[1-9]\d|100)$/i.test(code)
+  const boost = Math.min(500, Math.max(0, Math.floor(customerBoostAmount || 0)))
   return {
     vehicleType: vehicle,
     pickupBarangayId: pickup.barangayId,
@@ -1313,14 +1374,17 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     riderId,
     passengerCount: vehicle === 'Motorcycle' ? 1 : Math.min(4, Math.max(1, passengerCount)),
     promoCode: looksComplete ? code : undefined,
+    customerBoostAmount: boost > 0 ? boost : undefined,
   }
 }
 
 function quotePriceLabel(quote: Quote) {
   const pay = quote.customerFare ?? quote.fare
-  const original = quote.originalFare && quote.originalFare > pay ? quote.originalFare : null
+  const boost = Math.max(0, Math.floor(quote.customerBoostAmount ?? 0))
+  const base = Math.max(0, pay - boost)
+  const original = quote.originalFare && quote.originalFare > base ? quote.originalFare : null
   const main = original ? `${peso(pay)} (was ${peso(original)})` : peso(pay)
-  return `${main} · ${kmLabel(quote.distanceKm)}`
+  return `${main}${boost > 0 ? ` · +₱${boost}` : ''} · ${kmLabel(quote.distanceKm)}`
 }
 
 function tripPay(trip: CustomerTrip) {
@@ -1329,6 +1393,7 @@ function tripPay(trip: CustomerTrip) {
 }
 
 const INSTALLED_KEY = 'yp-installed'
+const BOOST_PRESETS = [20, 50, 100] as const
 
 function isStandaloneApp() {
   return window.matchMedia('(display-mode: standalone)').matches

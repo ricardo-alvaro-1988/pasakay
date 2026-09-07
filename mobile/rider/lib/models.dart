@@ -246,6 +246,7 @@ class JobOffer {
     this.promoDiscountAmount = 0,
     this.isPromoSponsored = false,
     this.discountPercent,
+    this.customerBoostAmount = 0,
   });
 
   final String offerId;
@@ -270,6 +271,7 @@ class JobOffer {
   final double promoDiscountAmount;
   final bool isPromoSponsored;
   final int? discountPercent;
+  final double customerBoostAmount;
 
   double get collectFromCustomer =>
       customerFare > 0 ? customerFare : fare;
@@ -305,6 +307,7 @@ class JobOffer {
         promoDiscountAmount: (json['promoDiscountAmount'] as num?)?.toDouble() ?? 0,
         isPromoSponsored: asFlag(json['isPromoSponsored']),
         discountPercent: json['discountPercent'] is num ? (json['discountPercent'] as num).toInt() : null,
+        customerBoostAmount: (json['customerBoostAmount'] as num?)?.toDouble() ?? 0,
       );
 }
 
@@ -340,6 +343,7 @@ class RiderTrip {
     this.promoDiscountAmount = 0,
     this.isPromoSponsored = false,
     this.discountPercent,
+    this.customerBoostAmount = 0,
   });
 
   final String tripId;
@@ -372,6 +376,7 @@ class RiderTrip {
   final double promoDiscountAmount;
   final bool isPromoSponsored;
   final int? discountPercent;
+  final double customerBoostAmount;
 
   bool get isNewCustomer => previousBookingCount == 0;
 
@@ -423,6 +428,7 @@ class RiderTrip {
         promoDiscountAmount: (json['promoDiscountAmount'] as num?)?.toDouble() ?? 0,
         isPromoSponsored: asFlag(json['isPromoSponsored']),
         discountPercent: json['discountPercent'] is num ? (json['discountPercent'] as num).toInt() : null,
+        customerBoostAmount: (json['customerBoostAmount'] as num?)?.toDouble() ?? 0,
       );
 }
 

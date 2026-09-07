@@ -28,7 +28,8 @@ public record CustomerBookRequest(
     Guid? RiderId,
     bool HailQr,
     int PassengerCount = 1,
-    string? PromoCode = null);
+    string? PromoCode = null,
+    decimal CustomerBoostAmount = 0);
 
 public record CustomerHailRider(
     Guid RiderId,
@@ -60,7 +61,8 @@ public record CustomerQuoteResponse(
     bool PromoApplied = false,
     int? DiscountPercent = null,
     string? PromoCode = null,
-    bool HasActivePromos = false);
+    bool HasActivePromos = false,
+    decimal CustomerBoostAmount = 0);
 
 public record CustomerServiceCheckRequest(
     Guid? PickupBarangayId,
@@ -112,7 +114,8 @@ public record CustomerTripItem(
     decimal PromoDiscountAmount = 0,
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
-    string? PromoCode = null);
+    string? PromoCode = null,
+    decimal CustomerBoostAmount = 0);
 
 public record CustomerRateRequest(int Rating, string? Comment);
 

@@ -259,7 +259,6 @@ public class CustomerBookingsController(
             return BadRequest(new { message = prepared.Error });
         }
 
-        var original = prepared.Fare;
         var customerFare = prepared.CustomerFare;
         var hasPromos = await promos.HasOfferablePromosAsync(prepared.Operator!.Id, customer.Id, cancellationToken);
         return Ok(new CustomerQuoteResponse(
@@ -271,12 +270,13 @@ public class CustomerBookingsController(
             body.PaymentMethod,
             prepared.Rider is not null || prepared.Operator.BookingDispatchMode != BookingDispatchMode.Broadcast,
             prepared.Operator.BookingDispatchMode,
-            original,
+            prepared.MatrixFare,
             customerFare,
             prepared.PromoApplied,
             prepared.DiscountPercent,
             prepared.PromoDisplayCode,
-            hasPromos));
+            hasPromos,
+            prepared.CustomerBoostAmount));
     }
 
     [HttpPost("service-check")]
@@ -450,6 +450,7 @@ public class CustomerBookingsController(
                     : string.IsNullOrWhiteSpace(body.Notes) ? null : body.Notes.Trim(),
             Fare = prepared.Fare,
             CustomerFare = prepared.CustomerFare,
+            CustomerBoostAmount = prepared.CustomerBoostAmount,
             PromoDiscountAmount = prepared.PromoDiscountAmount,
             IsPromoSponsored = prepared.PromoApplied,
             PromoId = prepared.PromoId,
@@ -711,6 +712,14 @@ public class CustomerBookingsController(
             }
         }
 
+        var matrixFare = fare;
+        var boost = NormalizeCustomerBoost(request.CustomerBoostAmount);
+        if (boost > 0)
+        {
+            fare = CommissionCut.Round(fare + boost);
+            customerFare = CommissionCut.Round(customerFare + boost);
+        }
+
         var rider = hail.Rider ?? await PickRiderAsync(
             op.Id,
             vehicle,
@@ -749,6 +758,8 @@ public class CustomerBookingsController(
             DistanceKm = distance,
             Fare = fare,
             CustomerFare = customerFare,
+            MatrixFare = matrixFare,
+            CustomerBoostAmount = boost,
             PromoDiscountAmount = promoDiscount,
             PromoApplied = promo is not null,
             PromoId = promo?.Id,
@@ -759,6 +770,19 @@ public class CustomerBookingsController(
             EtaMinutes = eta,
             VehicleType = vehicle
         };
+    }
+
+    private const decimal MaxCustomerBoostAmount = 500m;
+
+    private static decimal NormalizeCustomerBoost(decimal amount)
+    {
+        if (amount <= 0)
+        {
+            return 0m;
+        }
+
+        var wholePesos = Math.Floor(amount);
+        return wholePesos > MaxCustomerBoostAmount ? MaxCustomerBoostAmount : wholePesos;
     }
 
     private async Task<RiderProfile?> PickRiderAsync(
@@ -904,6 +928,8 @@ public class CustomerBookingsController(
         public decimal DistanceKm { get; set; }
         public decimal Fare { get; set; }
         public decimal CustomerFare { get; set; }
+        public decimal MatrixFare { get; set; }
+        public decimal CustomerBoostAmount { get; set; }
         public decimal PromoDiscountAmount { get; set; }
         public bool PromoApplied { get; set; }
         public Guid? PromoId { get; set; }

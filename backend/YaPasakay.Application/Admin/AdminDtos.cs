@@ -159,7 +159,8 @@ public record RideListItem(
     decimal PromoDiscountAmount = 0,
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
-    string? PromoCode = null);
+    string? PromoCode = null,
+    decimal CustomerBoostAmount = 0);
 
 public record RideDetailResponse(
     Guid Id,
@@ -202,7 +203,8 @@ public record RideDetailResponse(
     decimal PromoDiscountAmount = 0,
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
-    string? PromoCode = null);
+    string? PromoCode = null,
+    decimal CustomerBoostAmount = 0);
 
 public record RideChatMessageItem(
     Guid Id,
@@ -604,7 +606,8 @@ public record OperatorBookingListItem(
     decimal PromoDiscountAmount = 0,
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
-    string? PromoCode = null);
+    string? PromoCode = null,
+    decimal CustomerBoostAmount = 0);
 
 public record CommissionReportItem(
     Guid Id,
