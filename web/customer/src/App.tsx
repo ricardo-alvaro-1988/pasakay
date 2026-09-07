@@ -233,7 +233,8 @@ function Home({
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
   const [paymentRef, setPaymentRef] = useState('')
   const [promoCode, setPromoCode] = useState('')
-  const [addedFare, setAddedFare] = useState(0)
+  const [boostOpen, setBoostOpen] = useState(false)
+  const [draftBoost, setDraftBoost] = useState(0)
   const [boostCustom, setBoostCustom] = useState('')
   const [quotes, setQuotes] = useState<Record<VehicleType, Quote | null>>({ Motorcycle: null, Tricycle: null })
   const [quoting, setQuoting] = useState(false)
@@ -483,7 +484,7 @@ function Home({
     let ignore = false
     async function quoteOne(type: VehicleType): Promise<{ quote: Quote | null; error: string }> {
       try {
-        return { quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, type === 'Tricycle' ? passengers : 1, promoCode, addedFare)), error: '' }
+        return { quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, type === 'Tricycle' ? passengers : 1, promoCode, 0)), error: '' }
       } catch (err) {
         return { quote: null, error: err instanceof Error ? err.message : 'Could not quote fare.' }
       }
@@ -523,7 +524,7 @@ function Home({
     }
     void load()
     return () => { ignore = true }
-  }, [pickup, dropoff, payment, paymentRef, promoCode, addedFare, trip, hail?.riderId, hail?.vehicleType, passengers])
+  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers])
 
   useEffect(() => {
     const available = !!(quotes.Motorcycle?.hasActivePromos || quotes.Tricycle?.hasActivePromos)
@@ -710,29 +711,6 @@ function Home({
     }
   }
 
-  async function book() {
-    if (!pickup || !dropoff) return
-    if (hail?.isBusy) {
-      setError('This rider is on another trip right now.')
-      return
-    }
-    if (needsRiderPick && !selectedRiderId) {
-      setError('Choose a rider to continue.')
-      return
-    }
-    setBusy(true)
-    setError('')
-    try {
-      const riderId = hail?.riderId ?? (needsRiderPick ? selectedRiderId ?? undefined : undefined)
-      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, vehicle === 'Tricycle' ? passengers : 1, promoCode, addedFare)))
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not book.'
-      setError(isOperatorCoverageError(message) ? '' : message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function clearHail() {
     setError('')
     try { onDesk(await api.clearHail()) }
@@ -793,10 +771,10 @@ function Home({
   }
 
   const quote = quotes[vehicle]
-  const boost = Math.max(0, Math.floor(quote?.customerBoostAmount ?? addedFare))
   const quotePay = quote ? (quote.customerFare ?? quote.fare) : 0
-  const quoteBase = Math.max(0, quotePay - boost)
-  const quoteOriginal = quote?.originalFare && quote.originalFare > quoteBase ? quote.originalFare : null
+  const quoteOriginal = quote?.originalFare && quote.originalFare > quotePay ? quote.originalFare : null
+  const modalBoost = Math.min(500, Math.max(0, Math.floor(draftBoost || 0)))
+  const modalTotal = quotePay + modalBoost
   const showPromoField = !!(quotes.Motorcycle?.hasActivePromos || quotes.Tricycle?.hasActivePromos || quote?.hasActivePromos)
   const searchingArea = noOperator.searching
   const canBook = !!pickup && !!dropoff && !quoting && !searchingArea && !noOperator.uncovered && !!quote && quote.riderAvailable !== false && !hail?.isBusy && (payment !== 'Other' || !!paymentRef.trim())
@@ -825,6 +803,51 @@ function Home({
                     : needsRiderPick && selectedRiderId
                       ? `Book ${availableRiders.find((r) => r.riderId === selectedRiderId)?.fullName.split(' ')[0] ?? 'rider'} · ${peso(quotePay)}`
                       : `Confirm ${vehicle} · ${peso(quotePay)} · ${kmLabel(quote.distanceKm)}`
+
+  function openBoostModal() {
+    if (!canBook) return
+    setDraftBoost(0)
+    setBoostCustom('')
+    setBoostOpen(true)
+  }
+
+  function closeBoostModal() {
+    setBoostOpen(false)
+    setDraftBoost(0)
+    setBoostCustom('')
+  }
+
+  function setBoostAmount(amount: number) {
+    const n = Math.min(500, Math.max(0, Math.floor(amount || 0)))
+    setDraftBoost(n)
+    setBoostCustom(BOOST_PRESETS.includes(n as typeof BOOST_PRESETS[number]) || n === 0 ? '' : String(n))
+  }
+
+  async function book(boostAmount = 0) {
+    if (!pickup || !dropoff) return
+    if (hail?.isBusy) {
+      setError('This rider is on another trip right now.')
+      return
+    }
+    if (needsRiderPick && !selectedRiderId) {
+      setError('Choose a rider to continue.')
+      return
+    }
+    setBoostOpen(false)
+    setBusy(true)
+    setError('')
+    try {
+      const riderId = hail?.riderId ?? (needsRiderPick ? selectedRiderId ?? undefined : undefined)
+      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, vehicle === 'Tricycle' ? passengers : 1, promoCode, boostAmount)))
+      setDraftBoost(0)
+      setBoostCustom('')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not book.'
+      setError(isOperatorCoverageError(message) ? '' : message)
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <>
@@ -996,63 +1019,10 @@ function Home({
                       <p className="promo-hint">
                         {quote.promoCode}
                         {quote.discountPercent != null ? ` · ${quote.discountPercent}% off` : ' applied'}
-                        {quoteOriginal ? ` · Was ${peso(quoteOriginal)}, base ${peso(quoteBase)}` : ''}
+                        {quoteOriginal ? ` · Was ${peso(quoteOriginal)}, you pay ${peso(quotePay)}` : ''}
                       </p>
                     ) : null}
                   </>
-                ) : null}
-                {quote ? (
-                  <div className="boost-field" role="group" aria-label="Add fare">
-                    <span>Add fare</span>
-                    <div className="boost-presets">
-                      <button
-                        type="button"
-                        className={addedFare === 0 && !boostCustom ? 'on' : ''}
-                        onClick={() => { setAddedFare(0); setBoostCustom('') }}
-                      >
-                        None
-                      </button>
-                      {BOOST_PRESETS.map((amount) => (
-                        <button
-                          key={amount}
-                          type="button"
-                          className={addedFare === amount && !boostCustom ? 'on' : ''}
-                          onClick={() => { setAddedFare(amount); setBoostCustom('') }}
-                        >
-                          +₱{amount}
-                        </button>
-                      ))}
-                    </div>
-                    <label className="boost-custom">
-                      <span>Custom</span>
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        max={500}
-                        step={1}
-                        placeholder="0"
-                        value={boostCustom}
-                        onChange={(e) => {
-                          const raw = e.target.value
-                          setBoostCustom(raw)
-                          if (raw.trim() === '') {
-                            setAddedFare(0)
-                            return
-                          }
-                          const n = Math.min(500, Math.max(0, Math.floor(Number(raw) || 0)))
-                          setAddedFare(n)
-                        }}
-                      />
-                    </label>
-                    <p className="boost-hint">
-                      {boost > 0
-                        ? `${peso(quoteBase)}${quoteOriginal ? ` (was ${peso(quoteOriginal)})` : ''} + ${peso(boost)} boost = ${peso(quotePay)}`
-                        : quoteOriginal
-                          ? `Was ${peso(quoteOriginal)}, you pay ${peso(quotePay)}`
-                          : `You pay ${peso(quotePay)}`}
-                    </p>
-                  </div>
                 ) : null}
                 {!hail && dispatchMode === 'Both' && (
                   <div className="dispatch-choice" role="group" aria-label="How to find a rider">
@@ -1106,7 +1076,7 @@ function Home({
                 )}
                 {error && !isOperatorCoverageError(error) && <p className="error">{error}</p>}
                 <NoOperatorNotice show={noOperator.uncovered} />
-                <button className={`primary${searchingArea ? ' searching pulse' : ''}`} disabled={busy || !canBook} onClick={() => void book()}>
+                <button className={`primary${searchingArea ? ' searching pulse' : ''}`} disabled={busy || !canBook} onClick={openBoostModal}>
                   {bookLabel}
                 </button>
               </>
@@ -1199,6 +1169,75 @@ function Home({
       )}
       {showQr && !trip && (
         <ShowQrOverlay customerId={desk.customerId} onClose={() => setShowQr(false)} />
+      )}
+      {boostOpen && quote && (
+        <div
+          className="notice-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="boost-booking-title"
+          onClick={(e) => { if (e.target === e.currentTarget) closeBoostModal() }}
+        >
+          <div className="notice-card boost-card">
+            <h3 id="boost-booking-title">Boost your booking</h3>
+            <p className="boost-lead">Add extra fare to attract riders faster. Optional.</p>
+            <div className="boost-presets" role="group" aria-label="Boost presets">
+              <button
+                type="button"
+                className={modalBoost === 0 && !boostCustom ? 'on' : ''}
+                onClick={() => setBoostAmount(0)}
+              >
+                None
+              </button>
+              {BOOST_PRESETS.map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  className={modalBoost === amount && !boostCustom ? 'on' : ''}
+                  onClick={() => setBoostAmount(amount)}
+                >
+                  +₱{amount}
+                </button>
+              ))}
+            </div>
+            <label className="boost-custom">
+              <span>Custom amount</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={500}
+                step={1}
+                placeholder="0"
+                value={boostCustom}
+                onChange={(e) => {
+                  const raw = e.target.value
+                  setBoostCustom(raw)
+                  if (raw.trim() === '') {
+                    setDraftBoost(0)
+                    return
+                  }
+                  setDraftBoost(Math.min(500, Math.max(0, Math.floor(Number(raw) || 0))))
+                }}
+              />
+            </label>
+            <p className="boost-hint">
+              {modalBoost > 0
+                ? `${peso(quotePay)}${quoteOriginal ? ` (was ${peso(quoteOriginal)})` : ''} + ${peso(modalBoost)} boost = ${peso(modalTotal)}`
+                : quoteOriginal
+                  ? `Was ${peso(quoteOriginal)}, you pay ${peso(quotePay)}`
+                  : `You pay ${peso(quotePay)}`}
+            </p>
+            <div className="boost-actions">
+              <button type="button" className="ghost" disabled={busy} onClick={() => void book(0)}>
+                Skip
+              </button>
+              <button type="button" className="primary" disabled={busy} onClick={() => void book(modalBoost)}>
+                {busy ? 'Broadcasting…' : `Broadcast · ${peso(modalTotal)}`}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   )
@@ -1380,11 +1419,9 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
 
 function quotePriceLabel(quote: Quote) {
   const pay = quote.customerFare ?? quote.fare
-  const boost = Math.max(0, Math.floor(quote.customerBoostAmount ?? 0))
-  const base = Math.max(0, pay - boost)
-  const original = quote.originalFare && quote.originalFare > base ? quote.originalFare : null
+  const original = quote.originalFare && quote.originalFare > pay ? quote.originalFare : null
   const main = original ? `${peso(pay)} (was ${peso(original)})` : peso(pay)
-  return `${main}${boost > 0 ? ` · +₱${boost}` : ''} · ${kmLabel(quote.distanceKm)}`
+  return `${main} · ${kmLabel(quote.distanceKm)}`
 }
 
 function tripPay(trip: CustomerTrip) {
