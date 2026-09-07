@@ -120,9 +120,22 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         zone.PolygonJson = GeoPolygon.Serialize(request.Polygon.Select(p => new LatLngPoint(p.Lat, p.Lng)));
         zone.UpdatedAtUtc = DateTime.UtcNow;
 
-        await PersistRatesAsync(EnsureMatrix(zone, VehicleType.Motorcycle), SinglePassengerRates(request.Motorcycle), cancellationToken);
-        await PersistRatesAsync(EnsureMatrix(zone, VehicleType.Tricycle), request.Tricycle, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await PersistRatesAsync(EnsureMatrix(zone, VehicleType.Motorcycle), SinglePassengerRates(request.Motorcycle), cancellationToken);
+            await PersistRatesAsync(EnsureMatrix(zone, VehicleType.Tricycle), request.Tricycle, cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = DescribeDbError(ex) });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                message = $"Could not save derive fare zone. {ex.GetBaseException().Message}",
+            });
+        }
 
         var saved = await LoadZoneAsync(op.Id, zone.Id, cancellationToken);
         return Ok(MapDetail(op, saved!));
@@ -315,15 +328,13 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
 
     async Task PersistRatesAsync(DeriveFareMatrix matrix, FareVehicleRatesBody rates, CancellationToken cancellationToken)
     {
-        var tiers = (rates.PassengerTiers ?? [])
-            .OrderBy(x => x.PassengerCount)
-            .ToList();
-        if (tiers.Count == 0)
-        {
-            tiers.Add(new FarePassengerTierBody(1, rates.BaseFare, rates.PerKm, rates.MinimumFare, rates.IncludedKm));
-        }
-
-        var primary = tiers[0];
+        var tiers = NormalizeTiers(
+            rates.PassengerTiers,
+            rates.BaseFare,
+            rates.PerKm,
+            rates.MinimumFare,
+            rates.IncludedKm);
+        var primary = tiers.OrderBy(x => x.PassengerCount).First();
         matrix.BaseFare = FareCommissionSplit.Round(primary.BaseFare);
         matrix.PerKm = FareCommissionSplit.Round(primary.PerKm);
         matrix.MinimumFare = FareCommissionSplit.Round(primary.MinimumFare);
@@ -333,22 +344,85 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         matrix.IsActive = rates.IsActive;
         matrix.UpdatedAtUtc = DateTime.UtcNow;
 
-        var existing = matrix.PassengerTiers.ToList();
-        db.DeriveFarePassengerTiers.RemoveRange(existing);
-        matrix.PassengerTiers.Clear();
-        foreach (var tier in tiers)
+        // Save zone/matrix scalars via EF; manage tiers with raw SQL to avoid unique-index / concurrency issues.
+        var isNew = db.Entry(matrix).State == EntityState.Added;
+        DetachPassengerTiers(matrix);
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (!isNew)
         {
-            matrix.PassengerTiers.Add(new DeriveFarePassengerTier
-            {
-                PassengerCount = tier.PassengerCount,
-                BaseFare = FareCommissionSplit.Round(tier.BaseFare),
-                PerKm = FareCommissionSplit.Round(tier.PerKm),
-                MinimumFare = FareCommissionSplit.Round(tier.MinimumFare),
-                IncludedKm = FareCommissionSplit.Round(tier.IncludedKm),
-            });
+            await db.Database.ExecuteSqlRawAsync(
+                "DELETE FROM DeriveFarePassengerTiers WHERE DeriveFareMatrixId = {0}",
+                [matrix.Id],
+                cancellationToken);
         }
 
-        await Task.CompletedTask;
+        var now = DateTime.UtcNow;
+        foreach (var tier in tiers)
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "INSERT INTO DeriveFarePassengerTiers (Id, DeriveFareMatrixId, PassengerCount, BaseFare, PerKm, MinimumFare, IncludedKm, CreatedAtUtc) VALUES ({0},{1},{2},{3},{4},{5},{6},{7})",
+                [Guid.NewGuid(), matrix.Id, tier.PassengerCount, tier.BaseFare, tier.PerKm, tier.MinimumFare, tier.IncludedKm, now],
+                cancellationToken);
+        }
+    }
+
+    void DetachPassengerTiers(DeriveFareMatrix matrix)
+    {
+        foreach (var entry in db.ChangeTracker.Entries<DeriveFarePassengerTier>()
+            .Where(e => e.Entity.DeriveFareMatrixId == matrix.Id || ReferenceEquals(e.Entity.Matrix, matrix))
+            .ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
+
+        matrix.PassengerTiers.Clear();
+    }
+
+    static IReadOnlyList<FarePassengerTierBody> NormalizeTiers(
+        IReadOnlyList<FarePassengerTierBody>? passengerTiers,
+        decimal baseFare,
+        decimal perKm,
+        decimal minimumFare,
+        decimal includedKm)
+    {
+        if (passengerTiers is { Count: > 0 })
+        {
+            return passengerTiers
+                .Select(x => new FarePassengerTierBody(
+                    Math.Max(1, x.PassengerCount),
+                    FareCommissionSplit.Round(x.BaseFare),
+                    FareCommissionSplit.Round(x.PerKm),
+                    FareCommissionSplit.Round(x.MinimumFare),
+                    FareCommissionSplit.Round(x.IncludedKm)))
+                .GroupBy(x => x.PassengerCount)
+                .Select(g => g.First())
+                .OrderBy(x => x.PassengerCount)
+                .ToList();
+        }
+
+        return
+        [
+            new FarePassengerTierBody(1, baseFare, perKm, minimumFare, includedKm)
+        ];
+    }
+
+    static string DescribeDbError(DbUpdateException ex)
+    {
+        if (ex is DbUpdateConcurrencyException)
+        {
+            return "Derive fare rates changed while saving. Refresh the page and try again.";
+        }
+
+        var root = ex.InnerException?.Message ?? ex.Message;
+        if (root.Contains("IX_DeriveFarePassengerTiers_DeriveFareMatrixId_PassengerCount", StringComparison.OrdinalIgnoreCase)
+            || root.Contains("UNIQUE KEY", StringComparison.OrdinalIgnoreCase)
+            || root.Contains("duplicate", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Could not update passenger tiers because of a duplicate person count. Refresh and try again.";
+        }
+
+        return $"Could not save derive fare zone. {root}";
     }
 
     async Task<DeriveFareZone?> LoadZoneAsync(Guid operatorId, Guid id, CancellationToken cancellationToken) =>

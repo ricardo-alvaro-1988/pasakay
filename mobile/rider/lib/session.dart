@@ -343,9 +343,10 @@ class RiderSession extends ChangeNotifier {
     }
     final prevIds = {for (final offer in previous?.offers ?? const <JobOffer>[]) offer.offerId};
     final fresh = offers.where((offer) => !prevIds.contains(offer.offerId)).toList();
-    if (fresh.isNotEmpty || _alarmingOfferId == null) {
-      await _playOfferAlarm(fresh.isNotEmpty ? fresh.first : offers.first);
+    if (fresh.isEmpty) {
+      return;
     }
+    await _playOfferAlarm(fresh.first);
   }
 
   Future<void> _playOfferAlarm(JobOffer offer) async {
@@ -376,7 +377,7 @@ class RiderSession extends ChangeNotifier {
           ),
         ),
       );
-      await _offerAlarm.setReleaseMode(ReleaseMode.loop);
+      await _offerAlarm.setReleaseMode(ReleaseMode.release);
       await _offerAlarm.setVolume(1);
       await _offerAlarm.play(AssetSource('offer-alarm.wav'));
     } catch (_) {}

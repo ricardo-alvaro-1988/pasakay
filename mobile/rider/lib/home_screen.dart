@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -14,6 +14,7 @@ import 'trips_screen.dart';
 import 'wallet_screen.dart';
 import 'profile_screen.dart';
 import 'chat_screen.dart';
+import 'offers_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.session});
@@ -27,11 +28,12 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _waitingOnHail = false;
   bool _sosBusy = false;
-  bool _offerSheetOpen = false;
+  int _knownOfferCount = 0;
 
   @override
   void initState() {
     super.initState();
+    _knownOfferCount = widget.session.desk?.offers.length ?? 0;
     widget.session.addListener(_onDesk);
   }
 
@@ -66,14 +68,35 @@ class _HomeScreenState extends State<HomeScreen> {
     if (trip == null && desk?.pendingHail == null) {
       _waitingOnHail = false;
     }
-    final offer = widget.session.takeIncomingOffer();
-    if (offer != null && !_offerSheetOpen) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _showOffer(offer);
-        }
-      });
+
+    final offerCount = desk?.offers.length ?? 0;
+    if (offerCount > _knownOfferCount && offerCount > 0) {
+      final route = ModalRoute.of(context);
+      final onOffers = route?.settings.name == 'offers';
+      if (!onOffers) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(offerCount == 1 ? 'New job offer' : '$offerCount job offers waiting'),
+              action: SnackBarAction(
+                label: 'Open',
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      settings: const RouteSettings(name: 'offers'),
+                      builder: (_) => OffersScreen(session: widget.session),
+                    ),
+                  );
+                },
+              ),
+            ),
+          );
+        });
+      }
     }
+    _knownOfferCount = offerCount;
   }
 
   Future<void> _call(String phone) async {
@@ -82,15 +105,6 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
     await launchUrl(Uri(scheme: 'tel', path: cleaned));
-  }
-
-  String _fmtWhen(DateTime value) {
-    final local = value.toLocal();
-    final mm = local.month.toString().padLeft(2, '0');
-    final dd = local.day.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final min = local.minute.toString().padLeft(2, '0');
-    return '$mm/$dd $hh:$min';
   }
 
   Future<void> _sosFromHome() async {
@@ -143,255 +157,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _showOffer(JobOffer offer) async {
-    if (_offerSheetOpen || !mounted) {
-      return;
-    }
-    _offerSheetOpen = true;
-    final session = widget.session;
-    try {
-      await showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: brandCanvas,
-        showDragHandle: true,
-        builder: (context) {
-          final bottom = MediaQuery.paddingOf(context).bottom;
-          return Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottom),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-              Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: brandAccentSoft,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(Icons.directions_bike, color: brandRed),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Incoming job', style: Theme.of(context).textTheme.titleMedium),
-                        Text(
-                          offer.reference,
-                          style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (offer.highlighted || offer.isPreferred)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: brandWarnBg,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: brandWarnLine, width: 1.5),
-                      ),
-                      child: const Text(
-                        'ASSIGNED',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 11,
-                          color: Color(0xFF7A5B00),
-                          letterSpacing: 0.4,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-              if (offer.highlighted || offer.isPreferred) ...[
-                const SizedBox(height: 12),
-                BrandPanel(
-                  color: brandWarnBg,
-                  borderColor: brandWarnLine,
-                  borderWidth: 2,
-                  padding: const EdgeInsets.all(14),
-                  child: const Text(
-                    'Assigned to you — highlighted job. Accept to take it.',
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              BrandPanel(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                offer.customerName,
-                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                offer.customerPhone,
-                                style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
-                              ),
-                              if (offer.isPromoSponsored) ...[
-                                const SizedBox(height: 8),
-                                Text(
-                                  offer.discountPercent != null
-                                      ? 'Save${offer.discountPercent} · ${offer.discountPercent}% off'
-                                      : 'Promo ride',
-                                  style: const TextStyle(
-                                    color: Color(0xFF047857),
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                        if (offer.customerPhone.trim().isNotEmpty)
-                          IconButton.filled(
-                            style: IconButton.styleFrom(
-                              backgroundColor: brandChip,
-                              foregroundColor: brandInk,
-                            ),
-                            onPressed: () => _call(offer.customerPhone),
-                            icon: const Icon(Icons.call),
-                            tooltip: 'Call customer',
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    const Divider(height: 1, color: brandLine),
-                    const SizedBox(height: 14),
-                    _OfferStop(label: 'PICKUP', value: offer.pickup, icon: Icons.trip_origin),
-                    const SizedBox(height: 12),
-                    _OfferStop(label: 'DROP-OFF', value: offer.dropoff, icon: Icons.location_on),
-                    const SizedBox(height: 14),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFF1F2),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: const Color(0xFFFFC9CD)),
-                      ),
-                      child: Text(
-                        'Persons: ${passengerLabel(offer.passengerCount)}',
-                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-              BrandPanel(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _OfferStat(label: 'FARE', value: peso(offer.fare), emphasize: true),
-                        ),
-                        Container(width: 1, height: 36, color: brandLine),
-                        Expanded(
-                          child: _OfferStat(
-                            label: 'TRIP',
-                            value: '${offer.distanceKm.toStringAsFixed(1)} km',
-                          ),
-                        ),
-                        Container(width: 1, height: 36, color: brandLine),
-                        Expanded(
-                          child: _OfferStat(
-                            label: 'PAY',
-                            value: paymentLabel(offer.paymentMethod),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (offer.isPromoSponsored) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFECFDF5),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFA7F3D0)),
-                        ),
-                        child: Text(
-                          offer.discountPercent != null
-                              ? 'Save${offer.discountPercent} · ${offer.discountPercent}%: collect ${peso(offer.collectFromCustomer)} from customer · ${peso(offer.collectFromOperator)} from operator'
-                              : 'Promo: collect ${peso(offer.collectFromCustomer)} from customer · ${peso(offer.collectFromOperator)} from operator',
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (offer.riderDistanceKm != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  '${offer.riderDistanceKm!.toStringAsFixed(1)} km from pickup',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
-                ),
-              ],
-              if (offer.scheduledAt != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Scheduled · ${_fmtWhen(offer.scheduledAt!)}',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
-                ),
-              ],
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  try {
-                    await session.accept(offer.offerId);
-                    if (!mounted) {
-                      return;
-                    }
-                    await Navigator.push(
-                      this.context,
-                      MaterialPageRoute(builder: (_) => TripScreen(session: session)),
-                    );
-                  } catch (ex) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('$ex')));
-                    }
-                  }
-                },
-                child: const Text('Accept job'),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  await session.decline(offer.offerId);
-                },
-                child: const Text('Decline'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-    } finally {
-      _offerSheetOpen = false;
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -488,7 +253,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     desk.walletLow
                         ? 'WALLET TOO LOW'
-                        : 'MINIMUM ₱${desk.minWalletToReceive.toStringAsFixed(0)} TO RECEIVE BOOKINGS',
+                        : 'MINIMUM â‚±${desk.minWalletToReceive.toStringAsFixed(0)} TO RECEIVE BOOKINGS',
                     style: TextStyle(
                       fontWeight: FontWeight.w800,
                       color: desk.walletLow ? brandRed : const Color(0xFF7A5B00),
@@ -512,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   desk.isOnline
                       ? (desk.canReceiveBookings
                           ? 'Waiting for nearby bookings'
-                          : 'Online, but wallet is below ₱${desk.minWalletToReceive.toStringAsFixed(0)}')
+                          : 'Online, but wallet is below â‚±${desk.minWalletToReceive.toStringAsFixed(0)}')
                       : 'Go online to receive broadcast jobs',
                   style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
                 ),
@@ -550,7 +315,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         child: Text(
                           activeTrip.discountPercent != null
-                              ? 'Save${activeTrip.discountPercent} · ${activeTrip.discountPercent}%'
+                              ? 'Save${activeTrip.discountPercent} Â· ${activeTrip.discountPercent}%'
                               : 'PROMO',
                           style: const TextStyle(
                             color: Color(0xFF047857),
@@ -562,7 +327,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                     const SizedBox(height: 4),
                     Text(
-                      '${activeTrip.status} · ${activeTrip.customerName}',
+                      '${activeTrip.status} Â· ${activeTrip.customerName}',
                       style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 10),
@@ -585,13 +350,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
+                      '${peso(activeTrip.fare)} Â· ${paymentLabel(activeTrip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800, color: brandRed),
                     ),
                     if (activeTrip.isPromoSponsored) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'Promo: collect ${peso(activeTrip.collectFromCustomer)} from customer · ${peso(activeTrip.collectFromOperator)} from operator',
+                        'Promo: collect ${peso(activeTrip.collectFromCustomer)} from customer Â· ${peso(activeTrip.collectFromOperator)} from operator',
                         style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF047857)),
                       ),
                     ],
@@ -724,6 +489,38 @@ class _HomeScreenState extends State<HomeScreen> {
                   textAlign: TextAlign.center,
                   style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
                 ),
+              )
+            else
+              BrandPanel(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      desk.offers.length == 1
+                          ? '1 job waiting'
+                          : '${desk.offers.length} jobs waiting',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Open Jobs to review, accept, or decline offers.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          settings: const RouteSettings(name: 'offers'),
+                          builder: (_) => OffersScreen(session: widget.session),
+                        ),
+                      ),
+                      child: const Text('Open Jobs'),
+                    ),
+                  ],
+                ),
               ),
             const SizedBox(height: 14),
             FilledButton.icon(
@@ -762,11 +559,15 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               Expanded(
                 child: _NavItem(
-                  icon: Icons.qr_code_scanner,
-                  label: 'Scan',
+                  icon: Icons.work_outline_rounded,
+                  label: 'Jobs',
+                  badge: desk.offers.length,
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => QrScreen(session: widget.session)),
+                    MaterialPageRoute(
+                      settings: const RouteSettings(name: 'offers'),
+                      builder: (_) => OffersScreen(session: widget.session),
+                    ),
                   ),
                 ),
               ),
@@ -835,78 +636,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _OfferStop extends StatelessWidget {
-  const _OfferStop({required this.label, required this.value, required this.icon});
-
-  final String label;
-  final String value;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: brandRed),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  color: brandMuted,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(value, style: const TextStyle(fontWeight: FontWeight.w700, height: 1.3)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _OfferStat extends StatelessWidget {
-  const _OfferStat({required this.label, required this.value, this.emphasize = false});
-
-  final String label;
-  final String value;
-  final bool emphasize;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: brandMuted,
-            fontWeight: FontWeight.w700,
-            fontSize: 11,
-            letterSpacing: 0.4,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: emphasize ? 16 : 13,
-            color: emphasize ? brandRed : brandInk,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -988,3 +717,4 @@ class _UnreadBadge extends StatelessWidget {
     );
   }
 }
+

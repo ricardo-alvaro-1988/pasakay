@@ -14,9 +14,7 @@ import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -31,13 +29,12 @@ class OnlineService : Service() {
         const val ACTION_STOP_RING = "stop_ring"
         const val ACTION_CHAT = "chat"
         private const val ONLINE_CHANNEL = "yp_online"
-        /** Bumped so soft vibration settings apply on devices that already had older channels. */
-        private const val OFFER_CHANNEL = "yp_job_offers_v4"
+        /** Bumped so one-shot alert settings apply on devices that already had older channels. */
+        private const val OFFER_CHANNEL = "yp_job_offers_v5"
         private const val CHAT_CHANNEL = "yp_chat"
         /** Soft double-tap; no long continuous buzz. */
         private val OFFER_VIBE_TIMINGS = longArrayOf(0, 90, 70, 120)
         private val OFFER_VIBE_AMPS = intArrayOf(0, 110, 0, 150)
-        private const val OFFER_PULSE_MS = 2800L
         private const val ONLINE_ID = 1001
         private const val OFFER_ID = 1002
         private const val CHAT_ID = 1003
@@ -118,16 +115,11 @@ class OnlineService : Service() {
                         setSound(null, null)
                     },
                 )
-                val sound = Uri.parse("android.resource://${context.packageName}/${R.raw.offer_alarm}")
-                val attrs = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build()
                 nm.createNotificationChannel(
                     NotificationChannel(OFFER_CHANNEL, "Job offers", NotificationManager.IMPORTANCE_HIGH).apply {
                         description = "Alerts when a new booking is waiting."
-                        setSound(sound, attrs)
-                        // Vibration is driven by softPulse() so it stays smooth (not a continuous rattle).
+                        // Sound is played once by OnlineService; channel stays silent to avoid a double ring.
+                        setSound(null, null)
                         enableVibration(false)
                         lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     },
@@ -161,15 +153,6 @@ class OnlineService : Service() {
 
     private var player: MediaPlayer? = null
     private var wakeLock: PowerManager.WakeLock? = null
-    private var ringing = false
-    private val pulseHandler = Handler(Looper.getMainLooper())
-    private val pulseRunnable = object : Runnable {
-        override fun run() {
-            if (!ringing) return
-            softPulse()
-            pulseHandler.postDelayed(this, OFFER_PULSE_MS)
-        }
-    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -268,13 +251,8 @@ class OnlineService : Service() {
     private fun startRing(title: String, body: String) {
         try {
             acquireWake()
-            playAlarm()
-            if (!ringing) {
-                ringing = true
-                softPulse()
-                pulseHandler.removeCallbacks(pulseRunnable)
-                pulseHandler.postDelayed(pulseRunnable, OFFER_PULSE_MS)
-            }
+            playAlarmOnce()
+            softPulse()
             val open = openAppIntent()
             val notification = NotificationCompat.Builder(this, OFFER_CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_notify)
@@ -286,6 +264,7 @@ class OnlineService : Service() {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setOngoing(true)
                 .setAutoCancel(false)
+                .setOnlyAlertOnce(true)
                 .setFullScreenIntent(open, true)
                 .setContentIntent(open)
                 .build()
@@ -313,9 +292,8 @@ class OnlineService : Service() {
     }
 
     private fun stopRingInternal() {
-        ringing = false
-        pulseHandler.removeCallbacks(pulseRunnable)
         try {
+            player?.setOnCompletionListener(null)
             player?.stop()
         } catch (_: Throwable) {
         }
@@ -335,9 +313,11 @@ class OnlineService : Service() {
         }
     }
 
-    private fun playAlarm() {
+    /** Play offer sound once — never loop. Notification stays until stopRing. */
+    private fun playAlarmOnce() {
         try {
-            if (player?.isPlaying == true) return
+            player?.setOnCompletionListener(null)
+            player?.stop()
         } catch (_: Throwable) {
         }
         try {
@@ -354,8 +334,18 @@ class OnlineService : Service() {
                     .build(),
             )
             next.setDataSource(this, Uri.parse("android.resource://$packageName/${R.raw.offer_alarm}"))
-            next.isLooping = true
+            next.isLooping = false
             next.setVolume(0.9f, 0.9f)
+            next.setOnCompletionListener {
+                try {
+                    it.release()
+                } catch (_: Throwable) {
+                }
+                if (player === it) {
+                    player = null
+                }
+                releaseWake()
+            }
             next.prepare()
             next.start()
             player = next
@@ -365,10 +355,11 @@ class OnlineService : Service() {
             } catch (_: Throwable) {
             }
             player = null
+            releaseWake()
         }
     }
 
-    /** Short soft double-tap once — never an infinite rattle loop. */
+    /** Short soft double-tap once. */
     private fun softPulse() {
         try {
             val vibe = vibrator() ?: return
