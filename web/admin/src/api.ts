@@ -13,6 +13,7 @@ export type PageId =
   | 'surcharges'
   | 'billing'
   | 'commission'
+  | 'rider-report'
   | 'announcements'
   | 'support'
   | 'audit'
