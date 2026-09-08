@@ -22,6 +22,7 @@ type GMaps = {
       name: string,
       handler: (...args: never[]) => void,
     ) => void
+    trigger: (target: unknown, name: string) => void
   }
   places?: {
     Autocomplete: new (
@@ -78,6 +79,7 @@ export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
   onChangeRef.current = onChange
   const [searchError, setSearchError] = useState('')
   const [searchBusy, setSearchBusy] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
 
   function goToLocation(gmaps: GMaps, map: GMap, lat: number, lng: number, viewport?: GBounds) {
     const target = { lat, lng }
@@ -198,6 +200,37 @@ export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
     }
   }, [points])
 
+  useEffect(() => {
+    const previous = document.body.style.overflow
+    if (fullscreen) {
+      document.body.style.overflow = 'hidden'
+    }
+    const map = mapRef.current
+    const gmaps = gmapsRef.current
+    const timer = window.setTimeout(() => {
+      if (!map || !gmaps) return
+      gmaps.event.trigger(map, 'resize')
+      if (pointsRef.current.length >= 2) {
+        const bounds = new gmaps.LatLngBounds()
+        pointsRef.current.forEach((p) => bounds.extend(p))
+        map.fitBounds(bounds, 48)
+      }
+    }, 80)
+    return () => {
+      document.body.style.overflow = previous
+      window.clearTimeout(timer)
+    }
+  }, [fullscreen])
+
+  useEffect(() => {
+    if (!fullscreen) return
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setFullscreen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullscreen])
+
   function draw(gmaps: GMaps, map: GMap, ring: DeriveMapPoint[]) {
     markersRef.current.forEach((m) => m.setMap(null))
     markersRef.current = ring.map((p, index) => new gmaps.Marker({
@@ -233,41 +266,56 @@ export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
   }
 
   return (
-    <div>
-      <form
-        onSubmit={onSearchSubmit}
-        style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap', alignItems: 'center' }}
-      >
-        <input
-          ref={searchRef}
-          type="search"
-          defaultValue=""
-          onChange={() => {
-            if (searchError) setSearchError('')
-          }}
-          placeholder="Search place or address (e.g. Port of Calapan)"
-          style={{
-            flex: 1,
-            minWidth: 220,
-            margin: 0,
-            padding: '10px 12px',
-            borderRadius: 10,
-            border: '1px solid var(--line)',
-            background: 'var(--panel, #fff)',
-            color: 'inherit',
-            font: 'inherit',
-          }}
-          aria-label="Search map location"
-        />
-        <button className="btn tiny" type="submit" disabled={searchBusy}>
-          {searchBusy ? 'Searching…' : 'Go'}
+    <div className={fullscreen ? 'derive-map-shell is-fullscreen' : 'derive-map-shell'}>
+      <div className="derive-map-toolbar">
+        <form
+          onSubmit={onSearchSubmit}
+          style={{ display: 'flex', gap: 8, flex: 1, flexWrap: 'wrap', alignItems: 'center', minWidth: 0 }}
+        >
+          <input
+            ref={searchRef}
+            type="search"
+            defaultValue=""
+            onChange={() => {
+              if (searchError) setSearchError('')
+            }}
+            placeholder="Search place or address (e.g. Port of Calapan)"
+            style={{
+              flex: 1,
+              minWidth: 220,
+              margin: 0,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid var(--line)',
+              background: 'var(--panel, #fff)',
+              color: 'inherit',
+              font: 'inherit',
+            }}
+            aria-label="Search map location"
+          />
+          <button className="btn tiny" type="submit" disabled={searchBusy}>
+            {searchBusy ? 'Searching…' : 'Go'}
+          </button>
+        </form>
+        <button
+          className="btn tiny"
+          type="button"
+          onClick={() => setFullscreen((v) => !v)}
+          aria-pressed={fullscreen}
+        >
+          {fullscreen ? 'Exit full screen' : 'Full screen'}
         </button>
-      </form>
+      </div>
       {searchError ? <p className="error" style={{ marginTop: 0 }}>{searchError}</p> : null}
-      <div ref={host} style={{ width: '100%', height, borderRadius: 14, border: '1px solid var(--line)' }} />
+      <div
+        ref={host}
+        className="derive-map-host"
+        style={fullscreen ? undefined : { height }}
+      />
       <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <p className="muted" style={{ margin: 0, flex: 1 }}>
           Search to jump to an area, then click the map to add polygon points ({points.length} point{points.length === 1 ? '' : 's'}). Need at least 3.
+          {fullscreen ? ' Press Esc to exit full screen.' : ''}
         </p>
         <button className="btn tiny" type="button" disabled={points.length === 0} onClick={() => onChange(points.slice(0, -1))}>
           Undo point
