@@ -219,7 +219,7 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
                 await PersistSurchargeAsync(fare!, parsed.Item!, cancellationToken);
             }
         }
-        catch (DbUpdateException ex)
+        catch (Exception ex)
         {
             return StatusCode(StatusCodes.Status500InternalServerError, new
             {
@@ -270,7 +270,7 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         {
             await PersistSurchargeAsync(fare, parsed.Item!, cancellationToken);
         }
-        catch (DbUpdateException ex)
+        catch (Exception ex)
         {
             return StatusCode(StatusCodes.Status500InternalServerError, new
             {
@@ -462,11 +462,16 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             request.IsActive,
             request.PassengerTiers);
 
-    private static string DescribeSurchargeDbError(DbUpdateException ex)
+    private static string DescribeSurchargeDbError(Exception ex)
     {
         if (ex is DbUpdateConcurrencyException)
         {
             return "Could not save surcharge because fare data changed. Refresh the page and try again.";
+        }
+
+        if (ex is DbUpdateException dbEx)
+        {
+            return $"Could not save surcharge. {dbEx.GetBaseException().Message}";
         }
 
         return $"Could not save surcharge. {ex.GetBaseException().Message}";
@@ -545,51 +550,46 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
     }
 
     /// <summary>
-    /// Insert surcharge without attaching through FareMatrix.Surcharges.
-    /// Loading PassengerTiers/Surcharges into the change tracker and saving has caused
-    /// DbUpdateConcurrencyException (0 rows affected) on this path.
+    /// Insert by FK only — never via FareMatrix.Surcharges — so the change tracker does not
+    /// rewrite related PassengerTiers/Surcharges and throw DbUpdateConcurrencyException.
     /// </summary>
     private async Task PersistSurchargeAsync(
         FareMatrix fare,
         FareSurcharge item,
         CancellationToken cancellationToken)
     {
-        DetachPassengerTiers(fare);
-        foreach (var entry in db.ChangeTracker.Entries<FareSurcharge>()
-            .Where(e => e.Entity.FareMatrixId == fare.Id || ReferenceEquals(e.Entity.FareMatrix, fare))
-            .ToList())
+        // Ignore dirty Operator (and other) rows so SaveChanges only inserts what we need.
+        foreach (var entry in db.ChangeTracker.Entries().ToList())
         {
-            entry.State = EntityState.Detached;
-        }
+            if (ReferenceEquals(entry.Entity, fare) || entry.Entity is FareSurcharge)
+            {
+                continue;
+            }
 
-        fare.Surcharges.Clear();
+            if (entry.State is EntityState.Modified or EntityState.Deleted)
+            {
+                entry.State = EntityState.Unchanged;
+            }
+        }
 
         if (db.Entry(fare).State == EntityState.Added)
         {
             await db.SaveChangesAsync(cancellationToken);
         }
 
-        await db.Database.ExecuteSqlRawAsync(
-            """
-            INSERT INTO FareSurcharges
-                (Id, FareMatrixId, Kind, Name, Amount, WindowStart, WindowEnd, RangeStartUtc, RangeEndUtc, IsActive, CreatedAtUtc)
-            VALUES
-                ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10})
-            """,
-            [
-                Guid.NewGuid(),
-                fare.Id,
-                (int)item.Kind,
-                item.Name,
-                item.Amount,
-                item.WindowStart is TimeOnly ws ? ws.ToTimeSpan() : DBNull.Value,
-                item.WindowEnd is TimeOnly we ? we.ToTimeSpan() : DBNull.Value,
-                item.RangeStartUtc is DateTime rs ? rs : DBNull.Value,
-                item.RangeEndUtc is DateTime re ? re : DBNull.Value,
-                item.IsActive,
-                DateTime.UtcNow
-            ],
-            cancellationToken);
+        db.FareSurcharges.Add(new FareSurcharge
+        {
+            FareMatrixId = fare.Id,
+            Kind = item.Kind,
+            Name = item.Name,
+            Amount = item.Amount,
+            WindowStart = item.WindowStart,
+            WindowEnd = item.WindowEnd,
+            RangeStartUtc = item.RangeStartUtc,
+            RangeEndUtc = item.RangeEndUtc,
+            IsActive = item.IsActive,
+        });
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private void DetachPassengerTiers(FareMatrix fare)
