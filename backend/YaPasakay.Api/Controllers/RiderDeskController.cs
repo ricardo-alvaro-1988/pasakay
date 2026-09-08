@@ -394,7 +394,7 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
             .Select(x => new RideListItem(
                 x.Id,
                 x.Reference,
-                x.RequestedAtUtc,
+                x.ScheduledAtUtc ?? x.RequestedAtUtc,
                 x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
                 x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
                 x.CustomerName,
@@ -415,6 +415,7 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
             .ToListAsync(cancellationToken);
         return Ok(trips.Select(x => x with
         {
+            RequestedAtUtc = RiderDisplayTime.ToApi(x.RequestedAtUtc),
             Pickup = TripAddress.Clean(x.Pickup),
             Dropoff = TripAddress.Clean(x.Dropoff)
         }).ToList());
@@ -522,7 +523,23 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
 
         var trip = await OperatorMaps.RideDetailQuery(db)
             .FirstOrDefaultAsync(x => x.Id == id && x.RiderId == rider.Id, cancellationToken);
-        return trip is null ? NotFound() : Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
+        if (trip is null)
+        {
+            return NotFound();
+        }
+
+        var detail = await OperatorMaps.RideDetailAsync(trip, db, cancellationToken);
+        return Ok(detail with
+        {
+            RequestedAtUtc = RiderDisplayTime.PrimaryTripAt(detail.RequestedAtUtc, detail.ScheduledAtUtc),
+            ScheduledAtUtc = RiderDisplayTime.ToApi(detail.ScheduledAtUtc),
+            CompletedAtUtc = RiderDisplayTime.ToApi(detail.CompletedAtUtc),
+            CancelledAtUtc = RiderDisplayTime.ToApi(detail.CancelledAtUtc),
+            RatedAtUtc = RiderDisplayTime.ToApi(detail.RatedAtUtc),
+            Chat = detail.Chat
+                .Select(m => m with { SentAtUtc = RiderDisplayTime.ToApi(m.SentAtUtc) })
+                .ToList()
+        });
     }
 
     [HttpPost("trips/{id:guid}/complete")]
