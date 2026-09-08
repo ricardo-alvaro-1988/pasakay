@@ -684,6 +684,33 @@ public record CustomerReportResponse(
     PagedResult<CustomerReportItem> Page,
     CustomerReportSummary Summary);
 
+public record BookingReportItem(
+    Guid Id,
+    DateTime DateUtc,
+    string Reference,
+    string RiderName,
+    Guid RiderId,
+    string CustomerName,
+    Guid? CustomerId,
+    decimal RiderCommission,
+    decimal SystemCommission,
+    decimal OperatorCommission,
+    decimal Promo,
+    decimal Fare,
+    TripStatus Status);
+
+public record BookingReportSummary(
+    int Count,
+    decimal RiderCommission,
+    decimal SystemCommission,
+    decimal OperatorCommission,
+    decimal Promo,
+    decimal Fare);
+
+public record BookingReportResponse(
+    PagedResult<BookingReportItem> Page,
+    BookingReportSummary Summary);
+
 public record OperatorBookingColumn(
     int Total,
     IReadOnlyList<RideListItem> Items);

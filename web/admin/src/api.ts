@@ -13,6 +13,7 @@ export type PageId =
   | 'surcharges'
   | 'billing'
   | 'commission'
+  | 'booking-report'
   | 'rider-report'
   | 'customer-report'
   | 'announcements'
@@ -887,6 +888,34 @@ export type CustomerReportResponse = {
   }
 }
 
+export type BookingReportItem = {
+  id: string
+  dateUtc: string
+  reference: string
+  riderName: string
+  riderId: string
+  customerName: string
+  customerId: string | null
+  riderCommission: number
+  systemCommission: number
+  operatorCommission: number
+  promo: number
+  fare: number
+  status: TripStatus
+}
+
+export type BookingReportResponse = {
+  page: Paged<BookingReportItem>
+  summary: {
+    count: number
+    riderCommission: number
+    systemCommission: number
+    operatorCommission: number
+    promo: number
+    fare: number
+  }
+}
+
 export type Announcement = {
   id: string
   title: string
@@ -1733,6 +1762,66 @@ export const api = {
     const disposition = res.headers.get('Content-Disposition') ?? ''
     const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
     const filename = match?.[1]?.replace(/['"]/g, '') || `customer-report.xlsx`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
+  operatorBookingReport: (opts: {
+    bookingNo?: string
+    rider?: string
+    customer?: string
+    from?: string
+    to?: string
+    page?: number
+    pageSize?: number
+  }) => {
+    const params = new URLSearchParams({
+      page: String(opts.page ?? 1),
+      pageSize: String(opts.pageSize ?? 10),
+    })
+    if (opts.bookingNo?.trim()) params.set('bookingNo', opts.bookingNo.trim())
+    if (opts.rider?.trim()) params.set('rider', opts.rider.trim())
+    if (opts.customer?.trim()) params.set('customer', opts.customer.trim())
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    return request<BookingReportResponse>(`/api/operator/reports/bookings?${params}`)
+  },
+  exportOperatorBookingReport: async (opts: {
+    bookingNo?: string
+    rider?: string
+    customer?: string
+    from?: string
+    to?: string
+  }) => {
+    const params = new URLSearchParams()
+    if (opts.bookingNo?.trim()) params.set('bookingNo', opts.bookingNo.trim())
+    if (opts.rider?.trim()) params.set('rider', opts.rider.trim())
+    if (opts.customer?.trim()) params.set('customer', opts.customer.trim())
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    const headers = new Headers()
+    const token = getToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    const res = await fetch(`/api/operator/reports/bookings/export?${params}`, { headers })
+    if (!res.ok) {
+      let message = 'Could not export booking report.'
+      try {
+        const body = (await res.json()) as { message?: string }
+        if (body.message) message = body.message
+      } catch {
+        /* ignore */
+      }
+      throw new Error(message)
+    }
+    const blob = await res.blob()
+    const disposition = res.headers.get('Content-Disposition') ?? ''
+    const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
+    const filename = match?.[1]?.replace(/['"]/g, '') || `booking-report.xlsx`
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

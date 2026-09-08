@@ -132,4 +132,67 @@ public class OperatorReportsController(AppDbContext db) : ControllerBase
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             $"customer-report-{stamp}.xlsx");
     }
+
+    [HttpGet("bookings")]
+    public async Task<ActionResult<BookingReportResponse>> Bookings(
+        [FromQuery] string? bookingNo,
+        [FromQuery] string? rider,
+        [FromQuery] string? customer,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        CancellationToken cancellationToken = default)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        return Ok(await BookingReport.BuildAsync(
+            db,
+            op.Id,
+            bookingNo,
+            rider,
+            customer,
+            from,
+            to,
+            page,
+            pageSize,
+            cancellationToken));
+    }
+
+    [HttpGet("bookings/export")]
+    public async Task<IActionResult> ExportBookings(
+        [FromQuery] string? bookingNo,
+        [FromQuery] string? rider,
+        [FromQuery] string? customer,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        CancellationToken cancellationToken = default)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var rows = await BookingReport.BuildRowsAsync(
+            db,
+            op.Id,
+            bookingNo,
+            rider,
+            customer,
+            from,
+            to,
+            BookingReport.ExportMaxRows,
+            cancellationToken);
+        var bytes = BookingReportExcel.Build(rows);
+        var stamp = DateTime.UtcNow.AddHours(8).ToString("yyyyMMdd");
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"booking-report-{stamp}.xlsx");
+    }
 }

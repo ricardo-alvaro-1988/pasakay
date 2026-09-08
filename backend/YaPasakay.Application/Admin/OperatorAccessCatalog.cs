@@ -20,6 +20,7 @@ public static class OperatorAccessCatalog
         new("wallet", "Wallet"),
         new("promos", "Promos"),
         new("commission", "Commission"),
+        new("booking-report", "Booking report"),
         new("rider-report", "Rider report"),
         new("customer-report", "Customer report"),
         new("company", "Company"),
