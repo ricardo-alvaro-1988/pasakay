@@ -370,6 +370,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
             total,
             items.Select(x => x with
             {
+                RequestedAtUtc = DateTime.SpecifyKind(x.RequestedAtUtc, DateTimeKind.Utc),
                 Pickup = TripAddress.Clean(x.Pickup),
                 Dropoff = TripAddress.Clean(x.Dropoff)
             }).ToList());

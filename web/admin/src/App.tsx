@@ -840,11 +840,29 @@ function percent(value: number) {
 
 const PH_TZ = 'Asia/Manila'
 
+/** API often emits UTC DateTimes without a Z (Unspecified). Treat those as UTC. */
+function parseApiDate(value: string | Date): Date {
+  if (value instanceof Date) {
+    return value
+  }
+  const raw = String(value).trim()
+  if (!raw) {
+    return new Date(NaN)
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return new Date(`${raw}T00:00:00+08:00`)
+  }
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)) {
+    return new Date(raw)
+  }
+  return new Date(raw.includes('T') ? `${raw}Z` : `${raw}T00:00:00Z`)
+}
+
 function phDateTime(value: string | Date | null | undefined) {
   if (!value) {
     return '—'
   }
-  return new Date(value).toLocaleString('en-PH', {
+  return parseApiDate(value).toLocaleString('en-PH', {
     timeZone: PH_TZ,
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -855,7 +873,7 @@ function phDate(value: string | Date | null | undefined) {
   if (!value) {
     return '—'
   }
-  return new Date(value).toLocaleDateString('en-PH', {
+  return parseApiDate(value).toLocaleDateString('en-PH', {
     timeZone: PH_TZ,
     dateStyle: 'medium',
   })

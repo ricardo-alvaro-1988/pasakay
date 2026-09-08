@@ -276,7 +276,12 @@ export const NO_OPERATOR_FACEBOOK_URL = 'https://www.facebook.com/profile.php?id
 export const NO_OPERATOR_EMAIL = 'contactus@enovasoftware.com'
 
 export function phWhen(value: string) {
-  return new Date(value).toLocaleString('en-PH', { timeZone: 'Asia/Manila' })
+  const raw = String(value ?? '').trim()
+  if (!raw) return '—'
+  const stamp = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(raw)
+    ? new Date(raw)
+    : new Date(raw.includes('T') ? `${raw}Z` : `${raw}T00:00:00Z`)
+  return stamp.toLocaleString('en-PH', { timeZone: 'Asia/Manila' })
 }
 
 export function mediaUrl(path?: string | null) {
