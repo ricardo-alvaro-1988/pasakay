@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using YaPasakay.Api.Services;
 using YaPasakay.Application.Admin;
 using YaPasakay.Domain.Entities;
@@ -216,7 +217,18 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             fare!.Surcharges.Add(CloneSurcharge(parsed.Item!));
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                message = $"Could not save surcharge. {ex.GetBaseException().Message}",
+            });
+        }
+
         return Ok(await BuildDetailAsync(op, request.MunicipalityId, cancellationToken));
     }
 
@@ -257,7 +269,18 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         }
 
         fare.Surcharges.Add(parsed.Item!);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                message = $"Could not save surcharge. {ex.GetBaseException().Message}",
+            });
+        }
+
         return Ok(await BuildDetailAsync(op, municipalityId, cancellationToken));
     }
 
@@ -614,14 +637,15 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         var item = new FareSurcharge
         {
             Kind = request.Kind,
-            Name = name,
+            Name = name.Length > 80 ? name[..80] : name,
             Amount = Math.Round(request.Amount, 2, MidpointRounding.AwayFromZero),
             IsActive = request.IsActive
         };
 
         if (request.Kind == SurchargeKind.TimeWindow)
         {
-            if (!TimeOnly.TryParse(request.WindowStart, out var start) || !TimeOnly.TryParse(request.WindowEnd, out var end))
+            if (!TryParseWindowTime(request.WindowStart, out var start)
+                || !TryParseWindowTime(request.WindowEnd, out var end))
             {
                 return (null, "Time-window surcharges need a start and end time in Philippine time.");
             }
@@ -651,5 +675,29 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         item.RangeStartUtc = from;
         item.RangeEndUtc = to;
         return (item, null);
+    }
+
+    private static bool TryParseWindowTime(string? value, out TimeOnly time)
+    {
+        time = default;
+        var raw = (value ?? string.Empty).Trim();
+        if (raw.Length == 0)
+        {
+            return false;
+        }
+
+        // Browsers send HH:mm or HH:mm:ss; always parse as invariant (not server culture).
+        if (TimeOnly.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out time))
+        {
+            return true;
+        }
+
+        if (raw.Length == 5
+            && TimeOnly.TryParseExact(raw, "HH:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out time))
+        {
+            return true;
+        }
+
+        return TimeOnly.TryParseExact(raw, "HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None, out time);
     }
 }

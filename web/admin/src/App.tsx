@@ -9979,17 +9979,45 @@ function OperatorSurchargesPage() {
       setFormError('Choose a municipality first.')
       return
     }
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      setFormError('Enter a surcharge name.')
+      return
+    }
+    if (!amount.trim()) {
+      setFormError('Enter an amount.')
+      return
+    }
+    const pesos = Number(amount)
+    if (!Number.isFinite(pesos) || pesos < 0) {
+      setFormError('Enter a valid amount (0 or more).')
+      return
+    }
+    if (kind === 'TimeWindow' && (!windowStart || !windowEnd)) {
+      setFormError('Choose a start and end time.')
+      return
+    }
+    if (kind === 'DateRange') {
+      if (!fromPhInput(rangeStart) || !fromPhInput(rangeEnd)) {
+        setFormError('Choose a from and until date/time (Philippine time).')
+        return
+      }
+    }
     setBusy(true)
     setFormError('')
     try {
-      const body = surchargeBody()
+      const body = {
+        ...surchargeBody(),
+        name: trimmedName,
+        amount: pesos,
+      }
       if (editing) {
         loadMatrix(await api.updateOperatorSurcharge(editing.id, body))
-        setNotice(`${editing.name} updated.`)
+        setNotice(`${trimmedName} updated.`)
       } else {
         const vehicleTypes: VehicleType[] = applyTo === 'Both' ? ['Motorcycle', 'Tricycle'] : [applyTo]
         loadMatrix(await api.addOperatorSurcharges({ municipalityId, vehicleTypes, ...body }))
-        setNotice(`${name} added.`)
+        setNotice(`${trimmedName} added.`)
       }
       closeModal()
     } catch (err) {
@@ -10094,7 +10122,18 @@ function OperatorSurchargesPage() {
                 </div>
               ) : null}
               <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Night" /></label>
-              <label className="field"><span>Amount</span><input value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
+              <label className="field">
+                <span>Amount</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="50"
+                />
+              </label>
               <div className="field wide">
                 <span>Kind</span>
                 <div className="chips" style={{ marginTop: 8 }}>
