@@ -8,6 +8,7 @@ import {
   Desk,
   Gender,
   PaymentMethod,
+  Quote,
   chatFromRider,
   isOperatorCoverageError,
   mediaUrl,
@@ -332,12 +333,48 @@ export function ScheduleScreen({
   const [passengers, setPassengers] = useState(1)
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
   const [paymentRef, setPaymentRef] = useState('')
-  const [when, setWhen] = useState(() => toLocalInput(new Date(Date.now() + 60 * 60 * 1000)))
+  const [when, setWhen] = useState(() => toPhInput(new Date(Date.now() + 60 * 60 * 1000).toISOString()))
+  const [quote, setQuote] = useState<Quote | null>(null)
+  const [quoting, setQuoting] = useState(false)
   const [error, setError] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [coverageHint, setCoverageHint] = useState(false)
   const noOperator = useNoOperatorNotice(pickup, dropoff, true, coverageHint)
+
+  useEffect(() => {
+    if (!pickup || !dropoff) {
+      setQuote(null)
+      setQuoting(false)
+      setCoverageHint(false)
+      return
+    }
+    let ignore = false
+    async function load() {
+      setQuoting(true)
+      try {
+        const next = await api.quote(bookBody(vehicle, pickup!, dropoff!, payment, paymentRef, vehicle === 'Tricycle' ? passengers : 1))
+        if (ignore) return
+        setQuote(next)
+        setCoverageHint(false)
+        setError('')
+      } catch (err) {
+        if (ignore) return
+        setQuote(null)
+        const message = err instanceof Error ? err.message : 'Could not quote fare.'
+        if (isOperatorCoverageError(message)) {
+          setCoverageHint(true)
+          setError('')
+        } else {
+          setError(message)
+        }
+      } finally {
+        if (!ignore) setQuoting(false)
+      }
+    }
+    void load()
+    return () => { ignore = true }
+  }, [pickup, dropoff, vehicle, payment, paymentRef, passengers])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -345,13 +382,17 @@ export function ScheduleScreen({
       setError('Set pickup and drop-off first.')
       return
     }
-    const scheduled = new Date(when)
-    if (Number.isNaN(scheduled.getTime())) {
+    const scheduledAtUtc = fromPhInput(when)
+    if (!scheduledAtUtc) {
       setError('Choose a valid date and time.')
       return
     }
-    if (scheduled.getTime() < Date.now() + 10 * 60 * 1000) {
+    if (new Date(scheduledAtUtc).getTime() < Date.now() + 10 * 60 * 1000) {
       setError('Schedule the booking at least 10 minutes from now.')
+      return
+    }
+    if (!quote || quoting) {
+      setError('Wait for the fare quote before scheduling.')
       return
     }
     setBusy(true)
@@ -360,10 +401,10 @@ export function ScheduleScreen({
     try {
       onDesk(await api.book({
         ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, vehicle === 'Tricycle' ? passengers : 1),
-        scheduledAtUtc: scheduled.toISOString(),
+        scheduledAtUtc,
       }))
-      setNote('Scheduled booking requested. Riders in the area will see it closer to that time.')
-      setWhen(toLocalInput(new Date(Date.now() + 60 * 60 * 1000)))
+      setNote('Scheduled. Riders are notified about an hour before pickup.')
+      setWhen(toPhInput(new Date(Date.now() + 60 * 60 * 1000).toISOString()))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not schedule.'
       if (isOperatorCoverageError(message)) {
@@ -384,16 +425,23 @@ export function ScheduleScreen({
     catch (err) { setError(err instanceof Error ? err.message : 'Could not cancel.') }
   }
 
+  const quotePay = quote ? (quote.customerFare ?? quote.fare) : 0
+  const quoteOriginal = quote?.originalFare && quote.originalFare > quotePay ? quote.originalFare : null
+  const canSubmit = !!pickup && !!dropoff && !!quote && !quoting && !busy && !noOperator.searching && !noOperator.uncovered
+    && (payment !== 'Other' || !!paymentRef.trim())
+
   return (
     <form className="page" onSubmit={submit}>
       <h2>Schedule</h2>
-      <p className="muted">Request a booking for later. We broadcast it to riders in the operator service area.</p>
+      <p className="muted">
+        Book for later in Philippine time. Uses your Home pickup and drop-off. Riders are notified about an hour before pickup.
+      </p>
       <label className="field">
-        <span>WHEN</span>
+        <span>WHEN (Philippines)</span>
         <input
           type="datetime-local"
           value={when}
-          min={toLocalInput(new Date(Date.now() + 10 * 60 * 1000))}
+          min={toPhInput(new Date(Date.now() + 10 * 60 * 1000).toISOString())}
           onChange={(e) => setWhen(e.target.value)}
         />
       </label>
@@ -476,14 +524,40 @@ export function ScheduleScreen({
         }}
         onRefNo={setPaymentRef}
       />
+      {quoting ? (
+        <p className="muted">Getting fare…</p>
+      ) : quote ? (
+        <p className="fareline">
+          {quoteOriginal ? (
+            <>
+              <b>{peso(quotePay)}</b>
+              <span className="promo-was"> was {peso(quoteOriginal)}</span>
+            </>
+          ) : (
+            <b>{peso(quotePay)}</b>
+          )}
+          {kmLabel(quote.distanceKm) ? ` · ${kmLabel(quote.distanceKm)}` : ''}
+          {quote.promoApplied && quote.promoCode
+            ? ` · ${quote.promoCode}${quote.discountPercent != null ? ` · ${quote.discountPercent}% off` : ''}`
+            : ''}
+        </p>
+      ) : pickup && dropoff ? (
+        <p className="muted">No fare available for this route yet.</p>
+      ) : null}
       {error && <p className="error">{error}</p>}
       <NoOperatorNotice show={noOperator.uncovered} />
       {note && <p className="muted">{note}</p>}
       <button
         className={`primary${noOperator.searching ? ' searching pulse' : ''}`}
-        disabled={busy || noOperator.searching || noOperator.uncovered || !pickup || !dropoff || (payment === 'Other' && !paymentRef.trim())}
+        disabled={!canSubmit}
       >
-        {busy || noOperator.searching ? 'Finding a ride…' : 'Request scheduled booking'}
+        {busy || noOperator.searching
+          ? 'Finding a ride…'
+          : quoting
+            ? 'Getting fare…'
+            : quote
+              ? `Request scheduled · ${peso(quotePay)}`
+              : 'Request scheduled booking'}
       </button>
       <h3 className="section-title">Upcoming</h3>
       {(desk.scheduled ?? []).length === 0 && <p className="muted">None yet.</p>}
@@ -511,9 +585,33 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
   }
 }
 
-function toLocalInput(value: Date) {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`
+const PH_TZ = 'Asia/Manila'
+
+function fromPhInput(value: string) {
+  const raw = value.trim()
+  if (!raw) {
+    return null
+  }
+  const normalized = raw.length === 16 ? `${raw}:00` : raw
+  const stamp = new Date(`${normalized}+08:00`)
+  return Number.isNaN(stamp.getTime()) ? null : stamp.toISOString()
+}
+
+function toPhInput(value: string | null | undefined) {
+  if (!value) {
+    return ''
+  }
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: PH_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(value))
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
 }
 
 export type AccountPage = 'menu' | 'profile' | 'pin' | 'mobile' | 'delete' | 'terms' | 'privacy'

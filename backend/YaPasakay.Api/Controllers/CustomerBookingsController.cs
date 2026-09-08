@@ -375,8 +375,9 @@ public class CustomerBookingsController(
         }
 
         var mode = preview.Operator.BookingDispatchMode;
-        var customerPicksRider = !isDirectHail && body.RiderId is Guid;
-        if (!isDirectHail)
+        var isScheduled = scheduled is not null;
+        var customerPicksRider = !isDirectHail && !isScheduled && body.RiderId is Guid;
+        if (!isDirectHail && !isScheduled)
         {
             if (mode == BookingDispatchMode.Selection && body.RiderId is null)
             {
@@ -493,7 +494,11 @@ public class CustomerBookingsController(
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        await broadcast.BroadcastAsync(trip.Id, cancellationToken);
+        if (TripBroadcastService.IsDueForScheduleBroadcast(scheduled))
+        {
+            await broadcast.BroadcastAsync(trip.Id, cancellationToken);
+        }
+
         await live.CustomerChangedAsync(customer.Id, "booked", cancellationToken);
 
         return Ok(await CustomerDeskBuilder.BuildAsync(db, customer, cancellationToken));

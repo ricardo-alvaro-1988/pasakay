@@ -26,6 +26,20 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         string.Equals(notes, CustomerPickNote, StringComparison.OrdinalIgnoreCase);
     public static readonly TimeSpan LiveOfferTtl = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan ScheduledOfferTtl = TimeSpan.FromHours(2);
+    /// <summary>Offer scheduled trips to riders only within this lead before pickup.</summary>
+    public static readonly TimeSpan ScheduleBroadcastLead = TimeSpan.FromMinutes(60);
+
+    /// <summary>Live trips always broadcast; scheduled only when within lead (or overdue Pending).</summary>
+    public static bool IsDueForScheduleBroadcast(DateTime? scheduledAtUtc, DateTime? utcNow = null)
+    {
+        if (scheduledAtUtc is not DateTime scheduled)
+        {
+            return true;
+        }
+
+        var now = utcNow ?? DateTime.UtcNow;
+        return scheduled <= now.Add(ScheduleBroadcastLead);
+    }
 
     /// <summary>Riders need more than ₱100 to receive bookings (₱100 or less is blocked).</summary>
     public static bool CanReceiveBookings(decimal balance) => balance > MinWalletToReceive;
@@ -42,6 +56,11 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
     {
         var trip = await db.Trips.FirstOrDefaultAsync(x => x.Id == tripId, cancellationToken);
         if (trip is null || trip.Status != TripStatus.Pending)
+        {
+            return;
+        }
+
+        if (!IsDueForScheduleBroadcast(trip.ScheduledAtUtc))
         {
             return;
         }
@@ -306,6 +325,24 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             .OrderByDescending(x => x.RequestedAtUtc)
             .Select(x => x.Id)
             .Take(15)
+            .ToListAsync(cancellationToken);
+        foreach (var id in tripIds)
+        {
+            await BroadcastAsync(id, cancellationToken);
+        }
+    }
+
+    public async Task BroadcastDueScheduledAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var leadEnd = now.Add(ScheduleBroadcastLead);
+        var tripIds = await db.Trips
+            .Where(x => x.Status == TripStatus.Pending
+                && x.ScheduledAtUtc != null
+                && x.ScheduledAtUtc <= leadEnd)
+            .OrderBy(x => x.ScheduledAtUtc)
+            .Select(x => x.Id)
+            .Take(50)
             .ToListAsync(cancellationToken);
         foreach (var id in tripIds)
         {
