@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -828,6 +828,63 @@ async function pickCompressedImage(
     return
   }
   setFile(await compressImageFile(file))
+}
+
+/** Camera + gallery pickers — Android needs capture= for camera; gallery stays available. */
+function PhotoPickField({
+  label,
+  file,
+  onFile,
+  hint,
+}: {
+  label: string
+  file: File | null
+  onFile: (next: File | null) => void
+  hint?: ReactNode
+}) {
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const galleryRef = useRef<HTMLInputElement>(null)
+
+  async function apply(picked: File | null | undefined, input: HTMLInputElement | null) {
+    await pickCompressedImage(picked ?? null, onFile)
+    if (input) input.value = ''
+  }
+
+  return (
+    <div className="field">
+      <span>{label}</span>
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={(e) => { void apply(e.target.files?.[0], cameraRef.current) }}
+      />
+      <input
+        ref={galleryRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => { void apply(e.target.files?.[0], galleryRef.current) }}
+      />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+        <button className="btn tiny" type="button" onClick={() => cameraRef.current?.click()}>
+          Take photo
+        </button>
+        <button className="btn tiny" type="button" onClick={() => galleryRef.current?.click()}>
+          Gallery
+        </button>
+        {file ? (
+          <button className="btn tiny ghost" type="button" onClick={() => onFile(null)}>
+            Clear
+          </button>
+        ) : null}
+      </div>
+      {file ? <small style={{ display: 'block', marginTop: 6 }}>{file.name}</small> : null}
+      {hint ? <div style={{ marginTop: 6 }}>{hint}</div> : null}
+    </div>
+  )
 }
 
 /** Drop barangay/city suffix historically appended after the Google place. */
@@ -9765,24 +9822,18 @@ function PublicRiderJoinPage({
           loadBarangays={(id) => api.publicBarangays(id)}
         />
         <div className="form-grid">
-          <label className="field">
-            <span>Profile photo</span>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => { void pickCompressedImage(e.target.files?.[0] ?? null, setProfilePhoto) }}
-            />
-            <small className="muted">Compressed automatically for faster upload.</small>
-          </label>
-          <label className="field">
-            <span>License photo</span>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => { void pickCompressedImage(e.target.files?.[0] ?? null, setLicensePhoto) }}
-            />
-            <small className="muted">Compressed automatically for faster upload.</small>
-          </label>
+          <PhotoPickField
+            label="Profile photo"
+            file={profilePhoto}
+            onFile={setProfilePhoto}
+            hint={<small className="muted">Use Take photo for camera (works on Android and iPhone). Compressed automatically.</small>}
+          />
+          <PhotoPickField
+            label="License photo"
+            file={licensePhoto}
+            onFile={setLicensePhoto}
+            hint={<small className="muted">Use Take photo for camera (works on Android and iPhone). Compressed automatically.</small>}
+          />
         </div>
         <button className="btn" type="submit" disabled={busy || !companyName} style={{ marginTop: 16 }}>
           {busy ? 'Submitting…' : 'Submit registration'}
@@ -10012,28 +10063,22 @@ function OperatorRiderForm({
       />
       <p className="muted" style={{ marginTop: 8 }}>Choose any province, city, and barangay in the Philippines.</p>
       <div className="form-grid">
-        <label className="field">
-          <span>Profile photo</span>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => { void pickCompressedImage(e.target.files?.[0] ?? null, setProfilePhoto) }}
-          />
-          {existing?.profilePhotoUrl && !profilePhoto
-            ? <small className="muted">Current photo kept unless you pick a new one.</small>
-            : <small className="muted">Compressed automatically for faster upload.</small>}
-        </label>
-        <label className="field">
-          <span>License photo</span>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => { void pickCompressedImage(e.target.files?.[0] ?? null, setLicensePhoto) }}
-          />
-          {existing?.licensePhotoUrl && !licensePhoto
-            ? <small className="muted">Current photo kept unless you pick a new one.</small>
-            : <small className="muted">Compressed automatically for faster upload.</small>}
-        </label>
+        <PhotoPickField
+          label="Profile photo"
+          file={profilePhoto}
+          onFile={setProfilePhoto}
+          hint={existing?.profilePhotoUrl && !profilePhoto
+            ? <small className="muted">Current photo kept unless you take or pick a new one.</small>
+            : <small className="muted">Take photo opens the camera on Android and iPhone. Compressed automatically.</small>}
+        />
+        <PhotoPickField
+          label="License photo"
+          file={licensePhoto}
+          onFile={setLicensePhoto}
+          hint={existing?.licensePhotoUrl && !licensePhoto
+            ? <small className="muted">Current photo kept unless you take or pick a new one.</small>
+            : <small className="muted">Take photo opens the camera on Android and iPhone. Compressed automatically.</small>}
+        />
       </div>
       <div style={{ display: 'flex', gap: 10, maxWidth: 280, marginTop: 14 }}>
         <button className="btn" type="submit" disabled={busy}>{busy ? 'Saving…' : riderId ? 'Save rider' : 'Create rider'}</button>
