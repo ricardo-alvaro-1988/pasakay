@@ -17,6 +17,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import { compressImageFile } from './compress-image'
 import {
   api,
   BarangayOption,
@@ -816,6 +817,17 @@ function FleetDutyTag({
 
 function peso(value: number) {
   return `₱${value.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+async function pickCompressedImage(
+  file: File | null | undefined,
+  setFile: (next: File | null) => void,
+) {
+  if (!file) {
+    setFile(null)
+    return
+  }
+  setFile(await compressImageFile(file))
 }
 
 /** Drop barangay/city suffix historically appended after the Google place. */
@@ -3261,10 +3273,10 @@ function OperatorFormPage({
         data.append('barangayIds', area.barangayId)
       }
       if (profilePhoto) {
-        data.append('profilePhoto', profilePhoto)
+        data.append('profilePhoto', await compressImageFile(profilePhoto))
       }
       if (govPhoto) {
-        data.append('governmentIdPhoto', govPhoto)
+        data.append('governmentIdPhoto', await compressImageFile(govPhoto))
       }
       if (isEdit && operatorId) {
         await api.updateOperator(operatorId, data)
@@ -3320,7 +3332,11 @@ function OperatorFormPage({
                   <small>Current photo. Choose a file to replace.</small>
                 </div>
               )}
-              <input type="file" accept="image/*" onChange={(e) => setProfilePhoto(e.target.files?.[0] ?? null)} />
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => { void pickCompressedImage(e.target.files?.[0] ?? null, setProfilePhoto) }}
+              />
             </label>
           </div>
         </section>
@@ -3344,7 +3360,12 @@ function OperatorFormPage({
               {existing?.governmentIdPhotoUrl && !govPhoto && (
                 <img className="id-preview" src={existing.governmentIdPhotoUrl} alt="Government ID" style={{ marginBottom: 8 }} />
               )}
-              <input type="file" accept="image/*" onChange={(e) => setGovPhoto(e.target.files?.[0] ?? null)} />
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => { void pickCompressedImage(e.target.files?.[0] ?? null, setGovPhoto) }}
+              />
+              <small className="muted">Compressed automatically for faster upload.</small>
             </label>
           </div>
         </section>
@@ -9667,8 +9688,8 @@ function PublicRiderJoinPage({
       data.append('addressBarangayId', address.barangay.id)
       data.append('addressDetails', address.details)
       acceptedPaymentMethods.forEach((method) => data.append('acceptedPaymentMethods', method))
-      if (profilePhoto) data.append('profilePhoto', profilePhoto)
-      if (licensePhoto) data.append('licensePhoto', licensePhoto)
+      if (profilePhoto) data.append('profilePhoto', await compressImageFile(profilePhoto))
+      if (licensePhoto) data.append('licensePhoto', await compressImageFile(licensePhoto))
       await api.publicRiderApply(token, data)
       setDone(true)
     } catch (err) {
@@ -9746,11 +9767,21 @@ function PublicRiderJoinPage({
         <div className="form-grid">
           <label className="field">
             <span>Profile photo</span>
-            <input type="file" accept="image/*" onChange={(e) => setProfilePhoto(e.target.files?.[0] ?? null)} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => { void pickCompressedImage(e.target.files?.[0] ?? null, setProfilePhoto) }}
+            />
+            <small className="muted">Compressed automatically for faster upload.</small>
           </label>
           <label className="field">
             <span>License photo</span>
-            <input type="file" accept="image/*" onChange={(e) => setLicensePhoto(e.target.files?.[0] ?? null)} />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => { void pickCompressedImage(e.target.files?.[0] ?? null, setLicensePhoto) }}
+            />
+            <small className="muted">Compressed automatically for faster upload.</small>
           </label>
         </div>
         <button className="btn" type="submit" disabled={busy || !companyName} style={{ marginTop: 16 }}>
@@ -9915,8 +9946,8 @@ function OperatorRiderForm({
       data.append('addressBarangayId', address.barangay.id)
       data.append('addressDetails', address.details)
       acceptedPaymentMethods.forEach((method) => data.append('acceptedPaymentMethods', method))
-      if (profilePhoto) data.append('profilePhoto', profilePhoto)
-      if (licensePhoto) data.append('licensePhoto', licensePhoto)
+      if (profilePhoto) data.append('profilePhoto', await compressImageFile(profilePhoto))
+      if (licensePhoto) data.append('licensePhoto', await compressImageFile(licensePhoto))
       const saved = riderId
         ? await api.updateOperatorRider(riderId, data)
         : await api.createOperatorRider(data)
@@ -9983,13 +10014,25 @@ function OperatorRiderForm({
       <div className="form-grid">
         <label className="field">
           <span>Profile photo</span>
-          <input type="file" accept="image/*" onChange={(e) => setProfilePhoto(e.target.files?.[0] ?? null)} />
-          {existing?.profilePhotoUrl && !profilePhoto ? <small className="muted">Current photo kept unless you pick a new one.</small> : null}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => { void pickCompressedImage(e.target.files?.[0] ?? null, setProfilePhoto) }}
+          />
+          {existing?.profilePhotoUrl && !profilePhoto
+            ? <small className="muted">Current photo kept unless you pick a new one.</small>
+            : <small className="muted">Compressed automatically for faster upload.</small>}
         </label>
         <label className="field">
           <span>License photo</span>
-          <input type="file" accept="image/*" onChange={(e) => setLicensePhoto(e.target.files?.[0] ?? null)} />
-          {existing?.licensePhotoUrl && !licensePhoto ? <small className="muted">Current photo kept unless you pick a new one.</small> : null}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => { void pickCompressedImage(e.target.files?.[0] ?? null, setLicensePhoto) }}
+          />
+          {existing?.licensePhotoUrl && !licensePhoto
+            ? <small className="muted">Current photo kept unless you pick a new one.</small>
+            : <small className="muted">Compressed automatically for faster upload.</small>}
         </label>
       </div>
       <div style={{ display: 'flex', gap: 10, maxWidth: 280, marginTop: 14 }}>

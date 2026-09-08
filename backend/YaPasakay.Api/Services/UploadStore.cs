@@ -2,6 +2,8 @@ namespace YaPasakay.Api.Services;
 
 public class UploadStore(IWebHostEnvironment environment, IConfiguration configuration)
 {
+    public const long MaxImageBytes = 5_000_000;
+
     private static readonly HashSet<string> Allowed = [".jpg", ".jpeg", ".png", ".webp", ".ico", ".svg"];
     private readonly string root = StoragePaths.UploadRoot(configuration, environment);
 
@@ -10,6 +12,11 @@ public class UploadStore(IWebHostEnvironment environment, IConfiguration configu
         if (file is null || file.Length == 0)
         {
             return null;
+        }
+
+        if (file.Length > MaxImageBytes)
+        {
+            throw new InvalidOperationException("Image is too large. Use a photo under 5 MB (or a compressed JPG).");
         }
 
         var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
