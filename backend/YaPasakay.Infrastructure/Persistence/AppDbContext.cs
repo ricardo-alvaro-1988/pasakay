@@ -496,6 +496,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             entity.HasIndex(x => x.Token).IsUnique();
             entity.HasIndex(x => x.OperatorId);
+            entity.HasIndex(x => new { x.OperatorId, x.Kind });
             entity.Property(x => x.Token).HasMaxLength(64).IsRequired();
             entity.HasOne(x => x.Operator)
                 .WithMany()

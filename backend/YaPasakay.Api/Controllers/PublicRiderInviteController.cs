@@ -248,7 +248,7 @@ public record RiderApplicationStatusRequest(string? Phone);
 public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
 {
     [HttpGet("rider-invite")]
-    public async Task<ActionResult<RiderInviteLinkResponse>> GetInvite(CancellationToken cancellationToken)
+    public async Task<ActionResult<RiderInviteLinksResponse>> GetInvite(CancellationToken cancellationToken)
     {
         var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
         if (op is null)
@@ -256,12 +256,14 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
             return StatusCode(status, new { message });
         }
 
-        var invite = await EnsureInviteAsync(op.Id, cancellationToken);
-        return Ok(MapInvite(invite));
+        var invites = await EnsureInvitesAsync(op.Id, cancellationToken);
+        return Ok(new RiderInviteLinksResponse(
+            MapInvite(invites.Rotating),
+            MapInvite(invites.Permanent)));
     }
 
     [HttpPost("rider-invite/regenerate")]
-    public async Task<ActionResult<RiderInviteLinkResponse>> Regenerate(CancellationToken cancellationToken)
+    public async Task<ActionResult<RiderInviteLinksResponse>> Regenerate(CancellationToken cancellationToken)
     {
         var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
         if (op is null)
@@ -270,7 +272,7 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
         }
 
         var existing = await db.RiderInviteLinks
-            .Where(x => x.OperatorId == op.Id && x.IsActive)
+            .Where(x => x.OperatorId == op.Id && x.IsActive && x.Kind == RiderInviteKind.Rotating)
             .ToListAsync(cancellationToken);
         foreach (var row in existing)
         {
@@ -278,15 +280,20 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
             row.UpdatedAtUtc = DateTime.UtcNow;
         }
 
-        var invite = new RiderInviteLink
+        var rotating = new RiderInviteLink
         {
             OperatorId = op.Id,
             Token = NewToken(),
+            Kind = RiderInviteKind.Rotating,
             IsActive = true
         };
-        db.RiderInviteLinks.Add(invite);
+        db.RiderInviteLinks.Add(rotating);
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(MapInvite(invite));
+
+        var invites = await EnsureInvitesAsync(op.Id, cancellationToken);
+        return Ok(new RiderInviteLinksResponse(
+            MapInvite(invites.Rotating),
+            MapInvite(invites.Permanent)));
     }
 
     [HttpGet("rider-applications")]
@@ -475,24 +482,53 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
         return Ok(MapDetail(loaded!));
     }
 
-    private async Task<RiderInviteLink> EnsureInviteAsync(Guid operatorId, CancellationToken cancellationToken)
+    private async Task<(RiderInviteLink Rotating, RiderInviteLink Permanent)> EnsureInvitesAsync(
+        Guid operatorId,
+        CancellationToken cancellationToken)
     {
-        var invite = await db.RiderInviteLinks
-            .FirstOrDefaultAsync(x => x.OperatorId == operatorId && x.IsActive, cancellationToken);
-        if (invite is not null)
+        var active = await db.RiderInviteLinks
+            .Where(x => x.OperatorId == operatorId && x.IsActive)
+            .ToListAsync(cancellationToken);
+
+        var rotating = active.FirstOrDefault(x => x.Kind == RiderInviteKind.Rotating);
+        // Legacy rows before Kind existed default to Rotating (0); treat any non-permanent active as rotating.
+        rotating ??= active.FirstOrDefault(x => x.Kind != RiderInviteKind.Permanent);
+        if (rotating is null)
         {
-            return invite;
+            rotating = new RiderInviteLink
+            {
+                OperatorId = operatorId,
+                Token = NewToken(),
+                Kind = RiderInviteKind.Rotating,
+                IsActive = true
+            };
+            db.RiderInviteLinks.Add(rotating);
+        }
+        else if (rotating.Kind != RiderInviteKind.Rotating)
+        {
+            rotating.Kind = RiderInviteKind.Rotating;
+            rotating.UpdatedAtUtc = DateTime.UtcNow;
         }
 
-        invite = new RiderInviteLink
+        var permanent = active.FirstOrDefault(x => x.Kind == RiderInviteKind.Permanent);
+        if (permanent is null)
         {
-            OperatorId = operatorId,
-            Token = NewToken(),
-            IsActive = true
-        };
-        db.RiderInviteLinks.Add(invite);
-        await db.SaveChangesAsync(cancellationToken);
-        return invite;
+            permanent = new RiderInviteLink
+            {
+                OperatorId = operatorId,
+                Token = NewToken(),
+                Kind = RiderInviteKind.Permanent,
+                IsActive = true
+            };
+            db.RiderInviteLinks.Add(permanent);
+        }
+
+        if (db.ChangeTracker.HasChanges())
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return (rotating, permanent);
     }
 
     private async Task<RiderApplication?> LoadApplicationAsync(Guid operatorId, Guid id, CancellationToken cancellationToken) =>
@@ -508,7 +544,8 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
             invite.Token,
             PublicRiderInviteController.JoinPathPrefix + invite.Token,
             PublicRiderInviteController.StatusPath,
-            invite.CreatedAtUtc);
+            invite.CreatedAtUtc,
+            invite.Kind.ToString());
 
     private static RiderApplicationDetailResponse MapDetail(RiderApplication row)
     {

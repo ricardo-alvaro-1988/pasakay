@@ -100,7 +100,7 @@ import {
   CustomerReportResponse,
   BookingReportItem,
   BookingReportResponse,
-  RiderInviteLink,
+  RiderInviteLinks,
   RiderApplicationListItem,
   RiderApplicationDetail,
   SurchargeKind,
@@ -7333,6 +7333,8 @@ function OperatorBookingReportPage() {
   const [bookingNo, setBookingNo] = useState('')
   const [rider, setRider] = useState('')
   const [customer, setCustomer] = useState('')
+  const [riderSuggest, setRiderSuggest] = useState<RiderListItem[]>([])
+  const [customerSuggest, setCustomerSuggest] = useState<CustomerListItem[]>([])
   const [page, setPage] = useState(1)
   const [data, setData] = useState<BookingReportResponse | null>(null)
   const [error, setError] = useState('')
@@ -7346,6 +7348,20 @@ function OperatorBookingReportPage() {
   useEffect(() => {
     setPage(1)
   }, [dateMode, from, to, bookingNo, rider, customer])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      api.opRiders(rider, 1, 8).then((rows) => setRiderSuggest(rows.items)).catch(() => setRiderSuggest([]))
+    }, 200)
+    return () => window.clearTimeout(handle)
+  }, [rider])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      api.opCustomers(customer).then(setCustomerSuggest).catch(() => setCustomerSuggest([]))
+    }, 200)
+    return () => window.clearTimeout(handle)
+  }, [customer])
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -7434,13 +7450,37 @@ function OperatorBookingReportPage() {
             <span>Booking no</span>
             <input value={bookingNo} onChange={(e) => setBookingNo(e.target.value)} placeholder="YP…" />
           </label>
-          <label className="field" style={{ margin: 0, minWidth: 160 }}>
+          <label className="field" style={{ margin: 0, minWidth: 220 }}>
             <span>Rider</span>
-            <input value={rider} onChange={(e) => setRider(e.target.value)} placeholder="Name or plate" />
+            <PersonSuggest
+              value={rider}
+              onChange={(value) => { setRider(value); setPage(1) }}
+              placeholder="Search name or plate"
+              items={riderSuggest.map((row) => ({
+                id: row.id,
+                name: row.fullName,
+                phone: row.phoneNumber,
+                photoUrl: row.profilePhotoUrl,
+                extra: row.plateNumber,
+                vehicleType: row.vehicleType,
+              }))}
+              onPick={(item) => { setRider(item.name); setPage(1) }}
+            />
           </label>
-          <label className="field" style={{ margin: 0, minWidth: 160 }}>
+          <label className="field" style={{ margin: 0, minWidth: 220 }}>
             <span>Customer</span>
-            <input value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Name" />
+            <PersonSuggest
+              value={customer}
+              onChange={(value) => { setCustomer(value); setPage(1) }}
+              placeholder="Search name or phone"
+              items={customerSuggest.map((row) => ({
+                id: row.id,
+                name: row.fullName,
+                phone: row.phoneNumber,
+                photoUrl: row.photoUrl,
+              }))}
+              onPick={(item) => { setCustomer(item.name); setPage(1) }}
+            />
           </label>
         </div>
         {error ? <p className="error">{error}</p> : null}
@@ -7906,6 +7946,7 @@ function AdminOperatorBookingsPage({ operatorId, onBack }: { operatorId: string;
       load={load}
       onOpen={setBookingId}
       hint="All bookings for this Operator: live, scheduled, completed, and cancelled."
+      operatorId={operatorId}
       extra={<button className="btn tiny" type="button" onClick={onBack}>Back to Operator</button>}
     />
   )
@@ -7916,14 +7957,19 @@ function OperatorBookingList({
   onOpen,
   hint,
   extra,
+  operatorId,
 }: {
   load: (q: string, page: number, pageSize: number, status: TripStatus | '', from?: string, to?: string) => Promise<{ items: OperatorBookingListItem[]; total: number }>
   onOpen: (id: string) => void
   hint: string
   extra?: ReactNode
+  /** When set, loads rider suggestions for that operator (admin). Otherwise uses operator APIs. */
+  operatorId?: string
 }) {
   const today = isoDate(new Date())
   const [q, setQ] = useState('')
+  const [riderSuggest, setRiderSuggest] = useState<RiderListItem[]>([])
+  const [customerSuggest, setCustomerSuggest] = useState<CustomerListItem[]>([])
   const [statusFilter, setStatusFilter] = useState<TripStatus | ''>('')
   const [dateMode, setDateMode] = useState<'all' | 'date' | 'range'>('all')
   const [from, setFrom] = useState(today)
@@ -7953,6 +7999,27 @@ function OperatorBookingList({
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
+      const ridersPromise = operatorId
+        ? api.operatorRiders(operatorId, q, 1, 8).then((rows) => rows.items)
+        : api.opRiders(q, 1, 8).then((rows) => rows.items)
+      const customersPromise = operatorId
+        ? api.customers(q)
+        : api.opCustomers(q)
+      Promise.all([ridersPromise, customersPromise])
+        .then(([riders, customers]) => {
+          setRiderSuggest(riders)
+          setCustomerSuggest(customers.slice(0, 8))
+        })
+        .catch(() => {
+          setRiderSuggest([])
+          setCustomerSuggest([])
+        })
+    }, 200)
+    return () => window.clearTimeout(handle)
+  }, [q, operatorId])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
       load(q, page, pageSize, statusFilter, fromParam, toParam)
         .then((data) => { setItems(data.items); setTotal(data.total); setError('') })
         .catch((err: Error) => setError(err.message))
@@ -7964,18 +8031,36 @@ function OperatorBookingList({
     setPage(1)
   }, [q, statusFilter, fromParam, toParam])
 
+  const suggestItems: SuggestItem[] = [
+    ...riderSuggest.map((row) => ({
+      id: `rider:${row.id}`,
+      name: row.fullName,
+      phone: row.phoneNumber,
+      photoUrl: row.profilePhotoUrl,
+      extra: row.plateNumber ? `Rider · ${row.plateNumber}` : 'Rider',
+      vehicleType: row.vehicleType,
+    })),
+    ...customerSuggest.map((row) => ({
+      id: `customer:${row.id}`,
+      name: row.fullName,
+      phone: row.phoneNumber,
+      photoUrl: row.photoUrl,
+      extra: 'Customer',
+    })),
+  ]
+
   return (
     <div className="card">
       <div className="toolbar">
         <h2 style={{ margin: 0 }}>Booking</h2>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <div className="ac">
-            <input
-              value={q}
-              placeholder="Search booking number, customer, rider, or place"
-              onChange={(e) => { setQ(e.target.value); setPage(1) }}
-            />
-          </div>
+          <PersonSuggest
+            value={q}
+            onChange={(value) => { setQ(value); setPage(1) }}
+            placeholder="Search booking number, customer, or rider"
+            items={suggestItems}
+            onPick={(item) => { setQ(item.name); setPage(1) }}
+          />
           {extra}
         </div>
       </div>
@@ -9169,7 +9254,7 @@ function OperatorRiderList({
 }
 
 function OperatorRiderInvitePage({ onBack }: { onBack: () => void }) {
-  const [invite, setInvite] = useState<RiderInviteLink | null>(null)
+  const [invite, setInvite] = useState<RiderInviteLinks | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -9180,8 +9265,9 @@ function OperatorRiderInvitePage({ onBack }: { onBack: () => void }) {
       .catch((err: Error) => setError(err.message))
   }, [])
 
-  const joinUrl = invite ? `${window.location.origin}${invite.joinPath}` : ''
-  const statusUrl = invite ? `${window.location.origin}${invite.statusPath}` : ''
+  const rotatingUrl = invite ? `${window.location.origin}${invite.rotating.joinPath}` : ''
+  const permanentUrl = invite ? `${window.location.origin}${invite.permanent.joinPath}` : ''
+  const statusUrl = invite ? `${window.location.origin}${invite.rotating.statusPath}` : ''
 
   async function copy(text: string, label: string) {
     try {
@@ -9193,13 +9279,16 @@ function OperatorRiderInvitePage({ onBack }: { onBack: () => void }) {
   }
 
   async function regenerate() {
+    if (!window.confirm('Regenerate the rotating invite? Old rotating links will stop working. The permanent link stays the same.')) {
+      return
+    }
     setBusy(true)
     setError('')
     setNotice('')
     try {
       const next = await api.regenerateOperatorRiderInvite()
       setInvite(next)
-      setNotice('Invite link regenerated. Old links no longer work.')
+      setNotice('Rotating invite regenerated. Permanent link is unchanged.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not regenerate invite.')
     } finally {
@@ -9212,31 +9301,56 @@ function OperatorRiderInvitePage({ onBack }: { onBack: () => void }) {
       <div className="panel-head">
         <div>
           <button className="btn tiny" type="button" onClick={onBack}>Back</button>
-          <h2 style={{ marginTop: 12 }}>Rider invite link</h2>
-          <p className="muted">Share this link so riders can register themselves. Applications stay pending until you approve them.</p>
+          <h2 style={{ marginTop: 12 }}>Rider invite links</h2>
+          <p className="muted">
+            Share either link so riders can register. Applications stay pending until you approve them.
+          </p>
         </div>
       </div>
       {error ? <p className="error">{error}</p> : null}
-      {notice ? <p className="muted">{notice}</p> : null}
+      {notice ? <p className="ok">{notice}</p> : null}
       {!invite ? <p>Loading invite…</p> : (
         <>
-          <label className="field wide">
-            <span>Registration link</span>
-            <input readOnly value={joinUrl} onFocus={(e) => e.target.select()} />
-          </label>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
-            <button className="btn" type="button" onClick={() => copy(joinUrl, 'Registration link')} style={{ width: 'auto' }}>Copy link</button>
-            <button className="btn tiny" type="button" disabled={busy} onClick={regenerate} style={{ width: 'auto' }}>
-              {busy ? 'Working…' : 'Regenerate link'}
-            </button>
-          </div>
-          <label className="field wide" style={{ marginTop: 18 }}>
-            <span>Status check link</span>
-            <input readOnly value={statusUrl} onFocus={(e) => e.target.select()} />
-          </label>
-          <div style={{ marginTop: 10 }}>
-            <button className="btn tiny" type="button" onClick={() => copy(statusUrl, 'Status link')} style={{ width: 'auto' }}>Copy status link</button>
-          </div>
+          <section style={{ marginTop: 8 }}>
+            <h3 style={{ margin: '0 0 6px' }}>Rotating invite</h3>
+            <p className="muted" style={{ margin: '0 0 10px' }}>
+              Use for short campaigns. Regenerating replaces this link only; old rotating URLs stop working.
+            </p>
+            <label className="field wide">
+              <span>Registration link</span>
+              <input readOnly value={rotatingUrl} onFocus={(e) => e.target.select()} />
+            </label>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+              <button className="btn" type="button" onClick={() => copy(rotatingUrl, 'Rotating link')} style={{ width: 'auto' }}>Copy link</button>
+              <button className="btn tiny" type="button" disabled={busy} onClick={() => void regenerate()} style={{ width: 'auto' }}>
+                {busy ? 'Working…' : 'Regenerate link'}
+              </button>
+            </div>
+          </section>
+
+          <section style={{ marginTop: 28 }}>
+            <h3 style={{ margin: '0 0 6px' }}>Permanent invite</h3>
+            <p className="muted" style={{ margin: '0 0 10px' }}>
+              Does not expire when you regenerate the rotating link. Good for posters, QR codes, and long-term sharing.
+            </p>
+            <label className="field wide">
+              <span>Registration link</span>
+              <input readOnly value={permanentUrl} onFocus={(e) => e.target.select()} />
+            </label>
+            <div style={{ marginTop: 10 }}>
+              <button className="btn" type="button" onClick={() => copy(permanentUrl, 'Permanent link')} style={{ width: 'auto' }}>Copy link</button>
+            </div>
+          </section>
+
+          <section style={{ marginTop: 28 }}>
+            <label className="field wide">
+              <span>Status check link</span>
+              <input readOnly value={statusUrl} onFocus={(e) => e.target.select()} />
+            </label>
+            <div style={{ marginTop: 10 }}>
+              <button className="btn tiny" type="button" onClick={() => copy(statusUrl, 'Status link')} style={{ width: 'auto' }}>Copy status link</button>
+            </div>
+          </section>
         </>
       )}
     </div>
@@ -9252,18 +9366,38 @@ function OperatorRiderApplicationsPage({
 }) {
   const [status, setStatus] = useState('Pending')
   const [q, setQ] = useState('')
+  const [suggest, setSuggest] = useState<RiderApplicationListItem[]>([])
   const [items, setItems] = useState<RiderApplicationListItem[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [error, setError] = useState('')
   const pageSize = 10
+  const statusFilters = [
+    { value: 'Pending', label: 'Pending' },
+    { value: 'Approved', label: 'Approved' },
+    { value: 'Rejected', label: 'Rejected' },
+    { value: '', label: 'All' },
+  ] as const
+
+  useEffect(() => {
+    setPage(1)
+  }, [status, q])
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
-      api.operatorRiderApplications({ status, q, page, pageSize })
+      api.operatorRiderApplications({ status: status || undefined, q, page: 1, pageSize: 8 })
+        .then((data) => setSuggest(data.items))
+        .catch(() => setSuggest([]))
+    }, 200)
+    return () => window.clearTimeout(handle)
+  }, [status, q])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      api.operatorRiderApplications({ status: status || undefined, q, page, pageSize })
         .then((data) => { setItems(data.items); setTotal(data.total); setError('') })
         .catch((err: Error) => setError(err.message))
-    }, 200)
+    }, q ? 220 : 0)
     return () => window.clearTimeout(handle)
   }, [status, q, page])
 
@@ -9274,20 +9408,37 @@ function OperatorRiderApplicationsPage({
           <button className="btn tiny" type="button" onClick={onBack}>Back to riders</button>
           <h2 style={{ marginTop: 12, marginBottom: 0 }}>Rider applications</h2>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }}>
-            <option value="Pending">Pending</option>
-            <option value="Approved">Approved</option>
-            <option value="Rejected">Rejected</option>
-            <option value="">All</option>
-          </select>
-          <input
-            value={q}
-            onChange={(e) => { setQ(e.target.value); setPage(1) }}
-            placeholder="Search name, phone, or plate"
-            style={{ minWidth: 220 }}
-          />
+      </div>
+      <div className="ride-filters" style={{ marginTop: 12, marginBottom: 12 }}>
+        <div className="chips">
+          {statusFilters.map((item) => (
+            <button
+              key={item.value || 'all'}
+              type="button"
+              className={status === item.value ? 'on' : ''}
+              onClick={() => { setStatus(item.value); setPage(1) }}
+            >
+              {item.label}
+            </button>
+          ))}
         </div>
+        <label className="field" style={{ margin: 0, minWidth: 260 }}>
+          <span>Search</span>
+          <PersonSuggest
+            value={q}
+            onChange={(value) => { setQ(value); setPage(1) }}
+            placeholder="Search name, phone, or plate"
+            items={suggest.map((row) => ({
+              id: row.id,
+              name: row.fullName,
+              phone: row.phoneNumber,
+              photoUrl: null,
+              extra: row.plateNumber,
+              vehicleType: row.vehicleType,
+            }))}
+            onPick={(item) => { setQ(item.name); setPage(1) }}
+          />
+        </label>
       </div>
       {error ? <p className="error">{error}</p> : null}
       <div className="table-wrap">
@@ -10459,6 +10610,7 @@ function OperatorFaresPage() {
 function OperatorSurchargesPage() {
   const [data, setData] = useState<OperatorFareMatrix | null>(null)
   const [municipalityId, setMunicipalityId] = useState('')
+  const [applyMunicipalityIds, setApplyMunicipalityIds] = useState<string[]>([])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [open, setOpen] = useState(false)
@@ -10498,6 +10650,7 @@ function OperatorSurchargesPage() {
   function openCreate() {
     setEditing(null)
     setApplyTo('Both')
+    setApplyMunicipalityIds(municipalityId ? [municipalityId] : [])
     setName('')
     setAmount('')
     setKind('TimeWindow')
@@ -10513,6 +10666,7 @@ function OperatorSurchargesPage() {
   function openEdit(item: RelatedSurcharge) {
     setEditing(item)
     setApplyTo(item.vehicleType)
+    setApplyMunicipalityIds([])
     setName(item.name)
     setAmount(String(item.amount))
     setKind(item.kind)
@@ -10531,6 +10685,18 @@ function OperatorSurchargesPage() {
     setFormError('')
   }
 
+  function toggleApplyMunicipality(id: string) {
+    setApplyMunicipalityIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id])
+  }
+
+  function toggleAllMunicipalities() {
+    if (!data) return
+    const allIds = data.municipalities.map((item) => item.id)
+    setApplyMunicipalityIds((prev) =>
+      prev.length === allIds.length ? [] : allIds)
+  }
+
   function surchargeBody() {
     return {
       kind,
@@ -10547,6 +10713,10 @@ function OperatorSurchargesPage() {
   async function saveSurcharge() {
     if (!municipalityId) {
       setFormError('Choose a municipality first.')
+      return
+    }
+    if (!editing && applyMunicipalityIds.length === 0) {
+      setFormError('Select at least one municipality.')
       return
     }
     const trimmedName = name.trim()
@@ -10586,8 +10756,16 @@ function OperatorSurchargesPage() {
         setNotice(`${trimmedName} updated.`)
       } else {
         const vehicleTypes: VehicleType[] = applyTo === 'Both' ? ['Motorcycle', 'Tricycle'] : [applyTo]
-        loadMatrix(await api.addOperatorSurcharges({ municipalityId, vehicleTypes, ...body }))
-        setNotice(`${trimmedName} added.`)
+        loadMatrix(await api.addOperatorSurcharges({
+          municipalityId,
+          municipalityIds: applyMunicipalityIds,
+          vehicleTypes,
+          ...body,
+        }))
+        const muniLabel = applyMunicipalityIds.length === 1
+          ? '1 municipality'
+          : `${applyMunicipalityIds.length} municipalities`
+        setNotice(`${trimmedName} added to ${muniLabel}.`)
       }
       closeModal()
     } catch (err) {
@@ -10598,6 +10776,10 @@ function OperatorSurchargesPage() {
   }
 
   if (!data) return error ? <p className="error">{error}</p> : <p>Loading surcharges…</p>
+
+  const allMunicipalityIds = data.municipalities.map((item) => item.id)
+  const allMunicipalitiesSelected = allMunicipalityIds.length > 0
+    && applyMunicipalityIds.length === allMunicipalityIds.length
 
   return (
     <div className="card">
@@ -10675,21 +10857,46 @@ function OperatorSurchargesPage() {
                 <p className="muted" style={{ margin: '6px 0 0' }}>
                   {editing
                     ? `Editing ${editing.name} for ${editing.vehicleType.toLowerCase()}. Times use Philippine time.`
-                    : 'Choose a time window or date range. Apply to one vehicle or both.'}
+                    : 'Choose municipalities and vehicles. Times use Philippine time.'}
                 </p>
               </div>
               <button className="btn tiny" type="button" onClick={closeModal}>Close</button>
             </div>
             <div className="form-grid">
               {!editing ? (
-                <div className="field wide">
-                  <span>Applies to</span>
-                  <div className="chips" style={{ marginTop: 8 }}>
-                    <button type="button" className={applyTo === 'Both' ? 'on' : ''} onClick={() => setApplyTo('Both')}>Both vehicles</button>
-                    <button type="button" className={applyTo === 'Motorcycle' ? 'on' : ''} onClick={() => setApplyTo('Motorcycle')}>Motorcycle</button>
-                    <button type="button" className={applyTo === 'Tricycle' ? 'on' : ''} onClick={() => setApplyTo('Tricycle')}>Tricycle</button>
+                <>
+                  <div className="field wide">
+                    <span>Municipalities</span>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={allMunicipalitiesSelected}
+                        onChange={toggleAllMunicipalities}
+                      />
+                      <span>All municipalities</span>
+                    </label>
+                    <div style={{ display: 'grid', gap: 6, marginTop: 8, maxHeight: 180, overflow: 'auto' }}>
+                      {data.municipalities.map((item) => (
+                        <label key={item.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <input
+                            type="checkbox"
+                            checked={applyMunicipalityIds.includes(item.id)}
+                            onChange={() => toggleApplyMunicipality(item.id)}
+                          />
+                          <span>{item.name}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                  <div className="field wide">
+                    <span>Applies to</span>
+                    <div className="chips" style={{ marginTop: 8 }}>
+                      <button type="button" className={applyTo === 'Both' ? 'on' : ''} onClick={() => setApplyTo('Both')}>Both vehicles</button>
+                      <button type="button" className={applyTo === 'Motorcycle' ? 'on' : ''} onClick={() => setApplyTo('Motorcycle')}>Motorcycle</button>
+                      <button type="button" className={applyTo === 'Tricycle' ? 'on' : ''} onClick={() => setApplyTo('Tricycle')}>Tricycle</button>
+                    </div>
+                  </div>
+                </>
               ) : null}
               <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Night" /></label>
               <label className="field">
@@ -10733,7 +10940,15 @@ function OperatorSurchargesPage() {
             {formError ? <p className="error">{formError}</p> : null}
             <div className="modal-actions">
               <button className="btn" type="button" disabled={busy} onClick={() => void saveSurcharge()}>
-                {busy ? 'Saving…' : editing ? 'Save surcharge' : applyTo === 'Both' ? 'Add to both vehicles' : 'Add surcharge'}
+                {busy
+                  ? 'Saving…'
+                  : editing
+                    ? 'Save surcharge'
+                    : applyMunicipalityIds.length > 1
+                      ? `Add to ${applyMunicipalityIds.length} municipalities`
+                      : applyTo === 'Both'
+                        ? 'Add to both vehicles'
+                        : 'Add surcharge'}
               </button>
               <button className="btn ghost" type="button" disabled={busy} onClick={closeModal}>Cancel</button>
             </div>

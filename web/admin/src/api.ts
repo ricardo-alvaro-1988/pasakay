@@ -131,6 +131,12 @@ export type RiderInviteLink = {
   joinPath: string
   statusPath: string
   createdAtUtc: string
+  kind: 'Rotating' | 'Permanent' | string
+}
+
+export type RiderInviteLinks = {
+  rotating: RiderInviteLink
+  permanent: RiderInviteLink
 }
 
 export type RiderInvitePublicInfo = {
@@ -1635,9 +1641,9 @@ export const api = {
     request<RiderRides>(`/api/operator/riders/${id}/rides?${rideQuery(opts)}`),
   opRiderRide: (id: string, rideId: string) =>
     request<RideDetail>(`/api/operator/riders/${id}/rides/${rideId}`),
-  operatorRiderInvite: () => request<RiderInviteLink>('/api/operator/rider-invite'),
+  operatorRiderInvite: () => request<RiderInviteLinks>('/api/operator/rider-invite'),
   regenerateOperatorRiderInvite: () =>
-    request<RiderInviteLink>('/api/operator/rider-invite/regenerate', { method: 'POST' }),
+    request<RiderInviteLinks>('/api/operator/rider-invite/regenerate', { method: 'POST' }),
   operatorRiderApplications: (opts: { status?: string; q?: string; page?: number; pageSize?: number } = {}) => {
     const params = new URLSearchParams({
       page: String(opts.page ?? 1),
@@ -1973,6 +1979,7 @@ export const api = {
     request<void>(`/api/operator/derive-fares/${id}`, { method: 'DELETE' }),
   addOperatorSurcharges: (body: {
     municipalityId: string
+    municipalityIds: string[]
     vehicleTypes: VehicleType[]
     kind: SurchargeKind
     name: string

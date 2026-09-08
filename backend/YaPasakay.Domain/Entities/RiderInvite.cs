@@ -8,6 +8,7 @@ public class RiderInviteLink : BaseEntity
     public Guid OperatorId { get; set; }
     public Operator Operator { get; set; } = null!;
     public string Token { get; set; } = string.Empty;
+    public RiderInviteKind Kind { get; set; } = RiderInviteKind.Rotating;
     public bool IsActive { get; set; } = true;
 }
 

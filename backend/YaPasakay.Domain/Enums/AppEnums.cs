@@ -51,6 +51,12 @@ public enum RiderApplicationStatus
     Rejected = 3
 }
 
+public enum RiderInviteKind
+{
+    Rotating = 0,
+    Permanent = 1
+}
+
 public enum BillStatus
 {
     Issued = 1

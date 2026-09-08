@@ -1,6 +1,15 @@
 namespace YaPasakay.Application.Admin;
 
-public record RiderInviteLinkResponse(string Token, string JoinPath, string StatusPath, DateTime CreatedAtUtc);
+public record RiderInviteLinkResponse(
+    string Token,
+    string JoinPath,
+    string StatusPath,
+    DateTime CreatedAtUtc,
+    string Kind);
+
+public record RiderInviteLinksResponse(
+    RiderInviteLinkResponse Rotating,
+    RiderInviteLinkResponse Permanent);
 
 public record RiderInvitePublicInfo(
     string Token,

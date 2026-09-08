@@ -176,10 +176,27 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             return StatusCode(status, new { message });
         }
 
-        var coverageError = await RequireCoveredMunicipalityAsync(op!.Id, request.MunicipalityId, cancellationToken);
-        if (coverageError is not null)
+        var municipalityIds = (request.MunicipalityIds ?? [])
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (municipalityIds.Count == 0 && request.MunicipalityId != Guid.Empty)
         {
-            return BadRequest(new { message = coverageError });
+            municipalityIds.Add(request.MunicipalityId);
+        }
+
+        if (municipalityIds.Count == 0)
+        {
+            return BadRequest(new { message = "Choose at least one municipality." });
+        }
+
+        foreach (var municipalityId in municipalityIds)
+        {
+            var coverageError = await RequireCoveredMunicipalityAsync(op!.Id, municipalityId, cancellationToken);
+            if (coverageError is not null)
+            {
+                return BadRequest(new { message = coverageError });
+            }
         }
 
         var types = (request.VehicleTypes ?? [])
@@ -208,15 +225,18 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
 
         try
         {
-            foreach (var vehicleType in types)
+            foreach (var municipalityId in municipalityIds)
             {
-                var fare = await EnsureMatrixAsync(
-                    op.Id,
-                    request.MunicipalityId,
-                    vehicleType,
-                    FareCommissionSplit.SystemPercent(op, vehicleType),
-                    cancellationToken);
-                await PersistSurchargeAsync(fare!, parsed.Item!, cancellationToken);
+                foreach (var vehicleType in types)
+                {
+                    var fare = await EnsureMatrixAsync(
+                        op.Id,
+                        municipalityId,
+                        vehicleType,
+                        FareCommissionSplit.SystemPercent(op, vehicleType),
+                        cancellationToken);
+                    await PersistSurchargeAsync(fare!, parsed.Item!, cancellationToken);
+                }
             }
         }
         catch (Exception ex)
@@ -227,7 +247,11 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             });
         }
 
-        return Ok(await BuildDetailAsync(op, request.MunicipalityId, cancellationToken));
+        var viewMunicipalityId = request.MunicipalityId != Guid.Empty
+            && municipalityIds.Contains(request.MunicipalityId)
+                ? request.MunicipalityId
+                : municipalityIds[0];
+        return Ok(await BuildDetailAsync(op, viewMunicipalityId, cancellationToken));
     }
 
     [HttpPost("{vehicleType}/surcharges")]

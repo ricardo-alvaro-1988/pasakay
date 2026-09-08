@@ -800,6 +800,7 @@ public record SaveFareSurchargeRequest(
 
 public record SaveRelatedFareSurchargeRequest(
     Guid MunicipalityId,
+    IReadOnlyList<Guid>? MunicipalityIds,
     IReadOnlyList<VehicleType>? VehicleTypes,
     SurchargeKind Kind,
     string Name,
