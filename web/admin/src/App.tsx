@@ -96,6 +96,8 @@ import {
   CommissionReportResponse,
   RiderReportItem,
   RiderReportResponse,
+  CustomerReportItem,
+  CustomerReportResponse,
   RiderInviteLink,
   RiderApplicationListItem,
   RiderApplicationDetail,
@@ -7106,6 +7108,7 @@ function OperatorShell({
         {page === 'promos' && <OperatorPromosPage />}
         {page === 'commission' && <CommissionReportPage mode="operator" />}
         {page === 'rider-report' && <OperatorRiderReportPage />}
+        {page === 'customer-report' && <OperatorCustomerReportPage />}
         {page === 'company' && <OperatorCompanyPage />}
         {page === 'roles' && me.isMainOperator ? (
           <div className="form-sections">
@@ -7325,6 +7328,7 @@ function OperatorRiderReportPage() {
   const [from, setFrom] = useState(today)
   const [to, setTo] = useState(today)
   const [q, setQ] = useState('')
+  const [suggest, setSuggest] = useState<RiderListItem[]>([])
   const [page, setPage] = useState(1)
   const [data, setData] = useState<RiderReportResponse | null>(null)
   const [error, setError] = useState('')
@@ -7338,6 +7342,13 @@ function OperatorRiderReportPage() {
   useEffect(() => {
     setPage(1)
   }, [dateMode, from, to, q])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      api.opRiders(q, 1, 8).then((rows) => setSuggest(rows.items)).catch(() => setSuggest([]))
+    }, 200)
+    return () => window.clearTimeout(handle)
+  }, [q])
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -7384,15 +7395,15 @@ function OperatorRiderReportPage() {
               Rider roster with completed rides and income for the selected date or range.
             </p>
           </div>
-          <button className="btn" type="button" disabled={exportBusy} onClick={() => void exportExcel()}>
-            {exportBusy ? 'Exporting…' : 'Export Excel'}
-          </button>
         </div>
         <div className="ride-filters" style={{ marginTop: 12 }}>
           <div className="chips">
             <button type="button" className={dateMode === 'date' ? 'on' : ''} onClick={() => { setDateMode('date'); setFrom(today); setTo(today) }}>By date</button>
             <button type="button" className={dateMode === 'range' ? 'on' : ''} onClick={() => { setDateMode('range'); setFrom(isoDate(addDays(new Date(), -6))); setTo(today) }}>By range</button>
           </div>
+          <button className="btn tiny" type="button" disabled={exportBusy} onClick={() => void exportExcel()}>
+            {exportBusy ? 'Exporting…' : 'Export Excel'}
+          </button>
           {dateMode === 'date' ? (
             <label className="field" style={{ margin: 0, minWidth: 160 }}>
               <span>Date</span>
@@ -7410,9 +7421,22 @@ function OperatorRiderReportPage() {
               </label>
             </>
           )}
-          <label className="field" style={{ margin: 0, minWidth: 220 }}>
+          <label className="field" style={{ margin: 0, minWidth: 260 }}>
             <span>Search</span>
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name, mobile, or plate" />
+            <PersonSuggest
+              value={q}
+              onChange={(value) => { setQ(value); setPage(1) }}
+              placeholder="Search name, phone, or plate"
+              items={suggest.map((row) => ({
+                id: row.id,
+                name: row.fullName,
+                phone: row.phoneNumber,
+                photoUrl: row.profilePhotoUrl,
+                extra: row.plateNumber,
+                vehicleType: row.vehicleType,
+              }))}
+              onPick={(item) => { setQ(item.name); setPage(1) }}
+            />
           </label>
         </div>
         {error ? <p className="error">{error}</p> : null}
@@ -7423,8 +7447,12 @@ function OperatorRiderReportPage() {
               <p className="detail-name" style={{ marginTop: 8 }}>{data.summary.riderCount}</p>
             </div>
             <div className="detail-card">
-              <span>Total rides</span>
+              <span>No# rides</span>
               <p className="detail-name" style={{ marginTop: 8 }}>{data.summary.totalRides}</p>
+            </div>
+            <div className="detail-card">
+              <span>No# cancel</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{data.summary.totalCancel}</p>
             </div>
             <div className="detail-card">
               <span>Rider income</span>
@@ -7445,14 +7473,15 @@ function OperatorRiderReportPage() {
                 <th>Registration</th>
                 <th>Mobile</th>
                 <th>Joined</th>
-                <th>Total rides</th>
+                <th>No# rides</th>
+                <th>No# cancel</th>
                 <th>Rider income</th>
                 <th>Booking amount</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={8}>No riders for this filter.</td></tr>
+                <tr><td colSpan={9}>No riders for this filter.</td></tr>
               ) : rows.map((row: RiderReportItem) => (
                 <tr key={row.riderId}>
                   <td><strong>{row.riderName}</strong>{row.isActive ? null : <span className="muted"> · Off</span>}</td>
@@ -7461,8 +7490,189 @@ function OperatorRiderReportPage() {
                   <td>{row.mobile || '—'}</td>
                   <td>{phDateTime(row.joinedAtUtc)}</td>
                   <td>{row.totalRides}</td>
+                  <td>{row.totalCancel}</td>
                   <td>{peso(row.riderIncome)}</td>
                   <td><strong>{peso(row.bookingAmount)}</strong></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="pager" style={{ marginTop: 12 }}>
+          <button className="btn tiny" type="button" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Prev</button>
+          <span className="muted">Page {page} of {pages}</span>
+          <button className="btn tiny" type="button" disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>Next</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OperatorCustomerReportPage() {
+  const today = isoDate(new Date())
+  const [dateMode, setDateMode] = useState<'date' | 'range'>('date')
+  const [from, setFrom] = useState(today)
+  const [to, setTo] = useState(today)
+  const [q, setQ] = useState('')
+  const [suggest, setSuggest] = useState<CustomerListItem[]>([])
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState<CustomerReportResponse | null>(null)
+  const [error, setError] = useState('')
+  const [exportBusy, setExportBusy] = useState(false)
+  const pageSize = 10
+  const start = from > to ? to : from
+  const end = from > to ? from : to
+  const fromParam = dateMode === 'date' ? end : start
+  const toParam = end
+
+  useEffect(() => {
+    setPage(1)
+  }, [dateMode, from, to, q])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      api.opCustomers(q).then(setSuggest).catch(() => setSuggest([]))
+    }, 200)
+    return () => window.clearTimeout(handle)
+  }, [q])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      api.operatorCustomerReport({
+        q: q.trim() || undefined,
+        from: fromParam,
+        to: toParam,
+        page,
+        pageSize,
+      })
+        .then(setData)
+        .catch((err: Error) => setError(err.message))
+    }, q ? 220 : 0)
+    return () => window.clearTimeout(handle)
+  }, [dateMode, fromParam, toParam, q, page])
+
+  const rows = data?.page.items ?? []
+  const total = data?.page.total ?? 0
+  const pages = Math.max(1, Math.ceil(total / pageSize))
+
+  async function exportExcel() {
+    setExportBusy(true)
+    setError('')
+    try {
+      await api.exportOperatorCustomerReport({
+        q: q.trim() || undefined,
+        from: fromParam,
+        to: toParam,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not export customer report.')
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  return (
+    <div className="form-sections">
+      <div className="card">
+        <div className="toolbar">
+          <div>
+            <h2 style={{ margin: 0 }}>Customer</h2>
+            <p className="muted" style={{ margin: '4px 0 0' }}>
+              Customers with completed rides, cancels, and spend for the selected date or range.
+            </p>
+          </div>
+        </div>
+        <div className="ride-filters" style={{ marginTop: 12 }}>
+          <div className="chips">
+            <button type="button" className={dateMode === 'date' ? 'on' : ''} onClick={() => { setDateMode('date'); setFrom(today); setTo(today) }}>By date</button>
+            <button type="button" className={dateMode === 'range' ? 'on' : ''} onClick={() => { setDateMode('range'); setFrom(isoDate(addDays(new Date(), -6))); setTo(today) }}>By range</button>
+          </div>
+          <button className="btn tiny" type="button" disabled={exportBusy} onClick={() => void exportExcel()}>
+            {exportBusy ? 'Exporting…' : 'Export Excel'}
+          </button>
+          {dateMode === 'date' ? (
+            <label className="field" style={{ margin: 0, minWidth: 160 }}>
+              <span>Date</span>
+              <input type="date" value={to} onChange={(e) => { setFrom(e.target.value); setTo(e.target.value) }} />
+            </label>
+          ) : (
+            <>
+              <label className="field" style={{ margin: 0, minWidth: 150 }}>
+                <span>From</span>
+                <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+              </label>
+              <label className="field" style={{ margin: 0, minWidth: 150 }}>
+                <span>To</span>
+                <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+              </label>
+            </>
+          )}
+          <label className="field" style={{ margin: 0, minWidth: 260 }}>
+            <span>Search</span>
+            <PersonSuggest
+              value={q}
+              onChange={(value) => { setQ(value); setPage(1) }}
+              placeholder="Search name or phone"
+              items={suggest.map((row) => ({
+                id: row.id,
+                name: row.fullName,
+                phone: row.phoneNumber,
+                photoUrl: row.photoUrl,
+              }))}
+              onPick={(item) => { setQ(item.name); setPage(1) }}
+            />
+          </label>
+        </div>
+        {error ? <p className="error">{error}</p> : null}
+        {data ? (
+          <div className="fare-cards" style={{ marginTop: 14 }}>
+            <div className="detail-card">
+              <span>Customers</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{data.summary.customerCount}</p>
+            </div>
+            <div className="detail-card">
+              <span>No# rides</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{data.summary.totalRides}</p>
+            </div>
+            <div className="detail-card">
+              <span>No# cancel</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{data.summary.totalCancel}</p>
+            </div>
+            <div className="detail-card">
+              <span>Booking amount</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{peso(data.summary.bookingAmount)}</p>
+            </div>
+            <div className="detail-card">
+              <span>Total spent</span>
+              <p className="detail-name" style={{ marginTop: 8 }}>{peso(data.summary.totalSpent)}</p>
+            </div>
+          </div>
+        ) : null}
+        <div className="table-wrap" style={{ marginTop: 16 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Customer name</th>
+                <th>Mobile</th>
+                <th>Joined</th>
+                <th>No# rides</th>
+                <th>No# cancel</th>
+                <th>Booking amount</th>
+                <th>Total spent</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr><td colSpan={7}>No customers for this filter.</td></tr>
+              ) : rows.map((row: CustomerReportItem) => (
+                <tr key={row.customerId}>
+                  <td><strong>{row.customerName}</strong>{row.isActive ? null : <span className="muted"> · Off</span>}</td>
+                  <td>{row.mobile || '—'}</td>
+                  <td>{phDateTime(row.joinedAtUtc)}</td>
+                  <td>{row.totalRides}</td>
+                  <td>{row.totalCancel}</td>
+                  <td>{peso(row.bookingAmount)}</td>
+                  <td><strong>{peso(row.totalSpent)}</strong></td>
                 </tr>
               ))}
             </tbody>

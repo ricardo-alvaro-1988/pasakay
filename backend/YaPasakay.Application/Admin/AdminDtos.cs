@@ -647,18 +647,42 @@ public record RiderReportItem(
     DateTime JoinedAtUtc,
     bool IsActive,
     int TotalRides,
+    int TotalCancel,
     decimal RiderIncome,
     decimal BookingAmount);
 
 public record RiderReportSummary(
     int RiderCount,
     int TotalRides,
+    int TotalCancel,
     decimal RiderIncome,
     decimal BookingAmount);
 
 public record RiderReportResponse(
     PagedResult<RiderReportItem> Page,
     RiderReportSummary Summary);
+
+public record CustomerReportItem(
+    Guid CustomerId,
+    string CustomerName,
+    string Mobile,
+    DateTime JoinedAtUtc,
+    bool IsActive,
+    int TotalRides,
+    int TotalCancel,
+    decimal BookingAmount,
+    decimal TotalSpent);
+
+public record CustomerReportSummary(
+    int CustomerCount,
+    int TotalRides,
+    int TotalCancel,
+    decimal BookingAmount,
+    decimal TotalSpent);
+
+public record CustomerReportResponse(
+    PagedResult<CustomerReportItem> Page,
+    CustomerReportSummary Summary);
 
 public record OperatorBookingColumn(
     int Total,

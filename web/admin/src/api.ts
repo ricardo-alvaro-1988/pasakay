@@ -14,6 +14,7 @@ export type PageId =
   | 'billing'
   | 'commission'
   | 'rider-report'
+  | 'customer-report'
   | 'announcements'
   | 'support'
   | 'audit'
@@ -847,6 +848,7 @@ export type RiderReportItem = {
   joinedAtUtc: string
   isActive: boolean
   totalRides: number
+  totalCancel: number
   riderIncome: number
   bookingAmount: number
 }
@@ -856,8 +858,32 @@ export type RiderReportResponse = {
   summary: {
     riderCount: number
     totalRides: number
+    totalCancel: number
     riderIncome: number
     bookingAmount: number
+  }
+}
+
+export type CustomerReportItem = {
+  customerId: string
+  customerName: string
+  mobile: string
+  joinedAtUtc: string
+  isActive: boolean
+  totalRides: number
+  totalCancel: number
+  bookingAmount: number
+  totalSpent: number
+}
+
+export type CustomerReportResponse = {
+  page: Paged<CustomerReportItem>
+  summary: {
+    customerCount: number
+    totalRides: number
+    totalCancel: number
+    bookingAmount: number
+    totalSpent: number
   }
 }
 
@@ -1659,6 +1685,54 @@ export const api = {
     const disposition = res.headers.get('Content-Disposition') ?? ''
     const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
     const filename = match?.[1]?.replace(/['"]/g, '') || `rider-report.xlsx`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
+  operatorCustomerReport: (opts: {
+    q?: string
+    from?: string
+    to?: string
+    page?: number
+    pageSize?: number
+  }) => {
+    const params = new URLSearchParams({
+      page: String(opts.page ?? 1),
+      pageSize: String(opts.pageSize ?? 10),
+    })
+    if (opts.q?.trim()) params.set('q', opts.q.trim())
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    return request<CustomerReportResponse>(`/api/operator/reports/customers?${params}`)
+  },
+  exportOperatorCustomerReport: async (opts: { q?: string; from?: string; to?: string }) => {
+    const params = new URLSearchParams()
+    if (opts.q?.trim()) params.set('q', opts.q.trim())
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    const headers = new Headers()
+    const token = getToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    const res = await fetch(`/api/operator/reports/customers/export?${params}`, { headers })
+    if (!res.ok) {
+      let message = 'Could not export customer report.'
+      try {
+        const body = (await res.json()) as { message?: string }
+        if (body.message) message = body.message
+      } catch {
+        /* ignore */
+      }
+      throw new Error(message)
+    }
+    const blob = await res.blob()
+    const disposition = res.headers.get('Content-Disposition') ?? ''
+    const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
+    const filename = match?.[1]?.replace(/['"]/g, '') || `customer-report.xlsx`
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

@@ -21,6 +21,7 @@ public static class OperatorAccessCatalog
         new("promos", "Promos"),
         new("commission", "Commission"),
         new("rider-report", "Rider report"),
+        new("customer-report", "Customer report"),
         new("company", "Company"),
     ];
 

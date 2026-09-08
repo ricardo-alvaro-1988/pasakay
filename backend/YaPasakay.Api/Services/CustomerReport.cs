@@ -1,15 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using YaPasakay.Application.Admin;
+using YaPasakay.Application.Common;
 using YaPasakay.Domain.Enums;
 using YaPasakay.Infrastructure.Persistence;
 
 namespace YaPasakay.Api.Services;
 
-public static class RiderReport
+public static class CustomerReport
 {
     public const int ExportMaxRows = 10_000;
 
-    public static async Task<RiderReportResponse> BuildAsync(
+    public static async Task<CustomerReportResponse> BuildAsync(
         AppDbContext db,
         Guid operatorId,
         string? q,
@@ -30,12 +31,12 @@ public static class RiderReport
             .Take(pageSize)
             .ToList();
 
-        return new RiderReportResponse(
-            new PagedResult<RiderReportItem>(pageItems, page, pageSize, total),
+        return new CustomerReportResponse(
+            new PagedResult<CustomerReportItem>(pageItems, page, pageSize, total),
             summary);
     }
 
-    public static async Task<IReadOnlyList<RiderReportItem>> BuildRowsAsync(
+    public static async Task<IReadOnlyList<CustomerReportItem>> BuildRowsAsync(
         AppDbContext db,
         Guid operatorId,
         string? q,
@@ -44,7 +45,6 @@ public static class RiderReport
         int take,
         CancellationToken cancellationToken)
     {
-        // Default window: today (PH ≈ UTC+8), matching commission report.
         if (from is null && to is null)
         {
             var today = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8));
@@ -62,39 +62,44 @@ public static class RiderReport
         var start = DateTime.SpecifyKind(startDay.ToDateTime(TimeOnly.MinValue).AddHours(-8), DateTimeKind.Utc);
         var endExclusive = DateTime.SpecifyKind(endDay.AddDays(1).ToDateTime(TimeOnly.MinValue).AddHours(-8), DateTimeKind.Utc);
 
-        var ridersQuery = db.RiderProfiles
+        var relatedIds = db.Trips
+            .Where(x => x.OperatorId == operatorId && x.CustomerId != null)
+            .Select(x => x.CustomerId!.Value)
+            .Distinct();
+
+        var customersQuery = db.CustomerProfiles
             .AsNoTracking()
             .Include(x => x.AppUser)
-            .Where(x => x.OperatorId == operatorId);
+            .Where(x => relatedIds.Contains(x.Id));
 
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = q.Trim();
-            ridersQuery = ridersQuery.Where(x =>
-                x.AppUser.FullName.Contains(term)
-                || x.AppUser.PhoneNumber.Contains(term)
-                || x.PlateNumber.Contains(term)
-                || x.VehicleFranchiseNumber.Contains(term));
+            var phone = PhoneNormalizer.Normalize(term);
+            customersQuery = customersQuery.Where(x =>
+                x.FirstName.Contains(term)
+                || x.LastName.Contains(term)
+                || x.AppUser.FullName.Contains(term)
+                || x.AppUser.PhoneNumber.Contains(phone.Length > 0 ? phone : term));
         }
 
-        var riders = await ridersQuery
-            .OrderByDescending(x => x.IsActive)
+        var customers = await customersQuery
+            .OrderByDescending(x => x.AppUser.IsActive)
             .ThenBy(x => x.AppUser.FullName)
             .Take(Math.Clamp(take, 1, ExportMaxRows))
             .ToListAsync(cancellationToken);
 
-        if (riders.Count == 0)
+        if (customers.Count == 0)
         {
             return [];
         }
 
-        var riderIds = riders.Select(x => x.Id).ToList();
+        var customerIds = customers.Select(x => x.Id).ToList();
         var trips = await db.Trips
             .AsNoTracking()
-            .Include(x => x.Operator)
-            .Include(x => x.PickupBarangay)
             .Where(x => x.OperatorId == operatorId
-                && riderIds.Contains(x.RiderId)
+                && x.CustomerId != null
+                && customerIds.Contains(x.CustomerId.Value)
                 && (
                     (x.Status == TripStatus.Completed
                         && x.Fare > 0
@@ -105,57 +110,46 @@ public static class RiderReport
                         && (x.CancelledAtUtc ?? x.ScheduledAtUtc ?? x.RequestedAtUtc) < endExclusive)))
             .ToListAsync(cancellationToken);
 
-        var completedTrips = trips.Where(x => x.Status == TripStatus.Completed).ToList();
-        var fares = await OperatorMaps.LoadFareMatrixLookupAsync(db, completedTrips, cancellationToken);
-        var completedByRider = completedTrips.GroupBy(x => x.RiderId).ToDictionary(g => g.Key, g => g.ToList());
-        var cancelByRider = trips
+        var completedByCustomer = trips
+            .Where(x => x.Status == TripStatus.Completed)
+            .GroupBy(x => x.CustomerId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var cancelByCustomer = trips
             .Where(x => x.Status == TripStatus.Cancelled)
-            .GroupBy(x => x.RiderId)
+            .GroupBy(x => x.CustomerId!.Value)
             .ToDictionary(g => g.Key, g => g.Count());
 
-        return riders.Select(rider =>
+        return customers.Select(customer =>
         {
-            completedByRider.TryGetValue(rider.Id, out var riderTrips);
-            riderTrips ??= [];
-            cancelByRider.TryGetValue(rider.Id, out var cancelCount);
-            decimal income = 0;
+            completedByCustomer.TryGetValue(customer.Id, out var customerTrips);
+            customerTrips ??= [];
+            cancelByCustomer.TryGetValue(customer.Id, out var cancelCount);
             decimal booking = 0;
-            foreach (var trip in riderTrips)
+            decimal spent = 0;
+            foreach (var trip in customerTrips)
             {
                 booking += trip.Fare;
-                Domain.Entities.FareMatrix? fare = null;
-                if (trip.PickupBarangay is not null)
-                {
-                    fares.TryGetValue((trip.OperatorId, trip.VehicleType, trip.PickupBarangay.MunicipalityId), out fare);
-                }
-
-                var breakdown = RideCommissionCalculator.ForTrip(trip, fare);
-                if (breakdown is not null)
-                {
-                    income += breakdown.DriverAmount;
-                }
+                spent += trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare;
             }
 
-            return new RiderReportItem(
-                rider.Id,
-                rider.AppUser.FullName,
-                rider.PlateNumber,
-                rider.VehicleFranchiseNumber,
-                rider.AppUser.PhoneNumber,
-                DateTime.SpecifyKind(rider.CreatedAtUtc, DateTimeKind.Utc),
-                rider.IsActive,
-                riderTrips.Count,
+            return new CustomerReportItem(
+                customer.Id,
+                customer.AppUser.FullName,
+                customer.AppUser.PhoneNumber,
+                DateTime.SpecifyKind(customer.CreatedAtUtc, DateTimeKind.Utc),
+                customer.AppUser.IsActive,
+                customerTrips.Count,
                 cancelCount,
-                CommissionCut.Round(income),
-                CommissionCut.Round(booking));
+                CommissionCut.Round(booking),
+                CommissionCut.Round(spent));
         }).ToList();
     }
 
-    public static RiderReportSummary Summarize(IReadOnlyList<RiderReportItem> rows) =>
+    public static CustomerReportSummary Summarize(IReadOnlyList<CustomerReportItem> rows) =>
         new(
             rows.Count,
             rows.Sum(x => x.TotalRides),
             rows.Sum(x => x.TotalCancel),
-            CommissionCut.Round(rows.Sum(x => x.RiderIncome)),
-            CommissionCut.Round(rows.Sum(x => x.BookingAmount)));
+            CommissionCut.Round(rows.Sum(x => x.BookingAmount)),
+            CommissionCut.Round(rows.Sum(x => x.TotalSpent)));
 }

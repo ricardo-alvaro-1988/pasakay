@@ -268,6 +268,7 @@ export const OPERATOR_MENU_GROUPS: SideNavGroup[] = [
     items: [
       { id: 'commission', label: 'Commission', icon: '％' },
       { id: 'rider-report', label: 'Rider', icon: '♟' },
+      { id: 'customer-report', label: 'Customer', icon: '☺' },
     ],
   },
   {
