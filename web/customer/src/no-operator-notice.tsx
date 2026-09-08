@@ -9,10 +9,14 @@ export function useNoOperatorNotice(
 ) {
   const [searching, setSearching] = useState(false)
   const [uncovered, setUncovered] = useState(false)
+  const [motorcycleAvailable, setMotorcycleAvailable] = useState(true)
+  const [tricycleAvailable, setTricycleAvailable] = useState(true)
 
   useEffect(() => {
     setSearching(false)
     setUncovered(false)
+    setMotorcycleAvailable(true)
+    setTricycleAvailable(true)
     if (!enabled || !pickup || !dropoff) return
 
     let cancelled = false
@@ -36,6 +40,8 @@ export function useNoOperatorNotice(
       dropoffDetails: dropoff.details,
     }).then((result) => {
       if (cancelled) return
+      setMotorcycleAvailable(!!result.motorcycleAvailable)
+      setTricycleAvailable(!!result.tricycleAvailable)
       if (!result.municipalityHasOperator) startWait()
     }).catch(() => {
       if (cancelled) return
@@ -59,7 +65,7 @@ export function useNoOperatorNotice(
     dropoff?.lng,
   ])
 
-  return { searching, uncovered }
+  return { searching, uncovered, motorcycleAvailable, tricycleAvailable }
 }
 
 export function NoOperatorNotice({ show }: { show: boolean }) {

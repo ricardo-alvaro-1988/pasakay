@@ -74,7 +74,9 @@ public record CustomerServiceCheckRequest(
 
 public record CustomerServiceCheckResponse(
     bool MunicipalityHasOperator,
-    string? MunicipalityName);
+    string? MunicipalityName,
+    bool MotorcycleAvailable = false,
+    bool TricycleAvailable = false);
 
 public record CustomerTripItem(
     Guid Id,

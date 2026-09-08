@@ -5238,11 +5238,11 @@ function RelatedFareRatesTable({
           <h3>{vehicle}</h3>
           {editable ? (
             <div className="chips">
-              <button type="button" className={draft.isActive ? 'on' : ''} disabled={locked} onClick={() => onChange?.(vehicle, { isActive: true })}>Active</button>
-              <button type="button" className={!draft.isActive ? 'on' : ''} disabled={locked} onClick={() => onChange?.(vehicle, { isActive: false })}>Off</button>
+              <button type="button" className={draft.isActive ? 'on' : ''} disabled={locked} onClick={() => onChange?.(vehicle, { isActive: true })}>Offered</button>
+              <button type="button" className={!draft.isActive ? 'on' : ''} disabled={locked} onClick={() => onChange?.(vehicle, { isActive: false })}>Not offered</button>
             </div>
           ) : (
-            rates ? <StatusTag active={rates.isActive} /> : <span className="muted">—</span>
+            rates ? <span className={`tag status ${rates.isActive ? 'active' : 'inactive'}`}>{rates.isActive ? 'Offered' : 'Not offered'}</span> : <span className="muted">—</span>
           )}
         </header>
 
@@ -5302,6 +5302,11 @@ function RelatedFareRatesTable({
 
   return (
     <div className="fare-matrix-layout">
+      {editable ? (
+        <p className="muted" style={{ marginTop: 0, marginBottom: 12, maxWidth: 640 }}>
+          Offered vehicles appear in the customer app for this municipality. Not offered keeps rates saved but blocks quote and book for that type.
+        </p>
+      ) : null}
       {editable ? (
         <div className="chips" style={{ marginBottom: 14 }}>
           <button type="button" className={linked ? 'on' : ''} onClick={() => onLinked?.(true)}>Same rates for both</button>
@@ -10646,6 +10651,7 @@ function OperatorFaresPage() {
             <h2 style={{ margin: 0 }}>{data.operatorName}</h2>
             <p className="muted" style={{ margin: '6px 0 0', maxWidth: 560 }}>
               Set motorcycle and tricycle rates for each municipality you serve. Quotes use the pickup city.
+              Use <strong style={{ color: 'var(--text)' }}>Offered / Not offered</strong> per vehicle to control which types customers can book there.
             </p>
           </div>
         </div>

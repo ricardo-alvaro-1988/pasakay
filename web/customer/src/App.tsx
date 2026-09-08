@@ -499,10 +499,18 @@ function Home({
           next[hail.vehicleType] = one.quote
           quoteError = one.error
         } else {
-          const [moto, trike] = await Promise.all([quoteOne('Motorcycle'), quoteOne('Tricycle')])
-          next.Motorcycle = moto.quote
-          next.Tricycle = trike.quote
-          quoteError = moto.error || trike.error
+          const tasks: Promise<{ type: VehicleType; quote: Quote | null; error: string }>[] = []
+          if (noOperator.motorcycleAvailable) {
+            tasks.push(quoteOne('Motorcycle').then((one) => ({ type: 'Motorcycle' as const, ...one })))
+          }
+          if (noOperator.tricycleAvailable) {
+            tasks.push(quoteOne('Tricycle').then((one) => ({ type: 'Tricycle' as const, ...one })))
+          }
+          const results = await Promise.all(tasks)
+          for (const one of results) {
+            next[one.type] = one.quote
+            if (!quoteError) quoteError = one.error
+          }
         }
         if (ignore) return
         setQuotes(next)
@@ -524,7 +532,16 @@ function Home({
     }
     void load()
     return () => { ignore = true }
-  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers])
+  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers, noOperator.motorcycleAvailable, noOperator.tricycleAvailable])
+
+  useEffect(() => {
+    if (hail) return
+    setVehicle((current) => {
+      if (current === 'Motorcycle' && !noOperator.motorcycleAvailable && noOperator.tricycleAvailable) return 'Tricycle'
+      if (current === 'Tricycle' && !noOperator.tricycleAvailable && noOperator.motorcycleAvailable) return 'Motorcycle'
+      return current
+    })
+  }, [hail, noOperator.motorcycleAvailable, noOperator.tricycleAvailable])
 
   useEffect(() => {
     const available = !!(quotes.Motorcycle?.hasActivePromos || quotes.Tricycle?.hasActivePromos)
@@ -934,21 +951,28 @@ function Home({
                   </div>
                 </div>
                 <div className="vehicles">
-                  <button type="button" disabled={!!hail && hail.vehicleType !== 'Motorcycle'} className={`vehicle ${vehicle === 'Motorcycle' ? 'on' : ''}`} onClick={() => { setVehicle('Motorcycle'); setPassengers(1) }}>
-                    <span className="icon moto"><img src={VEHICLE_ART.Motorcycle} alt="" /></span>
-                    <span className="copy">
-                      <b>Motorcycle</b>
-                      <b className="price">{quotes.Motorcycle ? quotePriceLabel(quotes.Motorcycle) : '—'}</b>
-                    </span>
-                  </button>
-                  <button type="button" disabled={!!hail && hail.vehicleType !== 'Tricycle'} className={`vehicle ${vehicle === 'Tricycle' ? 'on' : ''}`} onClick={() => setVehicle('Tricycle')}>
-                    <span className="icon"><img src={VEHICLE_ART.Tricycle} alt="" /></span>
-                    <span className="copy">
-                      <b>Tricycle</b>
-                      <b className="price">{quotes.Tricycle ? quotePriceLabel(quotes.Tricycle) : '—'}</b>
-                    </span>
-                  </button>
+                  {(noOperator.motorcycleAvailable || hail?.vehicleType === 'Motorcycle') && (
+                    <button type="button" disabled={!!hail && hail.vehicleType !== 'Motorcycle'} className={`vehicle ${vehicle === 'Motorcycle' ? 'on' : ''}`} onClick={() => { setVehicle('Motorcycle'); setPassengers(1) }}>
+                      <span className="icon moto"><img src={VEHICLE_ART.Motorcycle} alt="" /></span>
+                      <span className="copy">
+                        <b>Motorcycle</b>
+                        <b className="price">{quotes.Motorcycle ? quotePriceLabel(quotes.Motorcycle) : '—'}</b>
+                      </span>
+                    </button>
+                  )}
+                  {(noOperator.tricycleAvailable || hail?.vehicleType === 'Tricycle') && (
+                    <button type="button" disabled={!!hail && hail.vehicleType !== 'Tricycle'} className={`vehicle ${vehicle === 'Tricycle' ? 'on' : ''}`} onClick={() => setVehicle('Tricycle')}>
+                      <span className="icon"><img src={VEHICLE_ART.Tricycle} alt="" /></span>
+                      <span className="copy">
+                        <b>Tricycle</b>
+                        <b className="price">{quotes.Tricycle ? quotePriceLabel(quotes.Tricycle) : '—'}</b>
+                      </span>
+                    </button>
+                  )}
                 </div>
+                {!hail && pickup && dropoff && !noOperator.motorcycleAvailable && !noOperator.tricycleAvailable && (
+                  <p className="muted" style={{ margin: '8px 0 0' }}>No vehicle types are offered for bookings in this municipality yet.</p>
+                )}
                 {vehicle === 'Tricycle' && (
                   <div className="passenger-picker" role="group" aria-label="Number of passengers">
                     <span className="passenger-label">Passengers</span>

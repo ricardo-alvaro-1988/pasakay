@@ -376,6 +376,14 @@ export function ScheduleScreen({
     return () => { ignore = true }
   }, [pickup, dropoff, vehicle, payment, paymentRef, passengers])
 
+  useEffect(() => {
+    setVehicle((current) => {
+      if (current === 'Motorcycle' && !noOperator.motorcycleAvailable && noOperator.tricycleAvailable) return 'Tricycle'
+      if (current === 'Tricycle' && !noOperator.tricycleAvailable && noOperator.motorcycleAvailable) return 'Motorcycle'
+      return current
+    })
+  }, [noOperator.motorcycleAvailable, noOperator.tricycleAvailable])
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (!pickup || !dropoff) {
@@ -463,14 +471,18 @@ export function ScheduleScreen({
       </div>
       <p className="section-title">Vehicle</p>
       <div className="vehicles">
-        <button type="button" className={`vehicle ${vehicle === 'Motorcycle' ? 'on' : ''}`} onClick={() => { setVehicle('Motorcycle'); setPassengers(1) }}>
-          <span className="icon moto"><img src={VEHICLE_ART.Motorcycle} alt="" /></span>
-          <span className="copy"><b>Motorcycle</b></span>
-        </button>
-        <button type="button" className={`vehicle ${vehicle === 'Tricycle' ? 'on' : ''}`} onClick={() => setVehicle('Tricycle')}>
-          <span className="icon"><img src={VEHICLE_ART.Tricycle} alt="" /></span>
-          <span className="copy"><b>Tricycle</b></span>
-        </button>
+        {noOperator.motorcycleAvailable && (
+          <button type="button" className={`vehicle ${vehicle === 'Motorcycle' ? 'on' : ''}`} onClick={() => { setVehicle('Motorcycle'); setPassengers(1) }}>
+            <span className="icon moto"><img src={VEHICLE_ART.Motorcycle} alt="" /></span>
+            <span className="copy"><b>Motorcycle</b></span>
+          </button>
+        )}
+        {noOperator.tricycleAvailable && (
+          <button type="button" className={`vehicle ${vehicle === 'Tricycle' ? 'on' : ''}`} onClick={() => setVehicle('Tricycle')}>
+            <span className="icon"><img src={VEHICLE_ART.Tricycle} alt="" /></span>
+            <span className="copy"><b>Tricycle</b></span>
+          </button>
+        )}
       </div>
       {vehicle === 'Tricycle' && (
         <div className="passenger-picker" role="group" aria-label="Number of passengers">

@@ -486,7 +486,12 @@ export const api = {
     pickupLng: number
     dropoffBarangayId?: string
     dropoffDetails: string
-  }) => request<{ municipalityHasOperator: boolean; municipalityName: string | null }>('/api/customer/service-check', {
+  }) => request<{
+    municipalityHasOperator: boolean
+    municipalityName: string | null
+    motorcycleAvailable: boolean
+    tricycleAvailable: boolean
+  }>('/api/customer/service-check', {
     method: 'POST',
     body: JSON.stringify(body),
   }),

@@ -294,7 +294,7 @@ public class CustomerBookingsController(
         var dropoffDetails = (request.DropoffDetails ?? string.Empty).Trim();
         if (pickupDetails.Length == 0 || dropoffDetails.Length == 0)
         {
-            return Ok(new CustomerServiceCheckResponse(true, null));
+            return Ok(new CustomerServiceCheckResponse(true, null, true, true));
         }
 
         var pickup = await ResolveBarangayAsync(request.PickupBarangayId, pickupDetails, cancellationToken);
@@ -312,11 +312,29 @@ public class CustomerBookingsController(
             return Ok(new CustomerServiceCheckResponse(false, municipalityName));
         }
 
-        var municipalityHasOperator = await db.OperatorBarangays.AnyAsync(
-            x => x.Operator.IsActive && x.Barangay.MunicipalityId == municipalityId,
-            cancellationToken);
+        var op = await db.Operators
+            .Where(x => x.IsActive && (
+                x.Areas.Any(a => a.Barangay.MunicipalityId == municipalityId)))
+            .OrderBy(x => x.CompanyName)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (op is null)
+        {
+            return Ok(new CustomerServiceCheckResponse(false, municipalityName));
+        }
 
-        return Ok(new CustomerServiceCheckResponse(municipalityHasOperator, municipalityName));
+        var offered = await db.FareMatrices
+            .AsNoTracking()
+            .Where(x => x.OperatorId == op.Id
+                && x.MunicipalityId == municipalityId
+                && x.IsActive)
+            .Select(x => x.VehicleType)
+            .ToListAsync(cancellationToken);
+
+        return Ok(new CustomerServiceCheckResponse(
+            true,
+            municipalityName,
+            offered.Contains(VehicleType.Motorcycle),
+            offered.Contains(VehicleType.Tricycle)));
     }
 
     [HttpPost("book")]
@@ -675,6 +693,14 @@ public class CustomerBookingsController(
             vehicle,
             pickup.MunicipalityId,
             cancellationToken);
+        if (fareRow is null)
+        {
+            var vehicleLabel = vehicle == VehicleType.Motorcycle ? "Motorcycle" : "Tricycle";
+            return new PreparedBooking
+            {
+                Error = $"{vehicleLabel} is not offered for bookings in this municipality."
+            };
+        }
 
         Guid? deriveZoneId = null;
         decimal fare;
@@ -691,11 +717,6 @@ public class CustomerBookingsController(
         }
         else
         {
-            if (fareRow is null)
-            {
-                return new PreparedBooking { Error = "No fare matrix for this municipality. Ask the operator to set rates for this city." };
-            }
-
             fare = DeriveFarePricingService.ComputeMunicipalityWithSurcharges(fareRow, passengers, distance);
         }
 
