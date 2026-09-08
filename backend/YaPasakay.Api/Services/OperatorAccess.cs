@@ -103,6 +103,11 @@ public static class OperatorAccess
             return "promos";
         }
 
+        if (value.StartsWith("/api/operator/reports/riders"))
+        {
+            return "rider-report";
+        }
+
         if (value.StartsWith("/api/operator/reports/commission"))
         {
             return "commission";

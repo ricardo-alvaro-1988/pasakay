@@ -638,6 +638,28 @@ public record CommissionReportResponse(
     PagedResult<CommissionReportItem> Page,
     CommissionReportSummary Summary);
 
+public record RiderReportItem(
+    Guid RiderId,
+    string RiderName,
+    string PlateNumber,
+    string VehicleFranchiseNumber,
+    string Mobile,
+    DateTime JoinedAtUtc,
+    bool IsActive,
+    int TotalRides,
+    decimal RiderIncome,
+    decimal BookingAmount);
+
+public record RiderReportSummary(
+    int RiderCount,
+    int TotalRides,
+    decimal RiderIncome,
+    decimal BookingAmount);
+
+public record RiderReportResponse(
+    PagedResult<RiderReportItem> Page,
+    RiderReportSummary Summary);
+
 public record OperatorBookingColumn(
     int Total,
     IReadOnlyList<RideListItem> Items);

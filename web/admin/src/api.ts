@@ -837,6 +837,29 @@ export type CommissionReportResponse = {
   }
 }
 
+export type RiderReportItem = {
+  riderId: string
+  riderName: string
+  plateNumber: string
+  vehicleFranchiseNumber: string
+  mobile: string
+  joinedAtUtc: string
+  isActive: boolean
+  totalRides: number
+  riderIncome: number
+  bookingAmount: number
+}
+
+export type RiderReportResponse = {
+  page: Paged<RiderReportItem>
+  summary: {
+    riderCount: number
+    totalRides: number
+    riderIncome: number
+    bookingAmount: number
+  }
+}
+
 export type Announcement = {
   id: string
   title: string
@@ -1595,6 +1618,54 @@ export const api = {
     if (opts.from) params.set('from', opts.from)
     if (opts.to) params.set('to', opts.to)
     return request<CommissionReportResponse>(`/api/operator/reports/commission?${params}`)
+  },
+  operatorRiderReport: (opts: {
+    q?: string
+    from?: string
+    to?: string
+    page?: number
+    pageSize?: number
+  }) => {
+    const params = new URLSearchParams({
+      page: String(opts.page ?? 1),
+      pageSize: String(opts.pageSize ?? 10),
+    })
+    if (opts.q?.trim()) params.set('q', opts.q.trim())
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    return request<RiderReportResponse>(`/api/operator/reports/riders?${params}`)
+  },
+  exportOperatorRiderReport: async (opts: { q?: string; from?: string; to?: string }) => {
+    const params = new URLSearchParams()
+    if (opts.q?.trim()) params.set('q', opts.q.trim())
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    const headers = new Headers()
+    const token = getToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    const res = await fetch(`/api/operator/reports/riders/export?${params}`, { headers })
+    if (!res.ok) {
+      let message = 'Could not export rider report.'
+      try {
+        const body = (await res.json()) as { message?: string }
+        if (body.message) message = body.message
+      } catch {
+        /* ignore */
+      }
+      throw new Error(message)
+    }
+    const blob = await res.blob()
+    const disposition = res.headers.get('Content-Disposition') ?? ''
+    const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
+    const filename = match?.[1]?.replace(/['"]/g, '') || `rider-report.xlsx`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   },
   adminCommissionReport: (opts: {
     operatorId?: string
