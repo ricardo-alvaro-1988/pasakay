@@ -206,26 +206,24 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = parsed.Error });
         }
 
-        foreach (var vehicleType in types)
-        {
-            var fare = await EnsureMatrixAsync(
-                op.Id,
-                request.MunicipalityId,
-                vehicleType,
-                FareCommissionSplit.SystemPercent(op, vehicleType),
-                cancellationToken);
-            fare!.Surcharges.Add(CloneSurcharge(parsed.Item!));
-        }
-
         try
         {
-            await db.SaveChangesAsync(cancellationToken);
+            foreach (var vehicleType in types)
+            {
+                var fare = await EnsureMatrixAsync(
+                    op.Id,
+                    request.MunicipalityId,
+                    vehicleType,
+                    FareCommissionSplit.SystemPercent(op, vehicleType),
+                    cancellationToken);
+                await PersistSurchargeAsync(fare!, parsed.Item!, cancellationToken);
+            }
         }
         catch (DbUpdateException ex)
         {
             return StatusCode(StatusCodes.Status500InternalServerError, new
             {
-                message = $"Could not save surcharge. {ex.GetBaseException().Message}",
+                message = DescribeSurchargeDbError(ex),
             });
         }
 
@@ -268,16 +266,15 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = parsed.Error });
         }
 
-        fare.Surcharges.Add(parsed.Item!);
         try
         {
-            await db.SaveChangesAsync(cancellationToken);
+            await PersistSurchargeAsync(fare, parsed.Item!, cancellationToken);
         }
         catch (DbUpdateException ex)
         {
             return StatusCode(StatusCodes.Status500InternalServerError, new
             {
-                message = $"Could not save surcharge. {ex.GetBaseException().Message}",
+                message = DescribeSurchargeDbError(ex),
             });
         }
 
@@ -465,6 +462,16 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             request.IsActive,
             request.PassengerTiers);
 
+    private static string DescribeSurchargeDbError(DbUpdateException ex)
+    {
+        if (ex is DbUpdateConcurrencyException)
+        {
+            return "Could not save surcharge because fare data changed. Refresh the page and try again.";
+        }
+
+        return $"Could not save surcharge. {ex.GetBaseException().Message}";
+    }
+
     private static string DescribeDbError(DbUpdateException ex)
     {
         if (ex is DbUpdateConcurrencyException)
@@ -537,6 +544,54 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Insert surcharge without attaching through FareMatrix.Surcharges.
+    /// Loading PassengerTiers/Surcharges into the change tracker and saving has caused
+    /// DbUpdateConcurrencyException (0 rows affected) on this path.
+    /// </summary>
+    private async Task PersistSurchargeAsync(
+        FareMatrix fare,
+        FareSurcharge item,
+        CancellationToken cancellationToken)
+    {
+        DetachPassengerTiers(fare);
+        foreach (var entry in db.ChangeTracker.Entries<FareSurcharge>()
+            .Where(e => e.Entity.FareMatrixId == fare.Id || ReferenceEquals(e.Entity.FareMatrix, fare))
+            .ToList())
+        {
+            entry.State = EntityState.Detached;
+        }
+
+        fare.Surcharges.Clear();
+
+        if (db.Entry(fare).State == EntityState.Added)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            INSERT INTO FareSurcharges
+                (Id, FareMatrixId, Kind, Name, Amount, WindowStart, WindowEnd, RangeStartUtc, RangeEndUtc, IsActive, CreatedAtUtc)
+            VALUES
+                ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10})
+            """,
+            [
+                Guid.NewGuid(),
+                fare.Id,
+                (int)item.Kind,
+                item.Name,
+                item.Amount,
+                item.WindowStart is TimeOnly ws ? ws.ToTimeSpan() : DBNull.Value,
+                item.WindowEnd is TimeOnly we ? we.ToTimeSpan() : DBNull.Value,
+                item.RangeStartUtc is DateTime rs ? rs : DBNull.Value,
+                item.RangeEndUtc is DateTime re ? re : DBNull.Value,
+                item.IsActive,
+                DateTime.UtcNow
+            ],
+            cancellationToken);
+    }
+
     private void DetachPassengerTiers(FareMatrix fare)
     {
         foreach (var entry in db.ChangeTracker.Entries<FarePassengerTier>()
@@ -589,9 +644,10 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             return null;
         }
 
+        // Do not Include PassengerTiers/Surcharges here: those collections are persisted with
+        // raw SQL in PersistRatesAsync / PersistSurchargeAsync. Tracking them causes concurrency
+        // conflicts when SaveChanges runs for an unrelated insert.
         var fare = await db.FareMatrices
-            .Include(x => x.Surcharges)
-            .Include(x => x.PassengerTiers)
             .FirstOrDefaultAsync(
                 x => x.OperatorId == operatorId && x.VehicleType == vehicleType && x.MunicipalityId == municipalityId,
                 cancellationToken);
@@ -612,19 +668,6 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         db.FareMatrices.Add(fare);
         return fare;
     }
-
-    private static FareSurcharge CloneSurcharge(FareSurcharge source) =>
-        new()
-        {
-            Kind = source.Kind,
-            Name = source.Name,
-            Amount = source.Amount,
-            WindowStart = source.WindowStart,
-            WindowEnd = source.WindowEnd,
-            RangeStartUtc = source.RangeStartUtc,
-            RangeEndUtc = source.RangeEndUtc,
-            IsActive = source.IsActive
-        };
 
     private static (FareSurcharge? Item, string? Error) ParseSurcharge(SaveFareSurchargeRequest request)
     {
