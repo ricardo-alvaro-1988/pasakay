@@ -26,10 +26,16 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         string.Equals(notes, CustomerPickNote, StringComparison.OrdinalIgnoreCase);
     public static readonly TimeSpan LiveOfferTtl = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan ScheduledOfferTtl = TimeSpan.FromHours(2);
-    /// <summary>Cancel live Pending trips with no accept after this long.</summary>
-    public static readonly TimeSpan LiveUnassignedExpiry = TimeSpan.FromMinutes(15);
-    /// <summary>Cancel scheduled Pending trips this long after ScheduledAtUtc with no accept.</summary>
-    public static readonly TimeSpan ScheduledUnassignedGrace = TimeSpan.FromMinutes(20);
+    /// <summary>Default minutes a live Pending booking waits before system cancel.</summary>
+    public const int DefaultLiveBookingExpiryMinutes = 15;
+    /// <summary>Default minutes after scheduled pickup before still-Pending cancel.</summary>
+    public const int DefaultScheduledBookingGraceMinutes = 20;
+    public const int MinBookingExpiryMinutes = 1;
+    public const int MaxBookingExpiryMinutes = 180;
+    /// <summary>Fallback when operator settings are missing (legacy constant name).</summary>
+    public static readonly TimeSpan LiveUnassignedExpiry = TimeSpan.FromMinutes(DefaultLiveBookingExpiryMinutes);
+    /// <summary>Fallback when operator settings are missing (legacy constant name).</summary>
+    public static readonly TimeSpan ScheduledUnassignedGrace = TimeSpan.FromMinutes(DefaultScheduledBookingGraceMinutes);
     /// <summary>Offer scheduled trips to riders only within this lead before pickup.</summary>
     public static readonly TimeSpan ScheduleBroadcastLead = TimeSpan.FromMinutes(60);
 
@@ -373,22 +379,50 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
     }
 
     /// <summary>
-    /// Auto-cancel Pending trips that never got a rider:
-    /// live after <see cref="LiveUnassignedExpiry"/>, scheduled after pickup + <see cref="ScheduledUnassignedGrace"/>.
+    /// Auto-cancel Pending trips that never got a rider, using each operator's expiry settings.
     /// </summary>
     public async Task<int> ExpireUnassignedTripsAsync(CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        var liveCutoff = now - LiveUnassignedExpiry;
-        var scheduledCutoff = now - ScheduledUnassignedGrace;
+
+        var candidates = await db.Trips
+            .AsNoTracking()
+            .Where(x => x.Status == TripStatus.Pending)
+            .Select(x => new
+            {
+                x.Id,
+                x.RequestedAtUtc,
+                x.ScheduledAtUtc,
+                LiveMinutes = x.Operator.LiveBookingExpiryMinutes,
+                GraceMinutes = x.Operator.ScheduledBookingGraceMinutes,
+            })
+            .OrderBy(x => x.RequestedAtUtc)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+
+        var expireIds = candidates
+            .Where(x =>
+            {
+                var liveMinutes = ClampBookingExpiryMinutes(x.LiveMinutes, DefaultLiveBookingExpiryMinutes);
+                var graceMinutes = ClampBookingExpiryMinutes(x.GraceMinutes, DefaultScheduledBookingGraceMinutes);
+                if (x.ScheduledAtUtc is DateTime scheduled)
+                {
+                    return scheduled < now - TimeSpan.FromMinutes(graceMinutes);
+                }
+
+                return x.RequestedAtUtc < now - TimeSpan.FromMinutes(liveMinutes);
+            })
+            .Select(x => x.Id)
+            .Take(50)
+            .ToList();
+
+        if (expireIds.Count == 0)
+        {
+            return 0;
+        }
 
         var trips = await db.Trips
-            .Where(x => x.Status == TripStatus.Pending)
-            .Where(x =>
-                (x.ScheduledAtUtc == null && x.RequestedAtUtc < liveCutoff)
-                || (x.ScheduledAtUtc != null && x.ScheduledAtUtc < scheduledCutoff))
-            .OrderBy(x => x.RequestedAtUtc)
-            .Take(50)
+            .Where(x => expireIds.Contains(x.Id) && x.Status == TripStatus.Pending)
             .ToListAsync(cancellationToken);
 
         if (trips.Count == 0)
@@ -428,6 +462,12 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
 
         return trips.Count;
     }
+
+    public static int ClampBookingExpiryMinutes(int minutes, int fallback = DefaultLiveBookingExpiryMinutes) =>
+        Math.Clamp(
+            minutes <= 0 ? fallback : minutes,
+            MinBookingExpiryMinutes,
+            MaxBookingExpiryMinutes);
 
     public async Task ExpireStaleOnlineRidersAsync(CancellationToken cancellationToken)
     {

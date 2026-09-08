@@ -10737,14 +10737,20 @@ function OperatorCompanyPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [broadcastRadiusKm, setBroadcastRadiusKm] = useState('5')
+  const [liveBookingExpiryMinutes, setLiveBookingExpiryMinutes] = useState('15')
+  const [scheduledBookingGraceMinutes, setScheduledBookingGraceMinutes] = useState('20')
   const [busy, setBusy] = useState(false)
+
+  function applyCompany(next: OperatorDetail) {
+    setData(next)
+    setBroadcastRadiusKm(String(next.broadcastRadiusKm ?? 5))
+    setLiveBookingExpiryMinutes(String(next.liveBookingExpiryMinutes ?? 15))
+    setScheduledBookingGraceMinutes(String(next.scheduledBookingGraceMinutes ?? 20))
+  }
 
   useEffect(() => {
     api.operatorCompany()
-      .then((next) => {
-        setData(next)
-        setBroadcastRadiusKm(String(next.broadcastRadiusKm ?? 5))
-      })
+      .then(applyCompany)
       .catch((err: Error) => setError(err.message))
   }, [])
 
@@ -10780,9 +10786,12 @@ function OperatorCompanyPage() {
     setNotice('')
     try {
       const radius = Number(broadcastRadiusKm)
-      const next = await api.saveOperatorDispatchMode(mode, Number.isFinite(radius) ? radius : undefined)
-      setData(next)
-      setBroadcastRadiusKm(String(next.broadcastRadiusKm ?? 5))
+      const next = await api.saveOperatorDispatchMode(mode, {
+        broadcastRadiusKm: Number.isFinite(radius) ? radius : undefined,
+        liveBookingExpiryMinutes: Number(liveBookingExpiryMinutes) || undefined,
+        scheduledBookingGraceMinutes: Number(scheduledBookingGraceMinutes) || undefined,
+      })
+      applyCompany(next)
       setNotice(`Booking dispatch set to ${mode}.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save dispatch mode.')
@@ -10804,12 +10813,42 @@ function OperatorCompanyPage() {
     setNotice('')
     try {
       const mode = data.bookingDispatchMode ?? 'Broadcast'
-      const next = await api.saveOperatorDispatchMode(mode, radius)
-      setData(next)
-      setBroadcastRadiusKm(String(next.broadcastRadiusKm ?? 5))
+      const next = await api.saveOperatorDispatchMode(mode, { broadcastRadiusKm: radius })
+      applyCompany(next)
       setNotice(`Broadcast radius set to ${next.broadcastRadiusKm ?? radius} km.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save broadcast radius.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveBookingExpiry(e: FormEvent) {
+    e.preventDefault()
+    if (!data) return
+    const live = Number(liveBookingExpiryMinutes)
+    const grace = Number(scheduledBookingGraceMinutes)
+    if (!Number.isFinite(live) || live < 1 || live > 180) {
+      setError('Live booking expiry must be between 1 and 180 minutes.')
+      return
+    }
+    if (!Number.isFinite(grace) || grace < 1 || grace > 180) {
+      setError('Scheduled booking grace must be between 1 and 180 minutes.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const mode = data.bookingDispatchMode ?? 'Broadcast'
+      const next = await api.saveOperatorDispatchMode(mode, {
+        liveBookingExpiryMinutes: live,
+        scheduledBookingGraceMinutes: grace,
+      })
+      applyCompany(next)
+      setNotice(`Booking expiry set to ${next.liveBookingExpiryMinutes ?? live} min live / ${next.scheduledBookingGraceMinutes ?? grace} min scheduled grace.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save booking expiry.')
     } finally {
       setBusy(false)
     }
@@ -10882,6 +10921,42 @@ function OperatorCompanyPage() {
           Only online riders within this distance of pickup get broadcast offers (1–50 km). Current: {data.broadcastRadiusKm ?? 5} km.
         </p>
         <button className="btn tiny" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save radius'}</button>
+      </form>
+      <h3>Booking expiry</h3>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Auto-cancel unanswered Pending bookings. Waiting / Ongoing trips (rider already accepted) are not expired.
+      </p>
+      <form onSubmit={saveBookingExpiry} style={{ marginBottom: 20, maxWidth: 420 }}>
+        <div className="form-grid">
+          <label className="field">
+            <span>Live expiry (minutes)</span>
+            <input
+              type="number"
+              min={1}
+              max={180}
+              step={1}
+              value={liveBookingExpiryMinutes}
+              onChange={(e) => setLiveBookingExpiryMinutes(e.target.value)}
+              disabled={busy}
+            />
+          </label>
+          <label className="field">
+            <span>Scheduled grace (minutes)</span>
+            <input
+              type="number"
+              min={1}
+              max={180}
+              step={1}
+              value={scheduledBookingGraceMinutes}
+              onChange={(e) => setScheduledBookingGraceMinutes(e.target.value)}
+              disabled={busy}
+            />
+          </label>
+        </div>
+        <p className="muted" style={{ margin: '6px 0 10px' }}>
+          Live: cancel if still Pending after this many minutes from request (1–180). Scheduled: cancel if still Pending this many minutes after pickup time. Current: {data.liveBookingExpiryMinutes ?? 15} / {data.scheduledBookingGraceMinutes ?? 20}.
+        </p>
+        <button className="btn tiny" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save expiry'}</button>
       </form>
       <h3>Service areas</h3>
       {data.areas.length === 0 ? <p>No barangays assigned.</p> : (

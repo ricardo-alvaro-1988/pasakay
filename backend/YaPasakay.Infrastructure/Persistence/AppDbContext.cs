@@ -84,6 +84,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.MotorcycleCommissionPercent).HasColumnType("decimal(5,2)").HasDefaultValue(10m);
             entity.Property(x => x.TricycleCommissionPercent).HasColumnType("decimal(5,2)").HasDefaultValue(5m);
             entity.Property(x => x.BroadcastRadiusKm).HasDefaultValue(5d);
+            entity.Property(x => x.LiveBookingExpiryMinutes).HasDefaultValue(15);
+            entity.Property(x => x.ScheduledBookingGraceMinutes).HasDefaultValue(20);
             entity.HasOne(x => x.AddressBarangay)
                 .WithMany()
                 .HasForeignKey(x => x.AddressBarangayId)

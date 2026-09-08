@@ -210,6 +210,8 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             loaded.TricycleCommissionPercent,
             loaded.BookingDispatchMode,
             loaded.BroadcastRadiusKm,
+            loaded.LiveBookingExpiryMinutes,
+            loaded.ScheduledBookingGraceMinutes,
             riders.Count,
             loaded.Riders.Count(x => x.VehicleType == VehicleType.Motorcycle),
             loaded.Riders.Count(x => x.VehicleType == VehicleType.Tricycle),
@@ -245,6 +247,26 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             }
 
             op.BroadcastRadiusKm = Math.Round(radius, 1);
+        }
+
+        if (request.LiveBookingExpiryMinutes is int liveMinutes)
+        {
+            if (liveMinutes is < 1 or > 180)
+            {
+                return BadRequest(new { message = "Live booking expiry must be between 1 and 180 minutes." });
+            }
+
+            op.LiveBookingExpiryMinutes = liveMinutes;
+        }
+
+        if (request.ScheduledBookingGraceMinutes is int graceMinutes)
+        {
+            if (graceMinutes is < 1 or > 180)
+            {
+                return BadRequest(new { message = "Scheduled booking grace must be between 1 and 180 minutes." });
+            }
+
+            op.ScheduledBookingGraceMinutes = graceMinutes;
         }
 
         op.BookingDispatchMode = request.BookingDispatchMode;

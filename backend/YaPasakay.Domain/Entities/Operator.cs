@@ -23,6 +23,10 @@ public class Operator : BaseEntity
     public BookingDispatchMode BookingDispatchMode { get; set; } = BookingDispatchMode.Broadcast;
     /// <summary>Max distance (km) for broadcast offers to nearby riders.</summary>
     public double BroadcastRadiusKm { get; set; } = 5;
+    /// <summary>Minutes a live Pending booking waits for a rider before system cancel.</summary>
+    public int LiveBookingExpiryMinutes { get; set; } = 15;
+    /// <summary>Minutes after scheduled pickup a still-Pending booking is system-cancelled.</summary>
+    public int ScheduledBookingGraceMinutes { get; set; } = 20;
     public string GCashNumber { get; set; } = string.Empty;
     public string? GCashQrPath { get; set; }
     public bool GCashIsActive { get; set; } = true;

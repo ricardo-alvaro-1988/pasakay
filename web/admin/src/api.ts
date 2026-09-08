@@ -75,6 +75,8 @@ export type OperatorListItem = {
   tricycleCommissionPercent: number
   bookingDispatchMode?: BookingDispatchMode
   broadcastRadiusKm?: number
+  liveBookingExpiryMinutes?: number
+  scheduledBookingGraceMinutes?: number
   riderCount: number
   ridersMotorcycle: number
   ridersTricycle: number
@@ -1500,12 +1502,25 @@ export const api = {
   },
   operatorFleet: () => request<OperatorFleet>('/api/operator/fleet'),
   operatorCompany: () => request<OperatorDetail>('/api/operator/company'),
-  saveOperatorDispatchMode: (bookingDispatchMode: BookingDispatchMode, broadcastRadiusKm?: number) =>
+  saveOperatorDispatchMode: (
+    bookingDispatchMode: BookingDispatchMode,
+    options?: {
+      broadcastRadiusKm?: number
+      liveBookingExpiryMinutes?: number
+      scheduledBookingGraceMinutes?: number
+    },
+  ) =>
     request<OperatorDetail>('/api/operator/dispatch', {
       method: 'PUT',
       body: JSON.stringify({
         bookingDispatchMode,
-        ...(broadcastRadiusKm != null ? { broadcastRadiusKm } : {}),
+        ...(options?.broadcastRadiusKm != null ? { broadcastRadiusKm: options.broadcastRadiusKm } : {}),
+        ...(options?.liveBookingExpiryMinutes != null
+          ? { liveBookingExpiryMinutes: options.liveBookingExpiryMinutes }
+          : {}),
+        ...(options?.scheduledBookingGraceMinutes != null
+          ? { scheduledBookingGraceMinutes: options.scheduledBookingGraceMinutes }
+          : {}),
       }),
     }),
   changeOperatorPassword: (currentPassword: string, newPassword: string) =>

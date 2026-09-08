@@ -85,6 +85,8 @@ public record OperatorDetailResponse(
     decimal TricycleCommissionPercent,
     BookingDispatchMode BookingDispatchMode,
     double BroadcastRadiusKm,
+    int LiveBookingExpiryMinutes,
+    int ScheduledBookingGraceMinutes,
     int RiderCount,
     int RidersMotorcycle,
     int RidersTricycle,
@@ -95,7 +97,9 @@ public record OperatorDetailResponse(
 
 public record SaveBookingDispatchModeRequest(
     BookingDispatchMode BookingDispatchMode,
-    double? BroadcastRadiusKm = null);
+    double? BroadcastRadiusKm = null,
+    int? LiveBookingExpiryMinutes = null,
+    int? ScheduledBookingGraceMinutes = null);
 
 public record RiderListItem(
     Guid Id,
