@@ -26,6 +26,10 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         string.Equals(notes, CustomerPickNote, StringComparison.OrdinalIgnoreCase);
     public static readonly TimeSpan LiveOfferTtl = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan ScheduledOfferTtl = TimeSpan.FromHours(2);
+    /// <summary>Cancel live Pending trips with no accept after this long.</summary>
+    public static readonly TimeSpan LiveUnassignedExpiry = TimeSpan.FromMinutes(15);
+    /// <summary>Cancel scheduled Pending trips this long after ScheduledAtUtc with no accept.</summary>
+    public static readonly TimeSpan ScheduledUnassignedGrace = TimeSpan.FromMinutes(20);
     /// <summary>Offer scheduled trips to riders only within this lead before pickup.</summary>
     public static readonly TimeSpan ScheduleBroadcastLead = TimeSpan.FromMinutes(60);
 
@@ -366,6 +370,63 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         {
             await db.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// Auto-cancel Pending trips that never got a rider:
+    /// live after <see cref="LiveUnassignedExpiry"/>, scheduled after pickup + <see cref="ScheduledUnassignedGrace"/>.
+    /// </summary>
+    public async Task<int> ExpireUnassignedTripsAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var liveCutoff = now - LiveUnassignedExpiry;
+        var scheduledCutoff = now - ScheduledUnassignedGrace;
+
+        var trips = await db.Trips
+            .Where(x => x.Status == TripStatus.Pending)
+            .Where(x =>
+                (x.ScheduledAtUtc == null && x.RequestedAtUtc < liveCutoff)
+                || (x.ScheduledAtUtc != null && x.ScheduledAtUtc < scheduledCutoff))
+            .OrderBy(x => x.RequestedAtUtc)
+            .Take(50)
+            .ToListAsync(cancellationToken);
+
+        if (trips.Count == 0)
+        {
+            return 0;
+        }
+
+        const string reason = "No rider available in time.";
+        foreach (var trip in trips)
+        {
+            trip.Status = TripStatus.Cancelled;
+            trip.CancelledAtUtc = now;
+            trip.CancelReason = reason;
+            trip.CancelledBy = CancelledBy.System;
+            trip.UpdatedAtUtc = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        foreach (var trip in trips)
+        {
+            await ExpireTripAsync(trip.Id, cancellationToken);
+            if (trip.CustomerId is Guid customerId)
+            {
+                await live.CustomerTripAsync(
+                    customerId,
+                    "expired",
+                    "No rider available",
+                    string.IsNullOrWhiteSpace(trip.Reference)
+                        ? "Nobody accepted your booking in time. You can book again."
+                        : $"Nobody accepted {trip.Reference} in time. You can book again.",
+                    cancellationToken);
+            }
+
+            await live.TripPartiesAsync(trip, "cancelled", cancellationToken);
+        }
+
+        return trips.Count;
     }
 
     public async Task ExpireStaleOnlineRidersAsync(CancellationToken cancellationToken)

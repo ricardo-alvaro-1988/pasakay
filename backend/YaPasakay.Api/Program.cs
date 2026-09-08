@@ -30,6 +30,7 @@ builder.Services.AddScoped<YaPasakay.Api.Services.DeriveFarePricingService>();
 builder.Services.AddScoped<YaPasakay.Api.Services.LiveNotify>();
 builder.Services.AddSingleton<YaPasakay.Api.Services.GoogleDrivingDistance>();
 builder.Services.AddHostedService<YaPasakay.Api.Services.ScheduleBroadcastHostedService>();
+builder.Services.AddHostedService<YaPasakay.Api.Services.TripExpiryHostedService>();
 builder.Services.AddScoped<YaPasakay.Api.Services.AdminAccessFilter>();
 builder.Services.AddScoped<YaPasakay.Api.Services.OperatorAccessFilter>();
 builder.Services.AddControllers(options =>
