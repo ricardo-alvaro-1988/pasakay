@@ -1134,8 +1134,39 @@ function commissionRates(motorcycle: number, tricycle: number) {
   )
 }
 
-function VehicleTag({ type, count }: { type: string; count?: number }) {
-  const mc = type === 'Motorcycle'
+function normalizeVehicleType(value: unknown): VehicleType | null {
+  if (value === 'Motorcycle' || value === 1 || value === '1') return 'Motorcycle'
+  if (value === 'Tricycle' || value === 2 || value === '2') return 'Tricycle'
+  if (typeof value === 'string') {
+    const key = value.trim().toLowerCase()
+    if (key === 'motorcycle') return 'Motorcycle'
+    if (key === 'tricycle') return 'Tricycle'
+  }
+  return null
+}
+
+/** Real make/model only — omit when model is empty or just "Motorcycle"/"Tricycle". */
+function realVehicleModel(model: string | null | undefined, vehicleType?: unknown) {
+  const trimmed = (model ?? '').trim()
+  if (!trimmed) return null
+  const asType = normalizeVehicleType(trimmed)
+  if (asType) return null
+  const type = normalizeVehicleType(vehicleType)
+  if (type && trimmed.toLowerCase() === type.toLowerCase()) return null
+  return trimmed
+}
+
+function formatVehicleLine(vehicleType: unknown, model?: string | null, plate?: string | null) {
+  const type = normalizeVehicleType(vehicleType) ?? String(vehicleType ?? '').trim()
+  const realModel = realVehicleModel(model, type)
+  const plateText = (plate ?? '').trim()
+  return [type || null, realModel, plateText || null].filter(Boolean).join(' · ')
+}
+
+function VehicleTag({ type, count }: { type: string | number; count?: number }) {
+  const normalized = normalizeVehicleType(type)
+  const mc = normalized === 'Motorcycle'
+  const label = normalized ?? String(type || 'Vehicle')
   return (
     <span className={`tag vehicle ${mc ? 'mc' : 'trike'}`}>
       {mc ? (
@@ -1152,7 +1183,7 @@ function VehicleTag({ type, count }: { type: string; count?: number }) {
           <path d="M7 17h5M12 17V8h6.5v9M12 8H8L6.5 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}
-      {mc ? 'Motorcycle' : 'Tricycle'}
+      {label}
       {typeof count === 'number' ? <em>{count}</em> : null}
     </span>
   )
@@ -3791,7 +3822,7 @@ function RiderDetailPage({
                 </>
               ) : null}
             </p>
-            <p>{rider.vehicleModel ? `${rider.vehicleType} · ${rider.vehicleModel}` : rider.vehicleType} · {rider.plateNumber}</p>
+            <p>{formatVehicleLine(rider.vehicleType, rider.vehicleModel, rider.plateNumber)}</p>
             <p>License: {[rider.licenseType, rider.licenseNumber].filter(Boolean).join(' · ') || '—'}</p>
             <p>Credibility: {rider.credibilityScore ?? 100}{rider.riderCancelCount ? ` · ${rider.riderCancelCount} cancel${rider.riderCancelCount === 1 ? '' : 's'}` : ''}</p>
             <div className="tag-row" style={{ marginTop: 10 }}>
@@ -4032,7 +4063,10 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
         ) : null}
         <DetailItem label="Payment" value={paymentMethodLabel(ride.paymentMethod, ride.paymentMethodOther)} />
         <DetailItem label="Duration" value={ride.durationMinutes ? `${ride.durationMinutes} min` : '—'} />
-        <DetailItem label="Vehicle" value={ride.vehicleModel ? `${ride.vehicleType} · ${ride.vehicleModel}` : ride.vehicleType} />
+        <DetailItem label="Vehicle" value={normalizeVehicleType(ride.vehicleType) ?? ride.vehicleType} />
+        {realVehicleModel(ride.vehicleModel, ride.vehicleType) ? (
+          <DetailItem label="Vehicle model" value={realVehicleModel(ride.vehicleModel, ride.vehicleType)!} />
+        ) : null}
         <DetailItem label="Requested" value={phDateTime(ride.requestedAtUtc)} />
         {ride.scheduledAtUtc ? <DetailItem label="Scheduled" value={phDateTime(ride.scheduledAtUtc)} /> : null}
         <DetailItem
@@ -4074,7 +4108,7 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
             <div>
               <p className="detail-name">{ride.riderName}</p>
               <p className="muted">{ride.riderPhone}</p>
-              <p className="muted">{ride.plateNumber}{ride.vehicleModel ? ` · ${ride.vehicleModel}` : ''}</p>
+              <p className="muted">{formatVehicleLine(ride.vehicleType, ride.vehicleModel, ride.plateNumber)}</p>
             </div>
           </div>
         </div>
@@ -9625,7 +9659,7 @@ function OperatorRiderApplicationDetail({
       <div className="detail-grid">
         <div><span className="muted">Vehicle</span><p><VehicleTag type={row.vehicleType} /> {row.plateNumber}</p></div>
         <div><span className="muted">Franchise no.</span><p>{row.vehicleFranchiseNumber || '—'}</p></div>
-        <div><span className="muted">Model</span><p>{row.vehicleModel || '—'}</p></div>
+        <div><span className="muted">Model</span><p>{realVehicleModel(row.vehicleModel, row.vehicleType) || '—'}</p></div>
         <div><span className="muted">License</span><p>{row.licenseType} · {row.licenseNumber}</p></div>
         <div><span className="muted">Address</span><p>{row.fullAddress}</p></div>
         <div><span className="muted">Payment methods</span><p>{row.acceptedPaymentMethods.join(', ') || '—'}</p></div>
@@ -9744,7 +9778,7 @@ function PublicRiderJoinPage({
       data.append('vehicleType', vehicleType)
       data.append('plateNumber', plateNumber)
       data.append('vehicleFranchiseNumber', vehicleFranchiseNumber.trim())
-      data.append('vehicleModel', vehicleModel)
+      data.append('vehicleModel', realVehicleModel(vehicleModel, vehicleType) ?? '')
       data.append('licenseType', licenseType)
       data.append('licenseNumber', licenseNumber)
       data.append('addressBarangayId', address.barangay.id)
@@ -9941,7 +9975,7 @@ function OperatorRiderForm({
       setVehicleType(row.vehicleType)
       setPlateNumber(row.plateNumber)
       setVehicleFranchiseNumber(row.vehicleFranchiseNumber ?? '')
-      setVehicleModel(row.vehicleModel ?? '')
+      setVehicleModel(realVehicleModel(row.vehicleModel, row.vehicleType) ?? '')
       setLicenseType(row.licenseType)
       setLicenseNumber(row.licenseNumber)
       setAddress({
@@ -9996,7 +10030,7 @@ function OperatorRiderForm({
       data.append('vehicleType', vehicleType)
       data.append('plateNumber', plateNumber)
       data.append('vehicleFranchiseNumber', vehicleFranchiseNumber.trim())
-      data.append('vehicleModel', vehicleModel)
+      data.append('vehicleModel', realVehicleModel(vehicleModel, vehicleType) ?? '')
       data.append('licenseType', licenseType)
       data.append('licenseNumber', licenseNumber)
       data.append('addressBarangayId', address.barangay.id)

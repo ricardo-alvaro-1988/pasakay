@@ -236,6 +236,13 @@ public class PublicRiderInviteController(AppDbContext db, UploadStore uploads) :
         }
 
         var model = string.IsNullOrWhiteSpace(form.VehicleModel) ? null : form.VehicleModel.Trim();
+        if (model is not null
+            && (model.Equals("Motorcycle", StringComparison.OrdinalIgnoreCase)
+                || model.Equals("Tricycle", StringComparison.OrdinalIgnoreCase)
+                || model.Equals(form.VehicleType.ToString(), StringComparison.OrdinalIgnoreCase)))
+        {
+            model = null;
+        }
         return (name, phone, plate, franchise, model, licenseType, licenseNumber, null);
     }
 }

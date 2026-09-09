@@ -23,6 +23,25 @@ String vehicleLabel(dynamic value) {
   }
 }
 
+/// Type + plate; omit model when it is empty or just a vehicle-type name.
+String formatVehicleLine(String vehicleType, {String? vehicleModel, String? plateNumber}) {
+  final type = vehicleType.trim();
+  final plate = (plateNumber ?? '').trim();
+  final model = (vehicleModel ?? '').trim();
+  final modelLooksLikeType = model.isEmpty ||
+      model.toLowerCase() == 'motorcycle' ||
+      model.toLowerCase() == 'tricycle' ||
+      (type.isNotEmpty && model.toLowerCase() == type.toLowerCase());
+  if (modelLooksLikeType) {
+    if (type.isEmpty) return plate;
+    return plate.isEmpty ? type : '$type · $plate';
+  }
+  if (type.isEmpty) {
+    return plate.isEmpty ? model : '$model · $plate';
+  }
+  return plate.isEmpty ? '$type · $model' : '$type · $model · $plate';
+}
+
 String paymentCode(dynamic value) {
   switch (asText(value, 'Cash')) {
     case '1':
@@ -155,13 +174,11 @@ class RiderDesk {
   final int credibilityScore;
   final int riderCancelCount;
 
-  String get vehicleLine {
-    final model = (vehicleModel ?? '').trim();
-    if (model.isEmpty) {
-      return '$vehicleType · $plateNumber';
-    }
-    return '$vehicleType · $model · $plateNumber';
-  }
+  String get vehicleLine => formatVehicleLine(
+        vehicleType,
+        vehicleModel: vehicleModel,
+        plateNumber: plateNumber,
+      );
 
   String get licenseLine {
     final parts = [licenseType, licenseNumber].where((x) => (x ?? '').trim().isNotEmpty).toList();

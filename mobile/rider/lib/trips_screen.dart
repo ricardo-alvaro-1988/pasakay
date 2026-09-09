@@ -283,7 +283,7 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                       _row('Customer', detail.customerName),
                       _row('Phone', detail.customerPhone),
                       _row('Persons', passengerLabel(detail.passengerCount), emphasize: true),
-                      _row('Vehicle', [detail.vehicleType, detail.vehicleModel, detail.plateNumber].where((x) => (x ?? '').toString().isNotEmpty).join(' · ')),
+                      _row('Vehicle', formatVehicleLine(detail.vehicleType, vehicleModel: detail.vehicleModel, plateNumber: detail.plateNumber)),
                       _row('Payment', paymentLabel(detail.paymentMethod)),
                       _row('Fare', peso(detail.fare)),
                       _row('Distance', '${detail.distanceKm.toStringAsFixed(1)} km'),
