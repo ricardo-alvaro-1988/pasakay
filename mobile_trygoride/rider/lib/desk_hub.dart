@@ -9,6 +9,9 @@ class DeskHubClient {
 
   final RiderApi api;
   HubConnection? _connection;
+  void Function(bool live)? onLiveChanged;
+
+  bool get isLive => _connection?.state == HubConnectionState.Connected;
 
   Future<void> connect(
     void Function(String? reason) onChanged, {
@@ -17,6 +20,7 @@ class DeskHubClient {
     await disconnect();
     final token = api.accessToken;
     if (token == null || token.isEmpty) {
+      onLiveChanged?.call(false);
       return;
     }
 
@@ -51,12 +55,25 @@ class DeskHubClient {
       });
     }
 
+    connection.onreconnecting(({error}) {
+      onLiveChanged?.call(false);
+    });
+    connection.onreconnected(({connectionId}) {
+      onLiveChanged?.call(true);
+      onChanged('reconnected');
+    });
+    connection.onclose(({error}) {
+      onLiveChanged?.call(false);
+    });
+
     try {
       await connection.start()?.timeout(const Duration(seconds: 6));
     } catch (_) {
+      onLiveChanged?.call(false);
       return;
     }
     _connection = connection;
+    onLiveChanged?.call(true);
 
     final prefs = await SharedPreferences.getInstance();
     var device = prefs.getString('deviceToken');
@@ -72,6 +89,7 @@ class DeskHubClient {
   Future<void> disconnect() async {
     final connection = _connection;
     _connection = null;
+    onLiveChanged?.call(false);
     if (connection == null) {
       return;
     }
