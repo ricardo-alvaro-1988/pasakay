@@ -2296,5 +2296,107 @@ button.brand-pill:active { transform: scale(.98); }
   .pin.beat::before,
   .pin.beat::after,
   .yp-stop-core,
-  .yp-stop-pulse { animation: none; box-shadow: none; }
+  .yp-stop-pulse,
+  .pabili-soon-badge,
+  .pabili-soon-glow { animation: none; box-shadow: none; }
+}
+
+.pabili-soon {
+  position: relative;
+  min-height: min(62dvh, 520px);
+  display: grid;
+  place-items: center;
+  padding: 28px 18px 36px;
+  overflow: hidden;
+}
+.pabili-soon-glow {
+  position: absolute;
+  inset: -20% -10% auto;
+  height: 70%;
+  background:
+    radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--accent) 28%, transparent), transparent 62%),
+    radial-gradient(circle at 18% 70%, color-mix(in srgb, #f59e0b 18%, transparent), transparent 45%);
+  animation: pabili-glow 6s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+.pabili-soon-card {
+  position: relative;
+  width: min(100%, 360px);
+  text-align: center;
+  padding: 28px 22px 26px;
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, #fff 92%, var(--accent-soft)), #fff);
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--line));
+  box-shadow:
+    0 18px 40px color-mix(in srgb, var(--accent) 14%, transparent),
+    0 2px 0 color-mix(in srgb, #fff 80%, transparent) inset;
+}
+.pabili-soon-badge {
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 16px;
+  border-radius: 22px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(145deg, #ff4d4d, var(--accent) 55%, #9b0a14);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--accent) 32%, transparent);
+  animation: pabili-float 3.6s ease-in-out infinite;
+}
+.pabili-soon-badge svg {
+  width: 32px;
+  height: 32px;
+}
+.pabili-soon-badge path {
+  stroke: #fff;
+  fill: none;
+}
+.pabili-soon-kicker {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pabili-soon-card h2 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.05;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.pabili-soon-headline {
+  margin: 8px 0 0;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.pabili-soon-copy {
+  margin: 14px auto 0;
+  max-width: 28ch;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+.pabili-soon-pill {
+  display: inline-flex;
+  margin-top: 18px;
+  padding: 9px 14px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+}
+@keyframes pabili-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes pabili-glow {
+  from { opacity: 0.75; transform: scale(1); }
+  to { opacity: 1; transform: scale(1.06); }
 }

@@ -42,7 +42,7 @@ import {
 } from './maps'
 import { AuthScreen, CompleteMobile } from './auth-screens'
 import { LoginBrandPanel } from './login-brand-panel'
-import { AccountHub, AccountPage, BookingScreen, PaymentBar, ScheduleScreen } from './account-screens'
+import { AccountHub, AccountPage, BookingScreen, PaymentBar } from './account-screens'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
 import { VEHICLE_ART } from './vehicle-art'
 import { ShowQrButton, ShowQrOverlay } from './scan-qr'
@@ -54,7 +54,7 @@ import { ShareTripButton } from './share-trip-button'
 import { lastKnownGps, readBootGps, readPickupGps, readGps, watchTripGps } from './gps'
 import { applyBrand, DEFAULT_BRAND_NAME, type BrandingConfig } from './brand-themes'
 
-type Tab = 'home' | 'booking' | 'schedule' | 'account'
+type Tab = 'home' | 'booking' | 'pabili' | 'account'
 type SearchTarget = 'pickup' | 'dropoff' | null
 
 function addressLabel(details: string) {
@@ -1114,16 +1114,9 @@ function Home({
             <BookingScreen desk={desk} onDesk={onDesk} />
           </section>
         )}
-        {tab === 'schedule' && (
+        {tab === 'pabili' && (
           <section className="panel page-panel">
-            <ScheduleScreen
-              desk={desk}
-              onDesk={onDesk}
-              pickup={pickup}
-              dropoff={dropoff}
-              onPickPickup={() => { setSearchFor('pickup'); setQuery(''); setError('') }}
-              onPickDropoff={() => { setSearchFor('dropoff'); setQuery(''); setError('') }}
-            />
+            <PabiliComingSoon />
           </section>
         )}
         {tab === 'account' && (
@@ -1150,9 +1143,9 @@ function Home({
             <span className="ico"><SosIcon /></span>
             {sosBusy ? '…' : 'SOS'}
           </button>
-          <button className={tab === 'schedule' ? 'on' : ''} onClick={() => onTab('schedule')}>
-            <span className="ico"><ScheduleIcon /></span>
-            Schedule
+          <button className={tab === 'pabili' ? 'on' : ''} onClick={() => onTab('pabili')}>
+            <span className="ico"><PabiliIcon /></span>
+            Pabili
           </button>
           <button className={tab === 'account' ? 'on' : ''} onClick={() => onTab('account')}>
             <span className="ico"><AccountIcon /></span>
@@ -1508,12 +1501,32 @@ function BookingIcon() {
   )
 }
 
-function ScheduleIcon() {
+function PabiliIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-      <rect x="4" y="5" width="16" height="15" rx="2" {...navStroke()} />
-      <path d="M8 3v4M16 3v4M4 10h16" {...navStroke()} />
+      <path d="M6.5 8.5h11l-.7 10.2a1.6 1.6 0 0 1-1.6 1.5H8.8a1.6 1.6 0 0 1-1.6-1.5L6.5 8.5z" {...navStroke()} />
+      <path d="M9 8.5V7a3 3 0 0 1 6 0v1.5" {...navStroke()} />
     </svg>
+  )
+}
+
+function PabiliComingSoon() {
+  return (
+    <div className="pabili-soon">
+      <div className="pabili-soon-glow" aria-hidden="true" />
+      <div className="pabili-soon-card">
+        <div className="pabili-soon-badge" aria-hidden="true">
+          <PabiliIcon />
+        </div>
+        <p className="pabili-soon-kicker">Ya! Pasakay</p>
+        <h2>Pabili</h2>
+        <p className="pabili-soon-headline">Coming soon</p>
+        <p className="pabili-soon-copy">
+          Order food, groceries, and errands for pickup and delivery — right from the same app you ride with.
+        </p>
+        <div className="pabili-soon-pill">We’re cooking this up for you</div>
+      </div>
+    </div>
   )
 }
 
