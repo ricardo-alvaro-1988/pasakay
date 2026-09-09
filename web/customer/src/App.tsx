@@ -1116,7 +1116,7 @@ function Home({
         )}
         {tab === 'pabili' && (
           <section className="panel page-panel">
-            <PabiliComingSoon />
+            <PabiliComingSoon brandName={brandName} brandLogo={brandLogo} />
           </section>
         )}
         {tab === 'account' && (
@@ -1510,19 +1510,19 @@ function PabiliIcon() {
   )
 }
 
-function PabiliComingSoon() {
+function PabiliComingSoon({ brandName, brandLogo }: { brandName: string; brandLogo: string }) {
   return (
     <div className="pabili-soon">
       <div className="pabili-soon-glow" aria-hidden="true" />
       <div className="pabili-soon-card">
         <div className="pabili-soon-badge" aria-hidden="true">
-          <PabiliIcon />
+          <img src={brandLogo} alt="" />
         </div>
-        <p className="pabili-soon-kicker">Ya! Pasakay</p>
+        <p className="pabili-soon-kicker">{brandName}</p>
         <h2>Pabili</h2>
         <p className="pabili-soon-headline">Coming soon</p>
         <p className="pabili-soon-copy">
-          Order food, groceries, and errands for pickup and delivery — right from the same app you ride with.
+          Order food, groceries, and errands for pickup and delivery — right from the same app you ride with on {brandName}.
         </p>
         <div className="pabili-soon-pill">We’re cooking this up for you</div>
       </div>
