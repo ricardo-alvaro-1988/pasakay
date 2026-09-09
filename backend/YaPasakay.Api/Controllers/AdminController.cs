@@ -750,7 +750,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 x.CustomerPhone,
                 x.Rider.AppUser.FullName,
                 x.Rider.PlateNumber,
-                x.VehicleType,
+                x.Rider.VehicleType,
                 x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
                 x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
                 x.Status,

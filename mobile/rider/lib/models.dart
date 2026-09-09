@@ -23,14 +23,21 @@ String vehicleLabel(dynamic value) {
   }
 }
 
-/// Type + plate; omit model when it is empty or just a vehicle-type name.
+/// Type + plate; omit model when it is empty or just a vehicle-type name (incl. typos).
 String formatVehicleLine(String vehicleType, {String? vehicleModel, String? plateNumber}) {
   final type = vehicleType.trim();
   final plate = (plateNumber ?? '').trim();
   final model = (vehicleModel ?? '').trim();
+  final modelKey = model.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
   final modelLooksLikeType = model.isEmpty ||
-      model.toLowerCase() == 'motorcycle' ||
-      model.toLowerCase() == 'tricycle' ||
+      modelKey == 'motorcycle' ||
+      modelKey == 'motocycle' ||
+      modelKey == 'motorcyle' ||
+      modelKey == 'tricycle' ||
+      modelKey == 'tricyle' ||
+      modelKey == 'trike' ||
+      (modelKey.startsWith('motor') && modelKey.contains('cycle')) ||
+      (modelKey.startsWith('tric') && modelKey.contains('cycle')) ||
       (type.isNotEmpty && model.toLowerCase() == type.toLowerCase());
   if (modelLooksLikeType) {
     if (type.isEmpty) return plate;

@@ -450,6 +450,7 @@ public class RiderDeskController(
 
         var now = DateTime.UtcNow;
         offer.Trip.RiderId = rider.Id;
+        offer.Trip.VehicleType = rider.VehicleType;
         offer.Trip.Status = TripStatus.Waiting;
         offer.Trip.UpdatedAtUtc = now;
         offer.Status = OfferStatus.Accepted;

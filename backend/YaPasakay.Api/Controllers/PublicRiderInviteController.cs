@@ -236,14 +236,28 @@ public class PublicRiderInviteController(AppDbContext db, UploadStore uploads) :
         }
 
         var model = string.IsNullOrWhiteSpace(form.VehicleModel) ? null : form.VehicleModel.Trim();
-        if (model is not null
-            && (model.Equals("Motorcycle", StringComparison.OrdinalIgnoreCase)
-                || model.Equals("Tricycle", StringComparison.OrdinalIgnoreCase)
-                || model.Equals(form.VehicleType.ToString(), StringComparison.OrdinalIgnoreCase)))
+        if (model is not null && LooksLikeVehicleTypeLabel(model, form.VehicleType))
         {
             model = null;
         }
         return (name, phone, plate, franchise, model, licenseType, licenseNumber, null);
+    }
+
+    private static bool LooksLikeVehicleTypeLabel(string model, VehicleType vehicleType)
+    {
+        var key = new string(model.Where(char.IsLetter).Select(char.ToLowerInvariant).ToArray());
+        if (key is "motorcycle" or "motocycle" or "motorcyle" or "tricycle" or "tricyle" or "trike")
+        {
+            return true;
+        }
+
+        if ((key.StartsWith("motor") && key.Contains("cycle"))
+            || (key.StartsWith("tric") && key.Contains("cycle")))
+        {
+            return true;
+        }
+
+        return model.Equals(vehicleType.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 }
 

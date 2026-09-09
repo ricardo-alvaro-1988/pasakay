@@ -16,7 +16,7 @@ public static class OperatorMaps
             rider.VehicleType,
             rider.PlateNumber,
             rider.VehicleFranchiseNumber,
-            rider.VehicleModel,
+            SanitizeVehicleModel(rider.VehicleModel, rider.VehicleType),
             rider.IsActive,
             rider.LicenseType,
             rider.LicenseNumber,
@@ -49,7 +49,7 @@ public static class OperatorMaps
             rider.VehicleType,
             rider.PlateNumber,
             rider.VehicleFranchiseNumber,
-            rider.VehicleModel,
+            SanitizeVehicleModel(rider.VehicleModel, rider.VehicleType),
             rider.IsActive,
             rider.LicenseType,
             rider.LicenseNumber,
@@ -125,7 +125,7 @@ public static class OperatorMaps
             trip.DistanceKm,
             Math.Max(1, trip.PassengerCount),
             duration,
-            trip.VehicleType,
+            rider?.VehicleType ?? trip.VehicleType,
             DateTime.SpecifyKind(trip.RequestedAtUtc, DateTimeKind.Utc),
             trip.ScheduledAtUtc is DateTime scheduled ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc) : null,
             trip.CompletedAtUtc is DateTime completed ? DateTime.SpecifyKind(completed, DateTimeKind.Utc) : null,
@@ -143,7 +143,7 @@ public static class OperatorMaps
             rider?.AppUser.FullName ?? "Rider unavailable",
             rider?.AppUser.PhoneNumber ?? string.Empty,
             rider?.PlateNumber ?? string.Empty,
-            rider?.VehicleModel,
+            null,
             UploadUrls.FromPath(rider?.ProfilePhotoPath),
             (trip.ChatMessages ?? [])
                 .OrderBy(x => x.SentAtUtc)
@@ -616,4 +616,35 @@ public static class OperatorMaps
                 label,
                 atUtc is DateTime stamp ? DateTime.SpecifyKind(stamp, DateTimeKind.Utc) : null)
             : null;
+
+    /// <summary>
+    /// Drop model values that are really vehicle-type labels (incl. typos like "Motocycle").
+    /// </summary>
+    private static string? SanitizeVehicleModel(string? model, VehicleType vehicleType)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            return null;
+        }
+
+        var trimmed = model.Trim();
+        var key = new string(trimmed.Where(char.IsLetter).Select(char.ToLowerInvariant).ToArray());
+        if (key is "motorcycle" or "motocycle" or "motorcyle" or "tricycle" or "tricyle" or "trike")
+        {
+            return null;
+        }
+
+        if ((key.StartsWith("motor") && key.Contains("cycle"))
+            || (key.StartsWith("tric") && key.Contains("cycle")))
+        {
+            return null;
+        }
+
+        if (trimmed.Equals(vehicleType.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return trimmed;
+    }
 }

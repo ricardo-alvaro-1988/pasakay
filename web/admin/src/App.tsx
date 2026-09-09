@@ -1145,10 +1145,22 @@ function normalizeVehicleType(value: unknown): VehicleType | null {
   return null
 }
 
-/** Real make/model only — omit when model is empty or just "Motorcycle"/"Tricycle". */
+/** True when the "model" is really a vehicle-type label (incl. typos like Motocycle). */
+function looksLikeVehicleTypeLabel(model: string) {
+  const key = model.trim().toLowerCase().replace(/[^a-z]/g, '')
+  if (!key) return false
+  if (key === 'motorcycle' || key === 'motocycle' || key === 'motorcyle' || key === 'motorcycle') return true
+  if (key === 'tricycle' || key === 'tricyle' || key === 'trike') return true
+  if (key.startsWith('motor') && key.includes('cycle')) return true
+  if (key.startsWith('tric') && key.includes('cycle')) return true
+  return false
+}
+
+/** Real make/model only — omit when model is empty or just a vehicle-type label. */
 function realVehicleModel(model: string | null | undefined, vehicleType?: unknown) {
   const trimmed = (model ?? '').trim()
   if (!trimmed) return null
+  if (looksLikeVehicleTypeLabel(trimmed)) return null
   const asType = normalizeVehicleType(trimmed)
   if (asType) return null
   const type = normalizeVehicleType(vehicleType)
@@ -4063,10 +4075,10 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
         ) : null}
         <DetailItem label="Payment" value={paymentMethodLabel(ride.paymentMethod, ride.paymentMethodOther)} />
         <DetailItem label="Duration" value={ride.durationMinutes ? `${ride.durationMinutes} min` : '—'} />
-        <DetailItem label="Vehicle" value={normalizeVehicleType(ride.vehicleType) ?? ride.vehicleType} />
-        {realVehicleModel(ride.vehicleModel, ride.vehicleType) ? (
-          <DetailItem label="Vehicle model" value={realVehicleModel(ride.vehicleModel, ride.vehicleType)!} />
-        ) : null}
+        <div className="detail-item">
+          <span>Vehicle</span>
+          <p><VehicleTag type={ride.vehicleType} /></p>
+        </div>
         <DetailItem label="Requested" value={phDateTime(ride.requestedAtUtc)} />
         {ride.scheduledAtUtc ? <DetailItem label="Scheduled" value={phDateTime(ride.scheduledAtUtc)} /> : null}
         <DetailItem
@@ -4108,7 +4120,7 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
             <div>
               <p className="detail-name">{ride.riderName}</p>
               <p className="muted">{ride.riderPhone}</p>
-              <p className="muted">{formatVehicleLine(ride.vehicleType, ride.vehicleModel, ride.plateNumber)}</p>
+              <p className="muted">{ride.plateNumber || '—'}</p>
             </div>
           </div>
         </div>
