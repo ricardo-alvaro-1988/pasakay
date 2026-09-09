@@ -33,7 +33,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _sosBusy = false;
   bool _acceptBusy = false;
   bool _hadActiveTrip = false;
-  int _knownOfferCount = 0;
   String _liveKey = '';
   RiderEarningsSummary? _summary;
   List<RiderTripListItem> _recent = const [];
@@ -41,7 +40,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _knownOfferCount = widget.session.desk?.offers.length ?? 0;
     _hadActiveTrip = widget.session.desk?.activeTrip != null;
     _liveKey = _deskLiveKey(widget.session.desk);
     widget.session.addListener(_onDesk);
@@ -91,35 +89,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (trip == null && desk?.pendingHail == null) {
       _waitingOnHail = false;
     }
-
-    final offerCount = desk?.offers.length ?? 0;
-    if (offerCount > _knownOfferCount && offerCount > 0) {
-      final route = ModalRoute.of(context);
-      final onOffers = route?.settings.name == 'offers';
-      if (!onOffers) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(offerCount == 1 ? 'New job offer' : '$offerCount job offers waiting'),
-              action: SnackBarAction(
-                label: 'Open',
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      settings: const RouteSettings(name: 'offers'),
-                      builder: (_) => OffersScreen(session: widget.session),
-                    ),
-                  );
-                },
-              ),
-            ),
-          );
-        });
-      }
-    }
-    _knownOfferCount = offerCount;
 
     final nextKey = _deskLiveKey(desk);
     final hasActive = desk?.activeTrip != null;

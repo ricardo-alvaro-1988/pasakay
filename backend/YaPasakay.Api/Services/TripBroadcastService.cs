@@ -472,7 +472,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
     public async Task ExpireStaleOnlineRidersAsync(CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        var cutoff = now - RiderPresence.OnlineTtl;
+        // Keep Online until the rider toggles off, unless the app is abandoned for a long time.
+        var cutoff = now - RiderPresence.AbandonedOnlineTtl;
         var stale = await db.RiderProfiles
             .Where(x => x.IsOnline
                 && (x.LastLocationAtUtc == null || x.LastLocationAtUtc < cutoff)

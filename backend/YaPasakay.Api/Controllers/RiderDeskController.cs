@@ -309,6 +309,10 @@ public class RiderDeskController(
         rider.LastLat = request.Lat;
         rider.LastLng = request.Lng;
         rider.LastLocationAtUtc = DateTime.UtcNow;
+        if (rider.IsOnline)
+        {
+            rider.OnlineAtUtc = DateTime.UtcNow;
+        }
         rider.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         return Ok(await BuildDeskAsync(rider.Id, cancellationToken));

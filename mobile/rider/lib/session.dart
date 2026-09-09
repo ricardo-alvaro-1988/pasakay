@@ -235,6 +235,9 @@ class RiderSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Force a location heartbeat (e.g. when the app returns from idle).
+  Future<void> pingLocationKeepAlive() => _pingGps(force: true);
+
   Future<void> setPaymentMethods(List<String> methods) async {
     desk = await api.setPayments(methods.map(paymentCode).toList());
     _deskSignature = _signature(desk);
@@ -641,7 +644,8 @@ class RiderSession extends ChangeNotifier {
         );
       }
 
-      // Stationary riders: skip network ping for a bit, but still heartbeat ~90s.
+      // Stationary riders: skip network ping briefly, but heartbeat at least every 2 minutes
+      // so idle Online status is not treated as abandoned.
       if (!force && _lastGpsLat != null && _lastGpsLng != null && _lastGpsAt != null) {
         final age = DateTime.now().difference(_lastGpsAt!);
         final moved = Geolocator.distanceBetween(
@@ -650,7 +654,7 @@ class RiderSession extends ChangeNotifier {
           position.latitude,
           position.longitude,
         );
-        if (moved < _minGpsMoveMeters && age < const Duration(seconds: 90)) {
+        if (moved < _minGpsMoveMeters && age < const Duration(minutes: 2)) {
           return;
         }
       }
