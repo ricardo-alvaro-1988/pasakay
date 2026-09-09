@@ -159,6 +159,13 @@ class _TripsScreenState extends State<TripsScreen> {
                                   passengerLabel(trip.passengerCount),
                                   style: const TextStyle(fontWeight: FontWeight.w800, color: brandRed),
                                 ),
+                                if (trip.status == 'Completed' && (trip.driverAmount != null || trip.platformFee != null)) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    'You ${peso(trip.driverAmount ?? 0)} · Fee ${peso(trip.platformFee ?? 0)}',
+                                    style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12),
+                                  ),
+                                ],
                               ],
                             ),
                           ),

@@ -13,7 +13,15 @@ namespace YaPasakay.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "Rider")]
 [Route("api/rider")]
-public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast, RiderWalletService wallets, TripChatRealtime chatRealtime, LiveNotify live, UploadStore uploads, OperatorPromoService promos) : ControllerBase
+public class RiderDeskController(
+    AppDbContext db,
+    TripBroadcastService broadcast,
+    RiderWalletService wallets,
+    TripChatRealtime chatRealtime,
+    LiveNotify live,
+    UploadStore uploads,
+    OperatorPromoService promos,
+    IConfiguration config) : ControllerBase
 {
     [HttpGet("desk")]
     public async Task<ActionResult<RiderDeskResponse>> Desk(CancellationToken cancellationToken)
@@ -31,6 +39,176 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
         }
 
         return Ok(await BuildDeskAsync(rider.Id, cancellationToken));
+    }
+
+    [HttpGet("earnings-summary")]
+    public async Task<ActionResult<RiderEarningsSummaryResponse>> EarningsSummary(CancellationToken cancellationToken)
+    {
+        var (rider, status, message) = await RiderContext.RequireAsync(db, User, cancellationToken);
+        if (rider is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var dailyGoal = config.GetValue("Rider:DailyEarningsGoal", 1000m);
+        if (dailyGoal <= 0)
+        {
+            dailyGoal = 1000m;
+        }
+
+        var todayPh = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(8));
+        var weekStart = todayPh.AddDays(-(int)todayPh.DayOfWeek); // Sunday start PH
+        var monthStart = new DateOnly(todayPh.Year, todayPh.Month, 1);
+
+        var monthStartUtc = PhDayStartUtc(monthStart);
+        var todayEndExclusiveUtc = PhDayStartUtc(todayPh.AddDays(1));
+
+        var trips = await db.Trips
+            .AsNoTracking()
+            .Include(x => x.Operator)
+            .Include(x => x.PickupBarangay)
+            .Where(x => x.RiderId == rider.Id
+                && x.Status == TripStatus.Completed
+                && x.Fare > 0
+                && (x.CompletedAtUtc ?? x.RequestedAtUtc) >= monthStartUtc
+                && (x.CompletedAtUtc ?? x.RequestedAtUtc) < todayEndExclusiveUtc)
+            .ToListAsync(cancellationToken);
+
+        var fares = await OperatorMaps.LoadFareMatrixLookupAsync(db, trips, cancellationToken);
+
+        decimal SumDriver(IEnumerable<Trip> rows)
+        {
+            decimal total = 0;
+            foreach (var trip in rows)
+            {
+                FareMatrix? fare = null;
+                if (trip.PickupBarangay is not null)
+                {
+                    fares.TryGetValue((trip.OperatorId, trip.VehicleType, trip.PickupBarangay.MunicipalityId), out fare);
+                }
+
+                var breakdown = RideCommissionCalculator.ForTrip(trip, fare);
+                if (breakdown is not null)
+                {
+                    total += breakdown.DriverAmount;
+                }
+            }
+
+            return CommissionCut.Round(total);
+        }
+
+        bool InRange(Trip trip, DateOnly from, DateOnly toInclusive)
+        {
+            var stamp = trip.CompletedAtUtc ?? trip.RequestedAtUtc;
+            var day = DateOnly.FromDateTime(stamp.AddHours(8));
+            return day >= from && day <= toInclusive;
+        }
+
+        var todayTrips = trips.Where(x => InRange(x, todayPh, todayPh)).ToList();
+        var weekTrips = trips.Where(x => InRange(x, weekStart, todayPh)).ToList();
+        var monthTrips = trips;
+
+        var todayEarnings = SumDriver(todayTrips);
+        var weekEarnings = SumDriver(weekTrips);
+        var monthEarnings = SumDriver(monthTrips);
+        var avgPerTrip = todayTrips.Count == 0
+            ? 0
+            : CommissionCut.Round(todayEarnings / todayTrips.Count);
+        var goalProgress = dailyGoal <= 0 ? 0 : Math.Min(1m, todayEarnings / dailyGoal);
+        int? tripsToGoal = null;
+        if (todayEarnings < dailyGoal && avgPerTrip > 0)
+        {
+            tripsToGoal = (int)Math.Ceiling((double)((dailyGoal - todayEarnings) / avgPerTrip));
+        }
+        else if (todayEarnings < dailyGoal && todayTrips.Count == 0)
+        {
+            tripsToGoal = null;
+        }
+
+        double? averageRating = null;
+        var rated = await db.Trips
+            .AsNoTracking()
+            .Where(x => x.RiderId == rider.Id && x.Rating != null && x.Rating > 0)
+            .Select(x => x.Rating!.Value)
+            .ToListAsync(cancellationToken);
+        if (rated.Count > 0)
+        {
+            averageRating = Math.Round(rated.Average(), 1);
+        }
+
+        return Ok(new RiderEarningsSummaryResponse(
+            todayEarnings,
+            todayTrips.Count,
+            avgPerTrip,
+            weekEarnings,
+            weekTrips.Count,
+            monthEarnings,
+            monthTrips.Count,
+            CommissionCut.Round(dailyGoal),
+            goalProgress,
+            tripsToGoal,
+            averageRating));
+    }
+
+    private static DateTime PhDayStartUtc(DateOnly day) =>
+        DateTime.SpecifyKind(day.ToDateTime(TimeOnly.MinValue).AddHours(-8), DateTimeKind.Utc);
+
+    [HttpGet("trips")]
+    public async Task<ActionResult<IReadOnlyList<RideListItem>>> Trips(CancellationToken cancellationToken)
+    {
+        var (rider, status, message) = await RiderContext.RequireAsync(db, User, cancellationToken);
+        if (rider is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var tripRows = await db.Trips
+            .AsNoTracking()
+            .Include(x => x.Operator)
+            .Include(x => x.PickupBarangay)
+            .Where(x => x.RiderId == rider.Id)
+            .OrderByDescending(x => x.RequestedAtUtc)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+
+        var fares = await OperatorMaps.LoadFareMatrixLookupAsync(db, tripRows, cancellationToken);
+        var trips = tripRows.Select(x =>
+        {
+            FareMatrix? fare = null;
+            if (x.PickupBarangay is not null)
+            {
+                fares.TryGetValue((x.OperatorId, x.VehicleType, x.PickupBarangay.MunicipalityId), out fare);
+            }
+
+            return new RideListItem(
+                x.Id,
+                x.Reference,
+                DateTime.SpecifyKind(x.RequestedAtUtc, DateTimeKind.Utc),
+                TripAddress.Display(x.PickupDetails, x.Pickup),
+                TripAddress.Display(x.DropoffDetails, x.Dropoff),
+                x.CustomerName,
+                x.VehicleType,
+                x.Status,
+                x.Fare,
+                x.DistanceKm,
+                Math.Max(1, x.PassengerCount),
+                x.PaymentMethod,
+                x.PaymentMethodOther,
+                RideCommissionCalculator.ForTrip(x, fare),
+                x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
+                x.PromoDiscountAmount,
+                x.IsPromoSponsored,
+                x.DiscountPercent,
+                x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
+                x.CustomerBoostAmount);
+        }).ToList();
+
+        return Ok(trips.Select(x => x with
+        {
+            RequestedAtUtc = RiderDisplayTime.ToApi(x.RequestedAtUtc),
+            Pickup = TripAddress.Clean(x.Pickup),
+            Dropoff = TripAddress.Clean(x.Dropoff)
+        }).ToList());
     }
 
     [HttpPost("online")]
@@ -376,49 +554,6 @@ public class RiderDeskController(AppDbContext db, TripBroadcastService broadcast
             await live.CustomerTripAsync(customerId, "started", "Trip started", $"Your trip {trip.Reference} is ongoing.", cancellationToken);
         }
         return Ok(await BuildDeskAsync(rider.Id, cancellationToken));
-    }
-
-    [HttpGet("trips")]
-    public async Task<ActionResult<IReadOnlyList<RideListItem>>> Trips(CancellationToken cancellationToken)
-    {
-        var (rider, status, message) = await RiderContext.RequireAsync(db, User, cancellationToken);
-        if (rider is null)
-        {
-            return StatusCode(status, new { message });
-        }
-
-        var trips = await db.Trips
-            .Where(x => x.RiderId == rider.Id)
-            .OrderByDescending(x => x.RequestedAtUtc)
-            .Take(200)
-            .Select(x => new RideListItem(
-                x.Id,
-                x.Reference,
-                x.ScheduledAtUtc ?? x.RequestedAtUtc,
-                x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
-                x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
-                x.CustomerName,
-                x.VehicleType,
-                x.Status,
-                x.Fare,
-                x.DistanceKm,
-                x.PassengerCount < 1 ? 1 : x.PassengerCount,
-                x.PaymentMethod,
-                x.PaymentMethodOther,
-                null,
-                x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
-                x.PromoDiscountAmount,
-                x.IsPromoSponsored,
-                x.DiscountPercent,
-                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null,
-                x.CustomerBoostAmount))
-            .ToListAsync(cancellationToken);
-        return Ok(trips.Select(x => x with
-        {
-            RequestedAtUtc = RiderDisplayTime.ToApi(x.RequestedAtUtc),
-            Pickup = TripAddress.Clean(x.Pickup),
-            Dropoff = TripAddress.Clean(x.Dropoff)
-        }).ToList());
     }
 
     [HttpGet("trips/{id:guid}/chat")]

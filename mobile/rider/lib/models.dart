@@ -452,6 +452,8 @@ class RiderTripListItem {
     required this.paymentMethod,
     required this.requestedAt,
     this.paymentMethodOther,
+    this.driverAmount,
+    this.platformFee,
   });
 
   final String id;
@@ -467,21 +469,74 @@ class RiderTripListItem {
   final String paymentMethod;
   final String? paymentMethodOther;
   final DateTime? requestedAt;
+  final double? driverAmount;
+  final double? platformFee;
 
-  factory RiderTripListItem.fromJson(Map<String, dynamic> json) => RiderTripListItem(
-        id: asText(json['id']),
-        reference: asText(json['reference']),
-        status: tripStatusLabel(json['status']),
-        customerName: asText(json['customerName']),
-        pickup: asText(json['pickup']),
-        dropoff: asText(json['dropoff']),
-        fare: (json['fare'] as num?)?.toDouble() ?? 0,
-        distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
-        passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
-        vehicleType: vehicleLabel(json['vehicleType']),
-        paymentMethod: paymentCode(json['paymentMethod']),
-        paymentMethodOther: asTextOrNull(json['paymentMethodOther']),
-        requestedAt: parseUtc(json['requestedAtUtc']),
+  factory RiderTripListItem.fromJson(Map<String, dynamic> json) {
+    final commission = asJsonMap(json['commission']);
+    final driver = (commission?['driverAmount'] as num?)?.toDouble();
+    final system = (commission?['systemAmount'] as num?)?.toDouble() ?? 0;
+    final operatorShare = (commission?['operatorAmount'] as num?)?.toDouble() ?? 0;
+    final platform = commission == null ? null : system + operatorShare;
+    return RiderTripListItem(
+      id: asText(json['id']),
+      reference: asText(json['reference']),
+      status: tripStatusLabel(json['status']),
+      customerName: asText(json['customerName']),
+      pickup: asText(json['pickup']),
+      dropoff: asText(json['dropoff']),
+      fare: (json['fare'] as num?)?.toDouble() ?? 0,
+      distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
+      passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
+      vehicleType: vehicleLabel(json['vehicleType']),
+      paymentMethod: paymentCode(json['paymentMethod']),
+      paymentMethodOther: asTextOrNull(json['paymentMethodOther']),
+      requestedAt: parseUtc(json['requestedAtUtc']),
+      driverAmount: driver,
+      platformFee: platform,
+    );
+  }
+}
+
+class RiderEarningsSummary {
+  RiderEarningsSummary({
+    required this.todayEarnings,
+    required this.todayTrips,
+    required this.avgPerTrip,
+    required this.weekEarnings,
+    required this.weekTrips,
+    required this.monthEarnings,
+    required this.monthTrips,
+    required this.dailyGoal,
+    required this.goalProgress,
+    this.tripsToGoalEstimate,
+    this.averageRating,
+  });
+
+  final double todayEarnings;
+  final int todayTrips;
+  final double avgPerTrip;
+  final double weekEarnings;
+  final int weekTrips;
+  final double monthEarnings;
+  final int monthTrips;
+  final double dailyGoal;
+  final double goalProgress;
+  final int? tripsToGoalEstimate;
+  final double? averageRating;
+
+  factory RiderEarningsSummary.fromJson(Map<String, dynamic> json) => RiderEarningsSummary(
+        todayEarnings: (json['todayEarnings'] as num?)?.toDouble() ?? 0,
+        todayTrips: asInt(json['todayTrips']),
+        avgPerTrip: (json['avgPerTrip'] as num?)?.toDouble() ?? 0,
+        weekEarnings: (json['weekEarnings'] as num?)?.toDouble() ?? 0,
+        weekTrips: asInt(json['weekTrips']),
+        monthEarnings: (json['monthEarnings'] as num?)?.toDouble() ?? 0,
+        monthTrips: asInt(json['monthTrips']),
+        dailyGoal: (json['dailyGoal'] as num?)?.toDouble() ?? 1000,
+        goalProgress: (json['goalProgress'] as num?)?.toDouble() ?? 0,
+        tripsToGoalEstimate: json['tripsToGoalEstimate'] == null ? null : asInt(json['tripsToGoalEstimate']),
+        averageRating: (json['averageRating'] as num?)?.toDouble(),
       );
 }
 

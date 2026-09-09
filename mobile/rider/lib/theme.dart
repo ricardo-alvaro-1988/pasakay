@@ -180,21 +180,26 @@ class BrandPanel extends StatelessWidget {
 }
 
 class BrandPill extends StatelessWidget {
-  const BrandPill({super.key, this.subtitle});
+  const BrandPill({super.key, this.subtitle, this.inverted = false});
 
   final String? subtitle;
+  final bool inverted;
 
   @override
   Widget build(BuildContext context) {
+    final fg = inverted ? Colors.white : brandInk;
+    final muted = inverted ? Colors.white70 : brandMuted;
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
       decoration: BoxDecoration(
-        color: brandSurface,
+        color: inverted ? Colors.white.withValues(alpha: 0.12) : brandSurface,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: brandLine),
-        boxShadow: const [
-          BoxShadow(color: Color(0x1416181D), blurRadius: 12, offset: Offset(0, 4)),
-        ],
+        border: Border.all(color: inverted ? Colors.white24 : brandLine),
+        boxShadow: inverted
+            ? const []
+            : const [
+                BoxShadow(color: Color(0x1416181D), blurRadius: 12, offset: Offset(0, 4)),
+              ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -207,14 +212,14 @@ class BrandPill extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'Ya! Pasakay',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: brandInk),
+                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: fg),
               ),
-              if (subtitle != null)
+              if (subtitle != null && subtitle!.trim().isNotEmpty)
                 Text(
                   subtitle!,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11, color: brandMuted),
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 11, color: muted),
                 ),
             ],
           ),

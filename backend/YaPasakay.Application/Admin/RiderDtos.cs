@@ -111,3 +111,16 @@ public record RiderDeskResponse(
     bool IsActive,
     int CredibilityScore,
     int RiderCancelCount);
+
+public record RiderEarningsSummaryResponse(
+    decimal TodayEarnings,
+    int TodayTrips,
+    decimal AvgPerTrip,
+    decimal WeekEarnings,
+    int WeekTrips,
+    decimal MonthEarnings,
+    int MonthTrips,
+    decimal DailyGoal,
+    decimal GoalProgress,
+    int? TripsToGoalEstimate,
+    double? AverageRating);

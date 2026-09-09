@@ -35,6 +35,9 @@ class RiderSession extends ChangeNotifier {
   RiderDesk? desk;
   String? error;
   bool busy = false;
+  RiderEarningsSummary? earningsSummary;
+  List<RiderTripListItem> recentTrips = const [];
+  DateTime? _homeExtrasAt;
   Timer? _poll;
   Timer? _gps;
   Timer? _chatPoll;
@@ -268,6 +271,7 @@ class RiderSession extends ChangeNotifier {
     desk = await api.completeTrip(tripId);
     _deskSignature = _signature(desk);
     await _syncChat();
+    await loadHomeExtras(force: true);
     notifyListeners();
   }
 
@@ -277,6 +281,34 @@ class RiderSession extends ChangeNotifier {
     _deskSignature = _signature(desk);
     await _syncChat();
     notifyListeners();
+  }
+
+  /// Earnings + recent trips — cached; not refetched on every desk SignalR tick.
+  Future<void> loadHomeExtras({bool force = false}) async {
+    if (!loggedIn) {
+      return;
+    }
+    if (!force &&
+        earningsSummary != null &&
+        _homeExtrasAt != null &&
+        DateTime.now().difference(_homeExtrasAt!) < const Duration(minutes: 2)) {
+      return;
+    }
+    try {
+      final summary = await api.earningsSummary();
+      final trips = await api.trips();
+      earningsSummary = summary;
+      recentTrips = trips.where((t) => t.status == 'Completed').take(5).toList();
+      _homeExtrasAt = DateTime.now();
+      notifyListeners();
+    } catch (_) {
+      /* keep prior cache */
+    }
+  }
+
+  Future<void> refreshHome({bool forceExtras = true}) async {
+    await refresh();
+    await loadHomeExtras(force: forceExtras);
   }
 
   Future<void> hail(String customerId) async {

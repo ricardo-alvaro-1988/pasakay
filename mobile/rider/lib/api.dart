@@ -346,6 +346,11 @@ class RiderApi {
     return rows.map(asJsonMap).whereType<Map<String, dynamic>>().map(RiderTripListItem.fromJson).toList();
   }
 
+  Future<RiderEarningsSummary> earningsSummary() async {
+    final response = await _get(_uri('/api/rider/earnings-summary'), headers: _headers());
+    return RiderEarningsSummary.fromJson(await _json(response, fallback: 'Could not load earnings.'));
+  }
+
   Future<RiderTripDetail> tripDetail(String tripId) async {
     final response = await _get(_uri('/api/rider/trips/$tripId'), headers: _headers());
     return RiderTripDetail.fromJson(await _json(response, fallback: 'Could not load trip details.'));
