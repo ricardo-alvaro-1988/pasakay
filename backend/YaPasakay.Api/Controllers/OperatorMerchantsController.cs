@@ -797,10 +797,10 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             return fail;
         }
 
-        var row = await db.MerchantProducts
-            .Include(x => x.AdoptedAddons)
-            .FirstOrDefaultAsync(x => x.Id == id && x.MerchantId == merchant!.Id, cancellationToken);
-        if (row is null)
+        var exists = await db.MerchantProducts.AnyAsync(
+            x => x.Id == id && x.MerchantId == merchant!.Id,
+            cancellationToken);
+        if (!exists)
         {
             return NotFound(new { message = "Product not found." });
         }
@@ -822,39 +822,35 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
 
         try
         {
-            // Sync in place — avoid Clear()/wipe+reinsert, which trips EF concurrency
-            // and unique-index issues on (ProductId, AddonGroupId).
-            var wanted = ids.ToHashSet();
-            foreach (var link in row.AdoptedAddons.Where(x => !wanted.Contains(x.AddonGroupId)).ToList())
-            {
-                db.MerchantProductAddons.Remove(link);
-            }
+            // Bulk replace outside the change tracker so we never hit EF concurrency /
+            // unique-index conflicts when rewriting product↔addon links.
+            await db.MerchantProductAddons
+                .Where(x => x.ProductId == id)
+                .ExecuteDeleteAsync(cancellationToken);
 
-            var existing = row.AdoptedAddons
-                .Where(x => wanted.Contains(x.AddonGroupId))
-                .ToDictionary(x => x.AddonGroupId);
-
+            var now = DateTime.UtcNow;
             for (var i = 0; i < ids.Count; i++)
             {
-                var groupId = ids[i];
-                if (existing.TryGetValue(groupId, out var link))
+                db.MerchantProductAddons.Add(new MerchantProductAddon
                 {
-                    link.SortOrder = i;
-                    link.UpdatedAtUtc = DateTime.UtcNow;
-                }
-                else
-                {
-                    row.AdoptedAddons.Add(new MerchantProductAddon
-                    {
-                        ProductId = row.Id,
-                        AddonGroupId = groupId,
-                        SortOrder = i,
-                    });
-                }
+                    Id = Guid.NewGuid(),
+                    ProductId = id,
+                    AddonGroupId = ids[i],
+                    SortOrder = i,
+                    CreatedAtUtc = now,
+                });
             }
 
-            row.UpdatedAtUtc = DateTime.UtcNow;
-            await db.SaveChangesAsync(cancellationToken);
+            await db.MerchantProducts
+                .Where(x => x.Id == id)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(x => x.UpdatedAtUtc, now),
+                    cancellationToken);
+
+            if (ids.Count > 0)
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
         }
         catch (Exception ex)
         {
@@ -867,7 +863,7 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             return BadRequest(new { message = $"Could not save product add-ons: {root.Message}" });
         }
 
-        var loaded = await LoadProductAsync(merchant!.Id, row.Id, cancellationToken);
+        var loaded = await LoadProductAsync(merchant!.Id, id, cancellationToken);
         return Ok(MapProduct(loaded!));
     }
 
