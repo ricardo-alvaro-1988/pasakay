@@ -105,6 +105,25 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var migrateLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbMigrate");
+
+    // MerchantId must exist before Migrate/Seed query [Users] — EF always selects it.
+    try
+    {
+        await MerchantCatalogBootstrap.EnsureUsersMerchantIdAsync(db);
+        if (!await MerchantCatalogBootstrap.HasUsersMerchantIdAsync(db))
+        {
+            migrateLogger.LogCritical("Users.MerchantId is still missing after bootstrap ALTER.");
+        }
+        else
+        {
+            migrateLogger.LogInformation("Users.MerchantId is present.");
+        }
+    }
+    catch (Exception merchantIdEx)
+    {
+        migrateLogger.LogCritical(merchantIdEx, "Failed to ensure Users.MerchantId before migrate/seed.");
+    }
+
     if (!app.Configuration.GetValue("Database:SkipMigrate", false))
     {
         try
@@ -130,7 +149,7 @@ using (var scope = app.Services.CreateScope())
         migrateLogger.LogWarning("Database:SkipMigrate is enabled; starting without MigrateAsync.");
     }
 
-    // Always keep Users.MerchantId in sync with the EF model so login/auth queries never 500.
+    // Always keep Users.MerchantId + merchant/Pabili schema in sync with the EF model.
     try
     {
         await MerchantCatalogBootstrap.EnsureUsersMerchantIdAsync(db);
@@ -153,7 +172,14 @@ using (var scope = app.Services.CreateScope())
     var seederLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbSeeder");
     try
     {
-        await DbSeeder.SeedAsync(db, seederLogger, uploadRoot);
+        if (!await MerchantCatalogBootstrap.HasUsersMerchantIdAsync(db))
+        {
+            migrateLogger.LogCritical("Skipping DbSeeder because Users.MerchantId is missing.");
+        }
+        else
+        {
+            await DbSeeder.SeedAsync(db, seederLogger, uploadRoot);
+        }
     }
     catch (Exception seedEx)
     {

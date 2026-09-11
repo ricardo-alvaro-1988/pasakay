@@ -122,7 +122,6 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     CONSTRAINT [FK_ProductAddonOptions_ProductAddonGroups_AddonGroupId] FOREIGN KEY ([AddonGroupId]) REFERENCES [ProductAddonGroups] ([Id]) ON DELETE CASCADE
                 );
 
-                CREATE INDEX [IX_Users_MerchantId] ON [Users] ([MerchantId]);
                 CREATE UNIQUE INDEX [IX_MerchantOperatingHours_MerchantId_DayOfWeek] ON [MerchantOperatingHours] ([MerchantId], [DayOfWeek]);
                 CREATE INDEX [IX_MerchantProductCategories_MerchantId_Name] ON [MerchantProductCategories] ([MerchantId], [Name]);
                 CREATE INDEX [IX_MerchantProducts_CategoryId] ON [MerchantProducts] ([CategoryId]);
@@ -132,6 +131,16 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                 CREATE INDEX [IX_Merchants_OperatorId_BusinessName] ON [Merchants] ([OperatorId], [BusinessName]);
                 CREATE INDEX [IX_ProductAddonGroups_ProductId] ON [ProductAddonGroups] ([ProductId]);
                 CREATE INDEX [IX_ProductAddonOptions_AddonGroupId] ON [ProductAddonOptions] ([AddonGroupId]);
+                """);
+
+            // Separate batch from ALTER TABLE ADD MerchantId (same-batch CREATE INDEX can roll back the ADD).
+            migrationBuilder.Sql("""
+                IF COL_LENGTH(N'Users', N'MerchantId') IS NOT NULL
+                   AND NOT EXISTS (
+                        SELECT 1 FROM sys.indexes
+                        WHERE name = N'IX_Users_MerchantId' AND object_id = OBJECT_ID(N'[Users]')
+                   )
+                    CREATE INDEX [IX_Users_MerchantId] ON [Users] ([MerchantId]);
                 """);
         }
 

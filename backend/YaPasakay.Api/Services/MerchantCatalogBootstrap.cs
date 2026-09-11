@@ -13,6 +13,9 @@ public static class MerchantCatalogBootstrap
     /// </summary>
     public static async Task EnsureAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
+        // Users.MerchantId must be its own batch — never ADD + CREATE INDEX together.
+        await EnsureUsersMerchantIdAsync(db, cancellationToken);
+
         await db.Database.ExecuteSqlRawAsync("""
             IF OBJECT_ID(N'[ProductAddonOptions]', N'U') IS NOT NULL DROP TABLE [ProductAddonOptions];
             IF OBJECT_ID(N'[ProductAddonGroups]', N'U') IS NOT NULL DROP TABLE [ProductAddonGroups];
@@ -20,15 +23,6 @@ public static class MerchantCatalogBootstrap
             IF OBJECT_ID(N'[MerchantProductCategories]', N'U') IS NOT NULL DROP TABLE [MerchantProductCategories];
             IF OBJECT_ID(N'[MerchantOperatingHours]', N'U') IS NOT NULL DROP TABLE [MerchantOperatingHours];
             IF OBJECT_ID(N'[Merchants]', N'U') IS NOT NULL DROP TABLE [Merchants];
-
-            IF EXISTS (
-                SELECT 1 FROM sys.indexes
-                WHERE name = N'IX_Users_MerchantId' AND object_id = OBJECT_ID(N'[Users]')
-            )
-                DROP INDEX [IX_Users_MerchantId] ON [Users];
-
-            IF COL_LENGTH(N'Users', N'MerchantId') IS NULL
-                ALTER TABLE [Users] ADD [MerchantId] uniqueidentifier NULL;
 
             IF OBJECT_ID(N'[Merchants]', N'U') IS NULL
             BEGIN
@@ -142,12 +136,6 @@ public static class MerchantCatalogBootstrap
 
             IF NOT EXISTS (
                 SELECT 1 FROM sys.indexes
-                WHERE name = N'IX_Users_MerchantId' AND object_id = OBJECT_ID(N'[Users]')
-            )
-                CREATE INDEX [IX_Users_MerchantId] ON [Users] ([MerchantId]);
-
-            IF NOT EXISTS (
-                SELECT 1 FROM sys.indexes
                 WHERE name = N'IX_MerchantOperatingHours_MerchantId_DayOfWeek' AND object_id = OBJECT_ID(N'[MerchantOperatingHours]')
             )
                 CREATE UNIQUE INDEX [IX_MerchantOperatingHours_MerchantId_DayOfWeek] ON [MerchantOperatingHours] ([MerchantId], [DayOfWeek]);
@@ -211,10 +199,14 @@ public static class MerchantCatalogBootstrap
 
     public static async Task EnsureUsersMerchantIdAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
+        // Separate batches: SQL Server can reject CREATE INDEX on a column added in the same batch,
+        // rolling back the ALTER TABLE and leaving Users without MerchantId while EF still selects it.
         await db.Database.ExecuteSqlRawAsync("""
             IF COL_LENGTH(N'Users', N'MerchantId') IS NULL
                 ALTER TABLE [Users] ADD [MerchantId] uniqueidentifier NULL;
+            """, cancellationToken);
 
+        await db.Database.ExecuteSqlRawAsync("""
             IF COL_LENGTH(N'Users', N'MerchantId') IS NOT NULL
                AND NOT EXISTS (
                     SELECT 1 FROM sys.indexes
@@ -222,6 +214,31 @@ public static class MerchantCatalogBootstrap
                )
                 CREATE INDEX [IX_Users_MerchantId] ON [Users] ([MerchantId]);
             """, cancellationToken);
+    }
+
+    public static async Task<bool> HasUsersMerchantIdAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        var conn = db.Database.GetDbConnection();
+        var shouldClose = conn.State != System.Data.ConnectionState.Open;
+        if (shouldClose)
+        {
+            await db.Database.OpenConnectionAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT CASE WHEN COL_LENGTH(N'Users', N'MerchantId') IS NULL THEN 0 ELSE 1 END";
+            var result = await cmd.ExecuteScalarAsync(cancellationToken);
+            return Convert.ToInt32(result) == 1;
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await db.Database.CloseConnectionAsync();
+            }
+        }
     }
 
     public static async Task EnsureAddonLibraryAsync(AppDbContext db, CancellationToken cancellationToken = default)
