@@ -500,7 +500,6 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         }
 
         var group = await db.MerchantAddonGroups
-            .Include(x => x.Options)
             .FirstOrDefaultAsync(x => x.Id == id && x.MerchantId == merchant!.Id, cancellationToken);
         if (group is null)
         {
@@ -513,22 +512,28 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         group.SortOrder = request.SortOrder;
         group.IsActive = request.IsActive;
         group.UpdatedAtUtc = DateTime.UtcNow;
-        db.MerchantAddonOptions.RemoveRange(group.Options);
-        group.Options.Clear();
-        foreach (var option in request.Options ?? [])
-        {
-            group.Options.Add(new MerchantAddonOption
-            {
-                Name = Truncate(option.Name.Trim(), 120),
-                BasePrice = option.BasePrice,
-                SellingPrice = option.SellingPrice,
-                SortOrder = option.SortOrder,
-                IsActive = option.IsActive,
-            });
-        }
 
         try
         {
+            // Replace options outside the change tracker to avoid concurrency conflicts
+            // from RemoveRange + Clear on a loaded navigation collection.
+            await db.MerchantAddonOptions
+                .Where(x => x.AddonGroupId == id)
+                .ExecuteDeleteAsync(cancellationToken);
+
+            foreach (var option in request.Options ?? [])
+            {
+                db.MerchantAddonOptions.Add(new MerchantAddonOption
+                {
+                    AddonGroupId = id,
+                    Name = Truncate(option.Name.Trim(), 120),
+                    BasePrice = option.BasePrice,
+                    SellingPrice = option.SellingPrice,
+                    SortOrder = option.SortOrder,
+                    IsActive = option.IsActive,
+                });
+            }
+
             await db.SaveChangesAsync(cancellationToken);
         }
         catch (Exception ex)
@@ -536,7 +541,11 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             return BadRequest(new { message = $"Could not update add-on group: {RootMessage(ex)}" });
         }
 
-        return Ok(MapLibraryGroup(group));
+        var loaded = await db.MerchantAddonGroups
+            .AsNoTracking()
+            .Include(x => x.Options)
+            .FirstAsync(x => x.Id == id, cancellationToken);
+        return Ok(MapLibraryGroup(loaded));
     }
 
     [HttpDelete("{merchantId:guid}/addon-groups/{id:guid}")]
