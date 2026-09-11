@@ -130,8 +130,23 @@ using (var scope = app.Services.CreateScope())
     {
         try
         {
-            using var migrateCts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            // Multiple pending migrations can exceed a short window; keep this generous so
+            // one deploy can catch up instead of applying a single migration then timing out.
+            using var migrateCts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
             await db.Database.MigrateAsync(migrateCts.Token);
+            migrateLogger.LogInformation("Database migrations are up to date.");
+        }
+        catch (OperationCanceledException oce)
+        {
+            migrateLogger.LogError(oce, "Database migrate timed out; applying merchant catalog bootstrap SQL.");
+            try
+            {
+                await MerchantCatalogBootstrap.EnsureAsync(db);
+            }
+            catch (Exception second)
+            {
+                migrateLogger.LogCritical(second, "Merchant catalog bootstrap failed after migrate timeout.");
+            }
         }
         catch (Exception first)
         {
