@@ -412,6 +412,7 @@ export function PabiliStorefront({
     const term = value.trim()
     if (term.length < 1) {
       clearSuggest()
+      void loadMerchants('')
       return
     }
     suggestTimer.current = window.setTimeout(() => {
