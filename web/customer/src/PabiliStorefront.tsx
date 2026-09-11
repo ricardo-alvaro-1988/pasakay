@@ -77,6 +77,16 @@ function lineTotal(line: CartLine) {
 
 const FALLBACK_LAT = 14.5995
 const FALLBACK_LNG = 120.9842
+const HOME_CATEGORIES = ['Food', 'Groceries', 'Gadgets', 'Drinks', 'Pharmacy', 'Pets', 'Fashion', 'Home'] as const
+
+function shuffleAds<T>(items: T[]) {
+  const next = [...items]
+  for (let i = next.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[next[i], next[j]] = [next[j], next[i]]
+  }
+  return next
+}
 
 type AdCard = { id: string; title: string; imageUrl: string | null; redirectUrl: string }
 type SuggestMerchant = { id: string; name: string; address: string; logoUrl: string | null }
@@ -188,7 +198,7 @@ export function PabiliStorefront({
       ])
       setMerchants(rows)
       setPopularProducts(popular)
-      setAds(exclusive)
+      setAds(shuffleAds(exclusive))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load stores.')
     }
@@ -521,6 +531,18 @@ export function PabiliStorefront({
               </div>
             ) : null}
           </div>
+          <nav className="pb-quick-cats" aria-label="Shop categories">
+            {HOME_CATEGORIES.map((label) => (
+              <button
+                key={label}
+                type="button"
+                className={`pb-quick-cat${search.trim().toLowerCase() === label.toLowerCase() ? ' on' : ''}`}
+                onClick={() => applySearch(label)}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
         </header>
       ) : null}
 
@@ -533,24 +555,31 @@ export function PabiliStorefront({
               <h2>Exclusive Offer</h2>
             </div>
             {ads.length ? (
-              <div className="pb-offers" role="list">
-                {ads.map((ad) => (
-                  <a
-                    key={ad.id}
-                    className="pb-offer-card"
-                    href={ad.redirectUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    role="listitem"
-                    aria-label={ad.title}
-                  >
-                    <span
-                      className="pb-offer-media"
-                      style={ad.imageUrl ? { backgroundImage: `url(${mediaUrl(ad.imageUrl)})` } : undefined}
-                    />
-                    <span className="pb-offer-title">{ad.title}</span>
-                  </a>
-                ))}
+              <div className="pb-offers-marquee" role="list" aria-label="Exclusive offers">
+                <div
+                  className="pb-offers-track"
+                  style={{ animationDuration: `${Math.max(18, ads.length * 7)}s` }}
+                >
+                  {[...ads, ...ads].map((ad, index) => (
+                    <a
+                      key={`${ad.id}-${index}`}
+                      className="pb-offer-card"
+                      href={ad.redirectUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      role="listitem"
+                      aria-label={ad.title}
+                      tabIndex={index >= ads.length ? -1 : 0}
+                      aria-hidden={index >= ads.length}
+                    >
+                      <span
+                        className="pb-offer-media"
+                        style={ad.imageUrl ? { backgroundImage: `url(${mediaUrl(ad.imageUrl)})` } : undefined}
+                      />
+                      <span className="pb-offer-title">{ad.title}</span>
+                    </a>
+                  ))}
+                </div>
               </div>
             ) : (
               <p className="muted">No exclusive offers right now.</p>

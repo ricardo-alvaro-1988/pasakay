@@ -204,47 +204,67 @@ export function OperatorAdsPage() {
             aria-labelledby="exclusive-offer-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 id="exclusive-offer-title">{editing ? 'Edit exclusive offer' : 'New exclusive offer'}</h3>
-            <label>
-              Title
-              <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Weekend deal" />
-            </label>
-            <label>
-              Redirect URL
-              <input
-                value={redirectUrl}
-                onChange={(e) => setRedirectUrl(e.target.value)}
-                placeholder="https://example.com/promo"
-              />
-            </label>
-            <label>
-              Sort order
-              <input
-                type="number"
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value)}
-              />
-            </label>
-            <label>
-              Image
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-              />
-            </label>
-            {editing?.imageUrl ? (
-              <img src={editing.imageUrl} alt="" style={{ maxWidth: '100%', maxHeight: 140, borderRadius: 12, marginTop: 8 }} />
-            ) : null}
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-              <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-              Active on storefront
-            </label>
+            <div className="modal-head">
+              <div>
+                <h2 id="exclusive-offer-title">{editing ? 'Edit exclusive offer' : 'New exclusive offer'}</h2>
+                <p className="muted" style={{ margin: '6px 0 0' }}>
+                  Upload a banner image and set where it opens when customers tap it.
+                </p>
+              </div>
+              <button className="btn tiny" type="button" onClick={closeModal}>Close</button>
+            </div>
+            <div className="form-grid">
+              <label className="field wide">
+                <span>Title</span>
+                <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Weekend deal" />
+              </label>
+              <label className="field wide">
+                <span>Redirect URL</span>
+                <input
+                  value={redirectUrl}
+                  onChange={(e) => setRedirectUrl(e.target.value)}
+                  placeholder="https://example.com/promo"
+                />
+              </label>
+              <label className="field">
+                <span>Sort order</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Status</span>
+                <select value={isActive ? 'active' : 'inactive'} onChange={(e) => setIsActive(e.target.value === 'active')}>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </label>
+              <label className="field wide">
+                <span>Image{editing ? ' (optional replace)' : ''}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              {editing?.imageUrl ? (
+                <div className="field wide">
+                  <span>Current image</span>
+                  <img
+                    src={editing.imageUrl}
+                    alt=""
+                    style={{ maxWidth: '100%', maxHeight: 160, borderRadius: 12, objectFit: 'cover', border: '1px solid var(--line)' }}
+                  />
+                </div>
+              ) : null}
+            </div>
             {formError ? <p className="error">{formError}</p> : null}
             <div className="modal-actions">
-              <button className="btn ghost" type="button" onClick={closeModal} disabled={busy}>Cancel</button>
               <button className="btn" type="button" onClick={() => void save()} disabled={busy}>
-                {busy ? 'Saving…' : 'Save'}
+                {busy ? 'Saving…' : editing ? 'Save changes' : 'Create offer'}
               </button>
             </div>
           </div>
