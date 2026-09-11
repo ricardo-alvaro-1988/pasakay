@@ -452,13 +452,20 @@ export function PabiliStorefront({
 
   return (
     <div className="pb-shell">
-      <div className="pb-mode pb-mode-sm">
-        <button type="button" className="pb-mode-btn" onClick={onSwitchToPasakay}>
-          Pasakay
-        </button>
-        <button type="button" className="pb-mode-btn on" aria-current="page">
-          Pabili
-        </button>
+      <div className={`pb-topbar${view === 'store' ? ' has-back' : ''}`}>
+        {view === 'store' ? (
+          <button type="button" className="pb-back-link" onClick={() => setView('home')}>
+            ← Back
+          </button>
+        ) : null}
+        <div className="pb-mode pb-mode-sm">
+          <button type="button" className="pb-mode-btn" onClick={onSwitchToPasakay}>
+            Pasakay
+          </button>
+          <button type="button" className="pb-mode-btn on" aria-current="page">
+            Pabili
+          </button>
+        </div>
       </div>
 
       {view === 'home' ? (
@@ -643,9 +650,6 @@ export function PabiliStorefront({
 
       {view === 'store' && store && (
         <main className="pb-main pb-store">
-          <button type="button" className="pb-back-link" onClick={() => setView('home')}>
-            ← Back
-          </button>
           <div
             className="pb-store-banner"
             style={store.coverUrl ? { backgroundImage: `url(${mediaUrl(store.coverUrl)})` } : undefined}
