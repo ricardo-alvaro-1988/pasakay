@@ -611,8 +611,22 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             AvailableToTime = request.AvailableAllDay ? null : ParseTime(request.AvailableToTime),
             SortOrder = request.SortOrder,
         };
-        db.MerchantProducts.Add(row);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            db.MerchantProducts.Add(row);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            var root = ex;
+            while (root.InnerException is not null)
+            {
+                root = root.InnerException;
+            }
+
+            return BadRequest(new { message = $"Could not save product: {root.Message}" });
+        }
+
         var loaded = await LoadProductAsync(merchant.Id, row.Id, cancellationToken);
         return Ok(MapProduct(loaded!));
     }
@@ -653,7 +667,21 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         row.AvailableToTime = request.AvailableAllDay ? null : ParseTime(request.AvailableToTime);
         row.SortOrder = request.SortOrder;
         row.UpdatedAtUtc = DateTime.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            var root = ex;
+            while (root.InnerException is not null)
+            {
+                root = root.InnerException;
+            }
+
+            return BadRequest(new { message = $"Could not save product: {root.Message}" });
+        }
+
         var loaded = await LoadProductAsync(merchant.Id, row.Id, cancellationToken);
         return Ok(MapProduct(loaded!));
     }
@@ -777,7 +805,10 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             return NotFound(new { message = "Product not found." });
         }
 
-        var ids = (request.AddonGroupIds ?? []).Distinct().ToList();
+        var ids = (request.AddonGroupIds ?? [])
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
         if (ids.Count > 0)
         {
             var validCount = await db.MerchantAddonGroups.CountAsync(
@@ -789,20 +820,41 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             }
         }
 
-        db.MerchantProductAddons.RemoveRange(row.AdoptedAddons);
-        row.AdoptedAddons.Clear();
-        for (var i = 0; i < ids.Count; i++)
+        try
         {
-            row.AdoptedAddons.Add(new MerchantProductAddon
+            // Delete + commit first, then insert. Avoids unique-index conflicts on
+            // (ProductId, AddonGroupId) when the same groups are kept across a save.
+            if (row.AdoptedAddons.Count > 0)
             {
-                ProductId = row.Id,
-                AddonGroupId = ids[i],
-                SortOrder = i,
-            });
+                db.MerchantProductAddons.RemoveRange(row.AdoptedAddons);
+                row.AdoptedAddons.Clear();
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
+            for (var i = 0; i < ids.Count; i++)
+            {
+                row.AdoptedAddons.Add(new MerchantProductAddon
+                {
+                    ProductId = row.Id,
+                    AddonGroupId = ids[i],
+                    SortOrder = i,
+                });
+            }
+
+            row.UpdatedAtUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            var root = ex;
+            while (root.InnerException is not null)
+            {
+                root = root.InnerException;
+            }
+
+            return BadRequest(new { message = $"Could not save product add-ons: {root.Message}" });
         }
 
-        row.UpdatedAtUtc = DateTime.UtcNow;
-        await db.SaveChangesAsync(cancellationToken);
         var loaded = await LoadProductAsync(merchant!.Id, row.Id, cancellationToken);
         return Ok(MapProduct(loaded!));
     }
@@ -1288,7 +1340,7 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             g.MaxSelect,
             g.SortOrder,
             g.IsActive,
-            g.Options
+            (g.Options ?? [])
                 .OrderBy(o => o.SortOrder)
                 .ThenBy(o => o.Name)
                 .Select(o => new ProductAddonOptionItem(

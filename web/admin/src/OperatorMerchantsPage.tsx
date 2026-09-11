@@ -753,7 +753,20 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
       let row = editingProduct
         ? await api.updateOperatorMerchantProduct(merchantId, editingProduct.id, body)
         : await api.createOperatorMerchantProduct(merchantId, body)
-      row = await api.saveOperatorMerchantProductAddons(merchantId, row.id, adoptedGroupIds)
+      const addonIds = adoptedGroupIds.filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+      try {
+        row = await api.saveOperatorMerchantProductAddons(merchantId, row.id, addonIds)
+      } catch (addonErr) {
+        setProductError(
+          addonErr instanceof Error
+            ? `Product saved, but add-ons failed: ${addonErr.message}`
+            : 'Product saved, but add-ons failed.',
+        )
+        const list = await api.operatorMerchantProducts(merchantId)
+        setProducts(list.items)
+        setEditingProduct(row)
+        return
+      }
       if (productImageFile) {
         const compressed = await compressImageFile(productImageFile)
         row = await api.uploadOperatorMerchantProductImage(merchantId, row.id, compressed)
