@@ -1162,6 +1162,16 @@ public record CustomerPabiliMerchantCard(
     double Latitude,
     double Longitude);
 
+public record CustomerPabiliPopularProduct(
+    Guid Id,
+    Guid MerchantId,
+    string MerchantName,
+    string Name,
+    string Description,
+    decimal SellingPrice,
+    string? ImageUrl,
+    bool MerchantOpen);
+
 public record CustomerPabiliAddonOption(
     Guid Id,
     string Name,

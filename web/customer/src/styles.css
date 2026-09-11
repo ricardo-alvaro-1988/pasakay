@@ -2660,7 +2660,7 @@ button.brand-pill:active { transform: scale(.98); }
   background: color-mix(in srgb, var(--accent) 12%, #fff);
   box-shadow: 0 6px 18px color-mix(in srgb, #000 6%, transparent);
 }
-.pb-shell .pb-mode-sm {
+.pb-mode-sm {
   width: fit-content;
   max-width: 168px;
   margin: 8px 12px 0;
@@ -2668,17 +2668,17 @@ button.brand-pill:active { transform: scale(.98); }
   gap: 2px;
   box-shadow: none;
 }
-.pb-shell .pb-mode-sm .pb-mode-btn {
+.pb-mode-sm .pb-mode-btn {
   padding: 4px 10px;
   font-size: 11px;
   font-weight: 700;
 }
-.pb-shell .pb-mode-sm .pb-mode-btn.on {
+.pb-mode-sm .pb-mode-btn.on {
   box-shadow: none;
 }
 .pasakay-mode {
   margin: 0 0 8px;
-  max-width: 220px;
+  max-width: 168px;
 }
 .pb-mode-btn {
   border: 0;
@@ -2715,6 +2715,14 @@ button.brand-pill:active { transform: scale(.98); }
   background: #fff;
   color: #111;
   font-size: 13px;
+}
+.pb-store-search {
+  margin: 0 0 10px;
+}
+.pb-store-search .pb-search {
+  background: #fff;
+  border: 1px solid color-mix(in srgb, #000 8%, transparent);
+  box-shadow: 0 4px 12px color-mix(in srgb, #000 4%, transparent);
 }
 .pb-main { padding: 12px 12px 20px; }
 .pb-error { margin: 8px 12px 0; font-size: 12px; }
@@ -2840,14 +2848,78 @@ button.brand-pill:active { transform: scale(.98); }
   background-size: cover;
   background-position: center;
 }
+.pb-store-list {
+  display: grid;
+  gap: 8px;
+}
+.pb-store-row {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: 0 4px 14px color-mix(in srgb, #000 5%, transparent);
+}
+.pb-store-row-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  background: #e8ebef center/cover no-repeat;
+}
+.pb-store-row-copy {
+  min-width: 0;
+  line-height: 1.35;
+}
+.pb-store-row-copy b {
+  font-size: 13px;
+  font-weight: 800;
+}
+.pb-store-row-copy .muted {
+  font-size: 11px;
+}
 .pb-store-banner {
-  margin: 0 -14px 12px;
-  min-height: 140px;
-  background: linear-gradient(135deg, #2b3038, color-mix(in srgb, var(--accent) 55%, #222));
+  margin: 0 -12px 12px;
+  min-height: 148px;
+  border-radius: 0;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 35%, #2b3038), #5a4638);
   background-size: cover;
   background-position: center;
-  color: #fff;
-  padding: 16px 14px;
+}
+.pb-store-identity {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 12px;
+  align-items: start;
+  margin: -36px 0 14px;
+  position: relative;
+  z-index: 1;
+}
+.pb-store-identity-img {
+  width: 64px;
+  height: 64px;
+  border-radius: 14px;
+  background: #fff center/cover no-repeat;
+  box-shadow: 0 8px 18px color-mix(in srgb, #000 12%, transparent);
+  border: 2px solid #fff;
+}
+.pb-store-identity-copy {
+  padding-top: 28px;
+  min-width: 0;
+}
+.pb-store-identity-copy h2 {
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+}
+.pb-store-identity-copy p {
+  margin: 0 0 4px;
+  font-size: 11px;
+  line-height: 1.35;
 }
 .pb-store-banner-inner { display: flex; gap: 12px; align-items: flex-end; }
 .pb-store-banner img {

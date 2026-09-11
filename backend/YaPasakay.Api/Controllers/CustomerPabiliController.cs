@@ -58,6 +58,68 @@ public class CustomerPabiliController(
         return Ok(rows.Select(MapMerchantCard).ToList());
     }
 
+    [HttpGet("products/popular")]
+    public async Task<ActionResult<IReadOnlyList<CustomerPabiliPopularProduct>>> PopularProducts(
+        [FromQuery] double lat,
+        [FromQuery] double lng,
+        [FromQuery] Guid? barangayId,
+        [FromQuery] string? q,
+        CancellationToken cancellationToken)
+    {
+        var (customer, status, message) = await CustomerContext.RequireAsync(db, User, cancellationToken);
+        if (customer is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var op = await ResolveOperatorAsync(barangayId, lat, lng, cancellationToken);
+        if (op is null)
+        {
+            return Ok(Array.Empty<CustomerPabiliPopularProduct>());
+        }
+
+        var merchants = await db.Merchants
+            .AsNoTracking()
+            .Include(x => x.OperatingHours)
+            .Include(x => x.Products)
+            .Where(x => x.OperatorId == op.Id && x.IsActive)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.BusinessName)
+            .Take(40)
+            .ToListAsync(cancellationToken);
+
+        IEnumerable<(Merchant Merchant, MerchantProduct Product)> pairs = merchants
+            .SelectMany(m => m.Products
+                .Where(p => PabiliPricingService.IsProductAvailableNow(p))
+                .OrderBy(p => p.SortOrder)
+                .ThenBy(p => p.Name)
+                .Select(p => (m, p)));
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim();
+            pairs = pairs.Where(x =>
+                x.Product.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || x.Product.Description.Contains(term, StringComparison.OrdinalIgnoreCase)
+                || x.Merchant.BusinessName.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var items = pairs
+            .Take(24)
+            .Select(x => new CustomerPabiliPopularProduct(
+                x.Product.Id,
+                x.Merchant.Id,
+                x.Merchant.BusinessName,
+                x.Product.Name,
+                x.Product.Description,
+                x.Product.SellingPrice,
+                UploadUrls.FromPath(x.Product.ImagePath),
+                PabiliPricingService.IsMerchantOpen(x.Merchant)))
+            .ToList();
+
+        return Ok(items);
+    }
+
     [HttpGet("merchants/{id:guid}")]
     public async Task<ActionResult<CustomerPabiliStoreResponse>> Store(Guid id, CancellationToken cancellationToken)
     {

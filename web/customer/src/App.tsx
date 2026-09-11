@@ -918,7 +918,7 @@ function Home({
       <div className="hud">
         <div className="topbar">
           <div className="brand-col">
-            <div className="pb-mode pasakay-mode">
+            <div className="pb-mode pb-mode-sm pasakay-mode">
               <button type="button" className="pb-mode-btn on" aria-current="page">
                 Pasakay
               </button>

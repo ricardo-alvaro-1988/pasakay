@@ -565,6 +565,24 @@ export const api = {
       longitude: number
     }>>(`/api/customer/pabili/merchants?${params}`)
   },
+  pabiliPopularProducts: (opts: { lat: number; lng: number; barangayId?: string; q?: string }) => {
+    const params = new URLSearchParams({
+      lat: String(opts.lat),
+      lng: String(opts.lng),
+    })
+    if (opts.barangayId) params.set('barangayId', opts.barangayId)
+    if (opts.q?.trim()) params.set('q', opts.q.trim())
+    return request<Array<{
+      id: string
+      merchantId: string
+      merchantName: string
+      name: string
+      description: string
+      sellingPrice: number
+      imageUrl: string | null
+      merchantOpen: boolean
+    }>>(`/api/customer/pabili/products/popular?${params}`)
+  },
   pabiliStore: (id: string) =>
     request<{
       id: string

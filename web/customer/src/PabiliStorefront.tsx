@@ -101,6 +101,16 @@ export function PabiliStorefront({
   const [accountPage, setAccountPage] = useState<AccountPage>('menu')
   const [search, setSearch] = useState('')
   const [merchants, setMerchants] = useState<MerchantCard[]>([])
+  const [popularProducts, setPopularProducts] = useState<Array<{
+    id: string
+    merchantId: string
+    merchantName: string
+    name: string
+    description: string
+    sellingPrice: number
+    imageUrl: string | null
+    merchantOpen: boolean
+  }>>([])
   const [store, setStore] = useState<Store | null>(null)
   const [cart, setCart] = useState<CartLine[]>([])
   const [gps, setGps] = useState<{ lat: number; lng: number }>(() => {
@@ -118,6 +128,7 @@ export function PabiliStorefront({
   const [sheetPicks, setSheetPicks] = useState<Record<string, string[]>>({})
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+  const [storeSearch, setStoreSearch] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -155,8 +166,12 @@ export function PabiliStorefront({
   async function loadMerchants(term = search) {
     setError('')
     try {
-      const rows = await api.pabiliMerchants({ lat, lng, q: term })
+      const [rows, popular] = await Promise.all([
+        api.pabiliMerchants({ lat, lng, q: term }),
+        api.pabiliPopularProducts({ lat, lng, q: term }),
+      ])
       setMerchants(rows)
+      setPopularProducts(popular)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load stores.')
     }
@@ -167,14 +182,19 @@ export function PabiliStorefront({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lat, lng])
 
-  async function openStore(id: string) {
+  async function openStore(id: string, focusProductId?: string) {
     setBusy(true)
     setError('')
     try {
       const row = await api.pabiliStore(id)
       setStore(row)
       setCategoryFilter(null)
+      setStoreSearch('')
       setView('store')
+      if (focusProductId) {
+        const product = row.products.find((p) => p.id === focusProductId)
+        if (product) openProduct(product)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Store unavailable.')
     } finally {
@@ -352,11 +372,20 @@ export function PabiliStorefront({
 
   const filteredProducts = useMemo(() => {
     if (!store) return []
-    if (!categoryFilter) return store.products
-    return store.products.filter((p) => p.categoryId === categoryFilter || p.categoryName === categoryFilter)
-  }, [store, categoryFilter])
+    const term = storeSearch.trim().toLowerCase()
+    return store.products.filter((p) => {
+      if (categoryFilter && p.categoryId !== categoryFilter && p.categoryName !== categoryFilter) {
+        return false
+      }
+      if (!term) return true
+      return (
+        p.name.toLowerCase().includes(term)
+        || p.description.toLowerCase().includes(term)
+        || p.categoryName.toLowerCase().includes(term)
+      )
+    })
+  }, [store, categoryFilter, storeSearch])
 
-  const popularMerchants = merchants.slice(0, 6)
   const showShellNav = view === 'home' || view === 'orders' || view === 'cart' || view === 'account'
   const cartNavOn = view === 'cart' || view === 'checkout'
 
@@ -412,42 +441,52 @@ export function PabiliStorefront({
             <div className="pb-section-head">
               <h2>Popular now</h2>
             </div>
-            <div className="pb-popular">
-              {popularMerchants.map((m) => (
-                <button key={m.id} type="button" className="pb-popular-card" onClick={() => void openStore(m.id)}>
+            <div className="pb-product-grid">
+              {popularProducts.map((p) => (
+                <button
+                  key={`${p.merchantId}-${p.id}`}
+                  type="button"
+                  className="pb-product-card"
+                  onClick={() => void openStore(p.merchantId, p.id)}
+                >
                   <div
-                    className="pb-popular-img"
-                    style={m.coverUrl || m.logoUrl ? { backgroundImage: `url(${mediaUrl(m.coverUrl || m.logoUrl)})` } : undefined}
+                    className="pb-product-img"
+                    style={p.imageUrl ? { backgroundImage: `url(${mediaUrl(p.imageUrl)})` } : undefined}
                   />
-                  <div className="pb-popular-body">
-                    <b>{m.name}</b>
-                    <div className="pb-meta">
-                      <span className={m.isOpen ? 'ok' : 'bad'}>{m.isOpen ? 'Open' : 'Closed'}</span>
-                      <span className="muted">·</span>
-                      <span className="muted truncate">{m.address}</span>
-                    </div>
+                  <div className="pb-product-body">
+                    <b>{p.name}</b>
+                    <small className="muted">{p.merchantName}</small>
+                    <span className="pb-price">{peso(p.sellingPrice)}</span>
                   </div>
                 </button>
               ))}
-              {!popularMerchants.length ? <p className="muted">No stores nearby yet.</p> : null}
+              {!popularProducts.length ? <p className="muted">No products nearby yet.</p> : null}
             </div>
           </section>
 
           <section className="pb-section">
             <div className="pb-section-head">
-              <h2>All merchants</h2>
+              <h2>Store Near You</h2>
             </div>
-            <div className="pb-merchant-row">
+            <div className="pb-store-list">
               {merchants.map((m) => (
-                <button key={m.id} type="button" className="pb-merchant-mini" onClick={() => void openStore(m.id)}>
+                <button key={m.id} type="button" className="pb-store-row" onClick={() => void openStore(m.id)}>
                   <div
-                    className="pb-mini-img"
-                    style={m.logoUrl ? { backgroundImage: `url(${mediaUrl(m.logoUrl)})` } : undefined}
+                    className="pb-store-row-img"
+                    style={
+                      m.logoUrl || m.coverUrl
+                        ? { backgroundImage: `url(${mediaUrl(m.logoUrl || m.coverUrl)})` }
+                        : undefined
+                    }
                   />
-                  <b>{m.name}</b>
-                  <small className={m.isOpen ? 'ok' : 'bad'}>{m.isOpen ? 'Open' : 'Closed'}</small>
+                  <div className="pb-store-row-copy">
+                    <b>{m.name}</b>
+                    <br />
+                    <span className="muted">{m.address || 'Location unavailable'}</span>
+                  </div>
                 </button>
               ))}
+              {!merchants.length ? <p className="muted">No stores nearby yet.</p> : null}
             </div>
           </section>
         </main>
@@ -461,14 +500,32 @@ export function PabiliStorefront({
           <div
             className="pb-store-banner"
             style={store.coverUrl ? { backgroundImage: `url(${mediaUrl(store.coverUrl)})` } : undefined}
-          >
-            <div className="pb-store-banner-inner">
-              {store.logoUrl ? <img src={mediaUrl(store.logoUrl)} alt="" /> : null}
-              <div>
-                <h2>{store.name}</h2>
-                <p className="muted">{store.address}</p>
-              </div>
+            role="img"
+            aria-label={store.name}
+          />
+          <div className="pb-store-identity">
+            <div
+              className="pb-store-identity-img"
+              style={
+                store.logoUrl || store.coverUrl
+                  ? { backgroundImage: `url(${mediaUrl(store.logoUrl || store.coverUrl)})` }
+                  : undefined
+              }
+            />
+            <div className="pb-store-identity-copy">
+              <h2>{store.name}</h2>
+              <p className="muted">{store.address || 'Location unavailable'}</p>
+              <span className={store.isOpen ? 'ok' : 'bad'}>{store.isOpen ? 'Open' : 'Closed'}</span>
             </div>
+          </div>
+          <div className="pb-search-wrap pb-store-search">
+            <input
+              className="pb-search"
+              placeholder={`Search in ${store.name}…`}
+              value={storeSearch}
+              onChange={(e) => setStoreSearch(e.target.value)}
+              aria-label="Search store products"
+            />
           </div>
           {storeCategories.length > 0 ? (
             <div className="pb-cats sticky">
@@ -501,6 +558,11 @@ export function PabiliStorefront({
                 </div>
               </button>
             ))}
+            {!filteredProducts.length ? (
+              <p className="muted">
+                {storeSearch.trim() ? 'No products match your search.' : 'No products available.'}
+              </p>
+            ) : null}
           </div>
           {cartCount > 0 ? (
             <button type="button" className="pb-cart-cta" onClick={() => setView('cart')}>
