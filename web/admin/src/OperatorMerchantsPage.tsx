@@ -1120,55 +1120,79 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
                     <input type="number" min={1} value={libForm.maxSelect} onChange={(e) => setLibForm({ ...libForm, maxSelect: Number(e.target.value) || 1 })} />
                   </label>
                 </div>
-                {(libForm.options ?? []).map((opt, oi) => (
-                  <div key={oi} style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
-                    <input
-                      placeholder="Option name"
-                      value={opt.name}
-                      style={{ flex: '1 1 160px' }}
-                      onChange={(e) => {
-                        const options = [...(libForm.options ?? [])]
-                        options[oi] = { ...opt, name: e.target.value }
-                        setLibForm({ ...libForm, options })
-                      }}
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      title="Base price"
-                      placeholder="Base"
-                      value={opt.basePrice}
-                      style={{ width: 100 }}
-                      onChange={(e) => {
-                        const options = [...(libForm.options ?? [])]
-                        options[oi] = { ...opt, basePrice: Number(e.target.value) || 0 }
-                        setLibForm({ ...libForm, options })
-                      }}
-                    />
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      title="Selling price"
-                      placeholder="Sell"
-                      value={opt.sellingPrice}
-                      style={{ width: 100 }}
-                      onChange={(e) => {
-                        const options = [...(libForm.options ?? [])]
-                        options[oi] = { ...opt, sellingPrice: Number(e.target.value) || 0 }
-                        setLibForm({ ...libForm, options })
-                      }}
-                    />
-                    <button
-                      className="btn tiny danger"
-                      type="button"
-                      onClick={() => setLibForm({ ...libForm, options: (libForm.options ?? []).filter((_, i) => i !== oi) })}
-                    >
-                      ×
-                    </button>
+                <div style={{ marginTop: 14 }}>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'minmax(140px, 1fr) 100px 100px 36px',
+                      gap: 8,
+                      alignItems: 'end',
+                      marginBottom: 6,
+                    }}
+                  >
+                    <span className="form-hint" style={{ margin: 0, fontWeight: 600 }}>Name</span>
+                    <span className="form-hint" style={{ margin: 0, fontWeight: 600 }}>Base</span>
+                    <span className="form-hint" style={{ margin: 0, fontWeight: 600 }}>Selling</span>
+                    <span />
                   </div>
-                ))}
+                  {(libForm.options ?? []).map((opt, oi) => (
+                    <div
+                      key={oi}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(140px, 1fr) 100px 100px 36px',
+                        gap: 8,
+                        alignItems: 'center',
+                        marginTop: oi === 0 ? 0 : 8,
+                      }}
+                    >
+                      <input
+                        aria-label="Name"
+                        placeholder="Option name"
+                        value={opt.name}
+                        onChange={(e) => {
+                          const options = [...(libForm.options ?? [])]
+                          options[oi] = { ...opt, name: e.target.value }
+                          setLibForm({ ...libForm, options })
+                        }}
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        aria-label="Base"
+                        placeholder="0.00"
+                        value={opt.basePrice}
+                        onChange={(e) => {
+                          const options = [...(libForm.options ?? [])]
+                          options[oi] = { ...opt, basePrice: Number(e.target.value) || 0 }
+                          setLibForm({ ...libForm, options })
+                        }}
+                      />
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        aria-label="Selling"
+                        placeholder="0.00"
+                        value={opt.sellingPrice}
+                        onChange={(e) => {
+                          const options = [...(libForm.options ?? [])]
+                          options[oi] = { ...opt, sellingPrice: Number(e.target.value) || 0 }
+                          setLibForm({ ...libForm, options })
+                        }}
+                      />
+                      <button
+                        className="btn tiny danger"
+                        type="button"
+                        aria-label="Remove option"
+                        onClick={() => setLibForm({ ...libForm, options: (libForm.options ?? []).filter((_, i) => i !== oi) })}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
                 <button
                   className="btn tiny"
                   type="button"
