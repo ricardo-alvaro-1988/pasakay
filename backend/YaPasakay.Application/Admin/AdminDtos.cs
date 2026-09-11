@@ -1017,7 +1017,8 @@ public record SaveMerchantProductCategoryRequest(
 public record ProductAddonOptionItem(
     Guid? Id,
     string Name,
-    decimal PriceDelta,
+    decimal BasePrice,
+    decimal SellingPrice,
     int SortOrder,
     bool IsActive);
 
@@ -1037,6 +1038,7 @@ public record MerchantProductItem(
     string? CategoryName,
     string Name,
     string Description,
+    decimal BasePrice,
     decimal SellingPrice,
     bool AvailableOnStorefront,
     bool AvailableAllDay,
@@ -1051,6 +1053,7 @@ public record SaveMerchantProductRequest(
     Guid? CategoryId,
     string Name,
     string Description,
+    decimal BasePrice,
     decimal SellingPrice,
     bool AvailableOnStorefront,
     bool AvailableAllDay,

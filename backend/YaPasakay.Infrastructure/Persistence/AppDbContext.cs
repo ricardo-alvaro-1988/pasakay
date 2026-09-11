@@ -674,6 +674,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
             entity.Property(x => x.BasePrice).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.SellingPrice).HasColumnType("decimal(18,2)");
             entity.Property(x => x.ImagePath).HasMaxLength(260);
             entity.Property(x => x.AvailableOnStorefront).HasDefaultValue(true);
             entity.HasOne(x => x.Merchant)
@@ -721,7 +722,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             entity.HasIndex(x => x.AddonGroupId);
             entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
-            entity.Property(x => x.PriceDelta).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.BasePrice).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.SellingPrice).HasColumnType("decimal(18,2)");
             entity.HasOne(x => x.AddonGroup)
                 .WithMany(x => x.Options)
                 .HasForeignKey(x => x.AddonGroupId)

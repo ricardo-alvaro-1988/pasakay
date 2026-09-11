@@ -251,7 +251,8 @@ public static class MerchantCatalogBootstrap
                     [Id] uniqueidentifier NOT NULL,
                     [AddonGroupId] uniqueidentifier NOT NULL,
                     [Name] nvarchar(120) NOT NULL,
-                    [PriceDelta] decimal(18,2) NOT NULL,
+                    [BasePrice] decimal(18,2) NOT NULL CONSTRAINT [DF_MerchantAddonOptions_BasePrice] DEFAULT (0),
+                    [SellingPrice] decimal(18,2) NOT NULL CONSTRAINT [DF_MerchantAddonOptions_SellingPrice] DEFAULT (0),
                     [SortOrder] int NOT NULL,
                     [IsActive] bit NOT NULL,
                     [CreatedAtUtc] datetime2 NOT NULL,
@@ -289,6 +290,39 @@ public static class MerchantCatalogBootstrap
             )
                 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
                 VALUES (N'20260911030157_MerchantAddonLibrary', N'9.0.8');
+            """, cancellationToken);
+    }
+
+    public static async Task EnsureDualPricingAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            IF COL_LENGTH(N'MerchantProducts', N'SellingPrice') IS NULL
+            BEGIN
+                ALTER TABLE [MerchantProducts] ADD [SellingPrice] decimal(18,2) NOT NULL CONSTRAINT [DF_MerchantProducts_SellingPrice] DEFAULT (0);
+                UPDATE [MerchantProducts] SET [SellingPrice] = [BasePrice];
+            END
+
+            IF OBJECT_ID(N'[MerchantAddonOptions]', N'U') IS NOT NULL
+            BEGIN
+                IF COL_LENGTH(N'MerchantAddonOptions', N'SellingPrice') IS NULL
+                   AND COL_LENGTH(N'MerchantAddonOptions', N'PriceDelta') IS NOT NULL
+                BEGIN
+                    EXEC sp_rename N'MerchantAddonOptions.PriceDelta', N'SellingPrice', N'COLUMN';
+                END
+
+                IF COL_LENGTH(N'MerchantAddonOptions', N'SellingPrice') IS NULL
+                    ALTER TABLE [MerchantAddonOptions] ADD [SellingPrice] decimal(18,2) NOT NULL CONSTRAINT [DF_MerchantAddonOptions_SellingPrice] DEFAULT (0);
+
+                IF COL_LENGTH(N'MerchantAddonOptions', N'BasePrice') IS NULL
+                    ALTER TABLE [MerchantAddonOptions] ADD [BasePrice] decimal(18,2) NOT NULL CONSTRAINT [DF_MerchantAddonOptions_BasePrice] DEFAULT (0);
+            END
+
+            IF NOT EXISTS (
+                SELECT 1 FROM [__EFMigrationsHistory]
+                WHERE [MigrationId] = N'20260911041500_MerchantDualPricing'
+            )
+                INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+                VALUES (N'20260911041500_MerchantDualPricing', N'9.0.8');
             """, cancellationToken);
     }
 

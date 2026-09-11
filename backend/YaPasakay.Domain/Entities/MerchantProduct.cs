@@ -10,7 +10,10 @@ public class MerchantProduct : BaseEntity
     public MerchantProductCategory? Category { get; set; }
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
+    /// <summary>Cost / acquisition price.</summary>
     public decimal BasePrice { get; set; }
+    /// <summary>Price charged to the customer.</summary>
+    public decimal SellingPrice { get; set; }
     public bool AvailableOnStorefront { get; set; } = true;
     /// <summary>When both null, product is available all day (within store hours).</summary>
     public TimeSpan? AvailableFromTime { get; set; }

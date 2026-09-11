@@ -450,7 +450,8 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             group.Options.Add(new MerchantAddonOption
             {
                 Name = option.Name.Trim(),
-                PriceDelta = option.PriceDelta,
+                BasePrice = option.BasePrice,
+                SellingPrice = option.SellingPrice,
                 SortOrder = option.SortOrder,
                 IsActive = option.IsActive,
             });
@@ -501,7 +502,8 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             group.Options.Add(new MerchantAddonOption
             {
                 Name = option.Name.Trim(),
-                PriceDelta = option.PriceDelta,
+                BasePrice = option.BasePrice,
+                SellingPrice = option.SellingPrice,
                 SortOrder = option.SortOrder,
                 IsActive = option.IsActive,
             });
@@ -602,7 +604,8 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             CategoryId = request.CategoryId,
             Name = request.Name.Trim(),
             Description = (request.Description ?? string.Empty).Trim(),
-            BasePrice = request.SellingPrice,
+            BasePrice = request.BasePrice,
+            SellingPrice = request.SellingPrice,
             AvailableOnStorefront = request.AvailableOnStorefront,
             AvailableFromTime = request.AvailableAllDay ? null : ParseTime(request.AvailableFromTime),
             AvailableToTime = request.AvailableAllDay ? null : ParseTime(request.AvailableToTime),
@@ -643,7 +646,8 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         row.CategoryId = request.CategoryId;
         row.Name = request.Name.Trim();
         row.Description = (request.Description ?? string.Empty).Trim();
-        row.BasePrice = request.SellingPrice;
+        row.BasePrice = request.BasePrice;
+        row.SellingPrice = request.SellingPrice;
         row.AvailableOnStorefront = request.AvailableOnStorefront;
         row.AvailableFromTime = request.AvailableAllDay ? null : ParseTime(request.AvailableFromTime);
         row.AvailableToTime = request.AvailableAllDay ? null : ParseTime(request.AvailableToTime);
@@ -1133,6 +1137,11 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             return "Product name is required.";
         }
 
+        if (request.BasePrice < 0)
+        {
+            return "Base price cannot be negative.";
+        }
+
         if (request.SellingPrice < 0)
         {
             return "Selling price cannot be negative.";
@@ -1193,9 +1202,9 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
                     return "Addon option name is required.";
                 }
 
-                if (option.PriceDelta < 0)
+                if (option.BasePrice < 0 || option.SellingPrice < 0)
                 {
-                    return "Addon option price cannot be negative.";
+                    return "Addon option prices cannot be negative.";
                 }
             }
         }
@@ -1285,7 +1294,8 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
                 .Select(o => new ProductAddonOptionItem(
                     o.Id,
                     o.Name,
-                    o.PriceDelta,
+                    o.BasePrice,
+                    o.SellingPrice,
                     o.SortOrder,
                     o.IsActive))
                 .ToList());
@@ -1304,6 +1314,7 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             row.Name,
             row.Description,
             row.BasePrice,
+            row.SellingPrice,
             row.AvailableOnStorefront,
             row.AvailableFromTime is null && row.AvailableToTime is null,
             FormatTime(row.AvailableFromTime),

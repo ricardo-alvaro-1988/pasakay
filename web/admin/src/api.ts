@@ -419,7 +419,8 @@ export type MerchantProductCategoryItem = {
 export type ProductAddonOptionItem = {
   id?: string | null
   name: string
-  priceDelta: number
+  basePrice: number
+  sellingPrice: number
   sortOrder: number
   isActive: boolean
 }
@@ -441,6 +442,7 @@ export type MerchantProductItem = {
   categoryName: string | null
   name: string
   description: string
+  basePrice: number
   sellingPrice: number
   availableOnStorefront: boolean
   availableAllDay: boolean
@@ -456,6 +458,7 @@ export type SaveMerchantProductBody = {
   categoryId?: string | null
   name: string
   description: string
+  basePrice: number
   sellingPrice: number
   availableOnStorefront: boolean
   availableAllDay: boolean

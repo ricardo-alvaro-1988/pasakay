@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   api,
   MerchantDetailItem,
@@ -12,6 +12,79 @@ import {
 } from './api'
 import { compressImageFile } from './compress-image'
 import { MerchantPinMap } from './MerchantPinMap'
+
+type SuggestRow = { id: string; name: string; extra?: string; photoUrl?: string | null }
+
+function ProductSuggest({
+  query,
+  onQuery,
+  items,
+  placeholder,
+  onPick,
+}: {
+  query: string
+  onQuery: (value: string) => void
+  items: SuggestRow[]
+  placeholder: string
+  onPick: (item: SuggestRow) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const q = query.trim().toLowerCase()
+  const filtered = items
+    .filter((item) => !q || item.name.toLowerCase().includes(q) || (item.extra ?? '').toLowerCase().includes(q))
+    .sort((a, b) => {
+      if (!q) return a.name.localeCompare(b.name)
+      const aStarts = a.name.toLowerCase().startsWith(q)
+      const bStarts = b.name.toLowerCase().startsWith(q)
+      if (aStarts !== bStarts) return aStarts ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+
+  return (
+    <div className="ac">
+      <input
+        value={query}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(e) => {
+          onQuery(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 160)}
+      />
+      {open ? (
+        <div className="suggest">
+          {filtered.length === 0 ? (
+            <div className="suggest-empty">No matches</div>
+          ) : (
+            filtered.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onPick(item)
+                  setOpen(false)
+                }}
+              >
+                {item.photoUrl ? (
+                  <img src={item.photoUrl} alt="" className="ac-avatar" style={{ objectFit: 'cover' }} />
+                ) : (
+                  <span className="ac-avatar ac-initial">{item.name.slice(0, 1).toUpperCase()}</span>
+                )}
+                <span className="ac-text">
+                  <span className="suggest-name">{item.name}</span>
+                  {item.extra ? <small>{item.extra}</small> : null}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
 
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
@@ -478,12 +551,17 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const [catName, setCatName] = useState('')
+  const [catOpen, setCatOpen] = useState(false)
+  const [editingCat, setEditingCat] = useState<MerchantProductCategoryItem | null>(null)
+  const [catForm, setCatForm] = useState({ name: '', sortOrder: 0, isActive: true })
+  const [catError, setCatError] = useState('')
+  const [productQuery, setProductQuery] = useState('')
   const [productOpen, setProductOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<MerchantProductItem | null>(null)
   const [productForm, setProductForm] = useState({
     name: '',
     description: '',
+    basePrice: '0',
     sellingPrice: '0',
     categoryId: '',
     availableOnStorefront: true,
@@ -504,7 +582,7 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
     maxSelect: 3,
     sortOrder: 0,
     isActive: true,
-    options: [{ name: '', priceDelta: 0, sortOrder: 0, isActive: true }],
+    options: [{ name: '', basePrice: 0, sellingPrice: 0, sortOrder: 0, isActive: true }],
   })
   const [libError, setLibError] = useState('')
 
@@ -544,20 +622,60 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
     }
   }
 
-  async function addCategory(e: FormEvent) {
-    e.preventDefault()
-    if (!catName.trim()) return
+  function openCategory(cat?: MerchantProductCategoryItem) {
+    if (cat) {
+      setEditingCat(cat)
+      setCatForm({ name: cat.name, sortOrder: cat.sortOrder, isActive: cat.isActive })
+    } else {
+      setEditingCat(null)
+      setCatForm({ name: '', sortOrder: categories.length, isActive: true })
+    }
+    setCatError('')
+    setCatOpen(true)
+  }
+
+  async function saveCategory() {
+    if (!catForm.name.trim()) {
+      setCatError('Category name is required.')
+      return
+    }
+    setBusy(true)
+    setCatError('')
     try {
-      const row = await api.createOperatorMerchantCategory(merchantId, {
-        name: catName.trim(),
-        sortOrder: categories.length,
-        isActive: true,
-      })
-      setCategories([...categories, row])
-      setCatName('')
-      setNotice('Category added.')
+      if (editingCat?.id) {
+        await api.updateOperatorMerchantCategory(merchantId, editingCat.id, {
+          name: catForm.name.trim(),
+          sortOrder: catForm.sortOrder,
+          isActive: catForm.isActive,
+        })
+      } else {
+        await api.createOperatorMerchantCategory(merchantId, {
+          name: catForm.name.trim(),
+          sortOrder: catForm.sortOrder,
+          isActive: catForm.isActive,
+        })
+      }
+      const c = await api.operatorMerchantCategories(merchantId)
+      setCategories(c.items)
+      setCatOpen(false)
+      setNotice(editingCat ? 'Category updated.' : 'Category added.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not add category.')
+      setCatError(err instanceof Error ? err.message : 'Could not save category.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeCategory(cat: MerchantProductCategoryItem) {
+    if (!confirm(`Delete category "${cat.name}"? Products in it will become uncategorized.`)) return
+    try {
+      await api.deleteOperatorMerchantCategory(merchantId, cat.id)
+      setCategories(categories.filter((x) => x.id !== cat.id))
+      const list = await api.operatorMerchantProducts(merchantId)
+      setProducts(list.items)
+      setNotice('Category deleted.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete category.')
     }
   }
 
@@ -568,7 +686,7 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
         ...group,
         options: group.options?.length
           ? group.options
-          : [{ name: '', priceDelta: 0, sortOrder: 0, isActive: true }],
+          : [{ name: '', basePrice: 0, sellingPrice: 0, sortOrder: 0, isActive: true }],
       })
     } else {
       setEditingLib(null)
@@ -578,7 +696,7 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
         maxSelect: 3,
         sortOrder: library.length,
         isActive: true,
-        options: [{ name: 'Extra rice', priceDelta: 15, sortOrder: 0, isActive: true }],
+        options: [{ name: 'Extra rice', basePrice: 10, sellingPrice: 15, sortOrder: 0, isActive: true }],
       })
     }
     setLibError('')
@@ -631,6 +749,7 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
       setProductForm({
         name: product.name,
         description: product.description,
+        basePrice: String(product.basePrice ?? 0),
         sellingPrice: String(product.sellingPrice),
         categoryId: product.categoryId ?? '',
         availableOnStorefront: product.availableOnStorefront,
@@ -645,6 +764,7 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
       setProductForm({
         name: '',
         description: '',
+        basePrice: '0',
         sellingPrice: '0',
         categoryId: '',
         availableOnStorefront: true,
@@ -660,9 +780,10 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
   }
 
   async function saveProduct() {
-    const price = Number(productForm.sellingPrice)
-    if (!productForm.name.trim() || !Number.isFinite(price) || price < 0) {
-      setProductError('Name and a valid selling price are required.')
+    const basePrice = Number(productForm.basePrice)
+    const sellingPrice = Number(productForm.sellingPrice)
+    if (!productForm.name.trim() || !Number.isFinite(basePrice) || basePrice < 0 || !Number.isFinite(sellingPrice) || sellingPrice < 0) {
+      setProductError('Name and valid base/selling prices are required.')
       return
     }
     if (!productForm.availableAllDay) {
@@ -681,7 +802,8 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
       const body: SaveMerchantProductBody = {
         name: productForm.name.trim(),
         description: productForm.description.trim(),
-        sellingPrice: price,
+        basePrice,
+        sellingPrice,
         categoryId: productForm.categoryId || null,
         availableOnStorefront: productForm.availableOnStorefront,
         availableAllDay: productForm.availableAllDay,
@@ -790,7 +912,7 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
                 <tr key={g.id}>
                   <td><strong>{g.name}</strong></td>
                   <td>{g.minSelect}–{g.maxSelect}</td>
-                  <td>{(g.options ?? []).map((o) => `${o.name} (+₱${o.priceDelta})`).join(', ') || '—'}</td>
+                  <td>{(g.options ?? []).map((o) => `${o.name} (₱${Number(o.sellingPrice).toFixed(2)})`).join(', ') || '—'}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn tiny" type="button" onClick={() => openLibrary(g)}>Edit</button>{' '}
                     <button className="btn tiny danger" type="button" onClick={() => void removeLibrary(g)}>Delete</button>
@@ -804,27 +926,36 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
 
       <div className="card">
         <div className="toolbar">
-          <h3 style={{ margin: 0 }}>Categories</h3>
+          <div>
+            <h3 style={{ margin: 0 }}>Categories</h3>
+            <p className="muted" style={{ margin: '6px 0 0' }}>Managed separately. Assign a category when editing a product.</p>
+          </div>
+          <button className="btn" type="button" style={{ width: 'auto' }} onClick={() => openCategory()}>
+            Add category
+          </button>
         </div>
-        <form onSubmit={(e) => void addCategory(e)} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <input placeholder="e.g. Meals, Drinks" value={catName} onChange={(e) => setCatName(e.target.value)} style={{ flex: 1 }} />
-          <button className="btn" type="submit" style={{ width: 'auto' }}>Add</button>
-        </form>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Sort</th>
                 <th>Status</th>
+                <th />
               </tr>
             </thead>
             <tbody>
               {categories.length === 0 ? (
-                <tr><td colSpan={2}>No categories yet.</td></tr>
+                <tr><td colSpan={4}>No categories yet.</td></tr>
               ) : categories.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.name}</td>
+                  <td><strong>{c.name}</strong></td>
+                  <td>{c.sortOrder}</td>
                   <td>{c.isActive ? 'Active' : 'Inactive'}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="btn tiny" type="button" onClick={() => openCategory(c)}>Edit</button>{' '}
+                    <button className="btn tiny danger" type="button" onClick={() => void removeCategory(c)}>Delete</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -834,17 +965,42 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
 
       <div className="card">
         <div className="toolbar">
-          <h3 style={{ margin: 0 }}>Products</h3>
-          <button className="btn" type="button" style={{ width: 'auto' }} onClick={() => openProduct()}>
-            Add product
-          </button>
+          <div>
+            <h3 style={{ margin: 0 }}>Products</h3>
+            <p className="muted" style={{ margin: '6px 0 0' }}>Search by name or category.</p>
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ minWidth: 260, flex: '1 1 260px' }}>
+              <ProductSuggest
+                query={productQuery}
+                onQuery={setProductQuery}
+                placeholder="Search products…"
+                items={products.map((p) => ({
+                  id: p.id,
+                  name: p.name,
+                  photoUrl: p.imageUrl,
+                  extra: `${p.categoryName || 'No category'} · ₱${Number(p.sellingPrice).toFixed(2)}`,
+                }))}
+                onPick={(item) => {
+                  const product = products.find((p) => p.id === item.id)
+                  if (!product) return
+                  setProductQuery(item.name)
+                  openProduct(product)
+                }}
+              />
+            </div>
+            <button className="btn" type="button" style={{ width: 'auto' }} onClick={() => openProduct()}>
+              Add product
+            </button>
+          </div>
         </div>
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Product</th>
-                <th>Selling price</th>
+                <th>Base</th>
+                <th>Selling</th>
                 <th>Hours</th>
                 <th>Storefront</th>
                 <th>Add-ons</th>
@@ -853,8 +1009,18 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
             </thead>
             <tbody>
               {products.length === 0 ? (
-                <tr><td colSpan={6}>No products yet.</td></tr>
-              ) : products.map((p) => (
+                <tr><td colSpan={7}>No products yet.</td></tr>
+              ) : products
+                .filter((p) => {
+                  const q = productQuery.trim().toLowerCase()
+                  if (!q) return true
+                  return (
+                    p.name.toLowerCase().includes(q) ||
+                    (p.categoryName ?? '').toLowerCase().includes(q) ||
+                    String(p.sellingPrice).includes(q)
+                  )
+                })
+                .map((p) => (
                 <tr key={p.id}>
                   <td>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -869,6 +1035,7 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
                       </div>
                     </div>
                   </td>
+                  <td>₱{Number(p.basePrice ?? 0).toFixed(2)}</td>
                   <td>₱{Number(p.sellingPrice).toFixed(2)}</td>
                   <td>{hoursLabel(p)}</td>
                   <td>
@@ -887,6 +1054,48 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
           </table>
         </div>
       </div>
+
+      {catOpen ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setCatOpen(false)}>
+          <div className="modal-panel merchant-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>{editingCat ? 'Edit category' : 'New category'}</h2>
+              <button className="btn tiny" type="button" onClick={() => setCatOpen(false)}>Close</button>
+            </div>
+            <div className="merchant-modal-body">
+              <section className="form-section">
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Name</span>
+                    <input value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value })} placeholder="Meals, Drinks…" />
+                  </label>
+                  <label className="field">
+                    <span>Sort order</span>
+                    <input type="number" value={catForm.sortOrder} onChange={(e) => setCatForm({ ...catForm, sortOrder: Number(e.target.value) || 0 })} />
+                  </label>
+                  <label className="field check-field">
+                    <span className="check">
+                      <input
+                        type="checkbox"
+                        checked={catForm.isActive}
+                        onChange={(e) => setCatForm({ ...catForm, isActive: e.target.checked })}
+                      />
+                      <span>Active</span>
+                    </span>
+                  </label>
+                </div>
+              </section>
+            </div>
+            {catError ? <p className="error" style={{ padding: '0 22px' }}>{catError}</p> : null}
+            <div className="merchant-modal-footer">
+              <button className="btn tiny" type="button" onClick={() => setCatOpen(false)}>Cancel</button>
+              <button className="btn" type="button" disabled={busy} onClick={() => void saveCategory()}>
+                {busy ? 'Saving…' : 'Save category'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {libOpen ? (
         <div className="modal-backdrop" role="presentation" onClick={() => setLibOpen(false)}>
@@ -912,11 +1121,11 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
                   </label>
                 </div>
                 {(libForm.options ?? []).map((opt, oi) => (
-                  <div key={oi} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <div key={oi} style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                     <input
                       placeholder="Option name"
                       value={opt.name}
-                      style={{ flex: 1 }}
+                      style={{ flex: '1 1 160px' }}
                       onChange={(e) => {
                         const options = [...(libForm.options ?? [])]
                         options[oi] = { ...opt, name: e.target.value }
@@ -927,11 +1136,27 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
                       type="number"
                       min={0}
                       step="0.01"
-                      value={opt.priceDelta}
-                      style={{ width: 110 }}
+                      title="Base price"
+                      placeholder="Base"
+                      value={opt.basePrice}
+                      style={{ width: 100 }}
                       onChange={(e) => {
                         const options = [...(libForm.options ?? [])]
-                        options[oi] = { ...opt, priceDelta: Number(e.target.value) || 0 }
+                        options[oi] = { ...opt, basePrice: Number(e.target.value) || 0 }
+                        setLibForm({ ...libForm, options })
+                      }}
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      title="Selling price"
+                      placeholder="Sell"
+                      value={opt.sellingPrice}
+                      style={{ width: 100 }}
+                      onChange={(e) => {
+                        const options = [...(libForm.options ?? [])]
+                        options[oi] = { ...opt, sellingPrice: Number(e.target.value) || 0 }
                         setLibForm({ ...libForm, options })
                       }}
                     />
@@ -953,7 +1178,7 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
                       ...libForm,
                       options: [
                         ...(libForm.options ?? []),
-                        { name: '', priceDelta: 0, sortOrder: (libForm.options ?? []).length, isActive: true },
+                        { name: '', basePrice: 0, sellingPrice: 0, sortOrder: (libForm.options ?? []).length, isActive: true },
                       ],
                     })
                   }
@@ -987,6 +1212,16 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
                   <label className="field">
                     <span>Name</span>
                     <input value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} />
+                  </label>
+                  <label className="field">
+                    <span>Base price (₱)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={productForm.basePrice}
+                      onChange={(e) => setProductForm({ ...productForm, basePrice: e.target.value })}
+                    />
                   </label>
                   <label className="field">
                     <span>Selling price (₱)</span>
