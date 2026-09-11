@@ -17,4 +17,5 @@ public class PabiliMatrix : BaseEntity
     public decimal MarkupOperatorCommissionPercent { get; set; }
     public decimal MarkupRiderCommissionPercent { get; set; }
     public bool IsActive { get; set; } = true;
+    public ICollection<PabiliSurcharge> Surcharges { get; set; } = new List<PabiliSurcharge>();
 }

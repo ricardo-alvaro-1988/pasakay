@@ -356,12 +356,40 @@ public static class MerchantCatalogBootstrap
                 CREATE UNIQUE INDEX [IX_PabiliMatrices_OperatorId] ON [PabiliMatrices] ([OperatorId]);
             END
 
+            IF OBJECT_ID(N'[PabiliSurcharges]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [PabiliSurcharges] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [PabiliMatrixId] uniqueidentifier NOT NULL,
+                    [Kind] int NOT NULL,
+                    [Name] nvarchar(80) NOT NULL,
+                    [Amount] decimal(18,2) NOT NULL,
+                    [WindowStart] time NULL,
+                    [WindowEnd] time NULL,
+                    [RangeStartUtc] datetime2 NULL,
+                    [RangeEndUtc] datetime2 NULL,
+                    [IsActive] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_PabiliSurcharges] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_PabiliSurcharges_PabiliMatrices_PabiliMatrixId] FOREIGN KEY ([PabiliMatrixId]) REFERENCES [PabiliMatrices] ([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_PabiliSurcharges_PabiliMatrixId] ON [PabiliSurcharges] ([PabiliMatrixId]);
+            END
+
             IF NOT EXISTS (
                 SELECT 1 FROM [__EFMigrationsHistory]
                 WHERE [MigrationId] = N'20260911042730_PabiliMatrix'
             )
                 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
                 VALUES (N'20260911042730_PabiliMatrix', N'9.0.8');
+
+            IF NOT EXISTS (
+                SELECT 1 FROM [__EFMigrationsHistory]
+                WHERE [MigrationId] = N'20260911072342_PabiliSurcharges'
+            )
+                INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+                VALUES (N'20260911072342_PabiliSurcharges', N'9.0.8');
             """, cancellationToken);
     }
 

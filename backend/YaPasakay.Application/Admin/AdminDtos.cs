@@ -1143,6 +1143,11 @@ public record SavePabiliMatrixRequest(
     decimal MarkupRiderCommissionPercent,
     bool IsActive = true);
 
+public record PabiliSurchargeListResponse(
+    Guid OperatorId,
+    string CompanyName,
+    IReadOnlyList<FareSurchargeItem> Items);
+
 public static class UploadUrls
 {
     public static string? FromPath(string? relativePath) =>

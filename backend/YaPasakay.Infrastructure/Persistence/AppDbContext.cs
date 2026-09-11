@@ -22,6 +22,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TripChatMessage> TripChatMessages => Set<TripChatMessage>();
     public DbSet<FareMatrix> FareMatrices => Set<FareMatrix>();
     public DbSet<PabiliMatrix> PabiliMatrices => Set<PabiliMatrix>();
+    public DbSet<PabiliSurcharge> PabiliSurcharges => Set<PabiliSurcharge>();
     public DbSet<FareSurcharge> FareSurcharges => Set<FareSurcharge>();
     public DbSet<FarePassengerTier> FarePassengerTiers => Set<FarePassengerTier>();
     public DbSet<OperatorBill> OperatorBills => Set<OperatorBill>();
@@ -358,6 +359,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.Operator)
                 .WithOne(x => x.PabiliMatrix)
                 .HasForeignKey<PabiliMatrix>(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PabiliSurcharge>(entity =>
+        {
+            entity.HasIndex(x => x.PabiliMatrixId);
+            entity.Property(x => x.Name).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+            entity.HasOne(x => x.PabiliMatrix)
+                .WithMany(x => x.Surcharges)
+                .HasForeignKey(x => x.PabiliMatrixId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

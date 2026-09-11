@@ -127,6 +127,7 @@ import TripLiveMap from './TripLiveMap'
 import { DeriveZoneMap } from './DeriveZoneMap'
 import { OperatorMerchantsPage } from './OperatorMerchantsPage'
 import { OperatorPabiliMatrixPage } from './OperatorPabiliMatrixPage'
+import { OperatorPabiliSurchargesPage } from './OperatorPabiliSurchargesPage'
 import { OperatorProductCategoriesPage } from './OperatorProductCategoriesPage'
 import {
   ADMIN_MENU_GROUPS,
@@ -7293,9 +7294,7 @@ function OperatorShell({
         {page === 'pabili-customers' && (
           <ComingSoon title="Pabili customers" body="Customer tools for Pabili will live here." />
         )}
-        {page === 'pabili-surcharges' && (
-          <ComingSoon title="Pabili surcharges" body="Surcharge rules for Pabili will live here." />
-        )}
+        {page === 'pabili-surcharges' && <OperatorPabiliSurchargesPage />}
         {page === 'pabili-commission' && (
           <ComingSoon title="Pabili commission report" body="Commission reporting for Pabili will live here." />
         )}

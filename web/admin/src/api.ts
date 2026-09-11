@@ -459,6 +459,12 @@ export type PabiliMatrixDetail = {
   isActive: boolean
 }
 
+export type PabiliSurchargeList = {
+  operatorId: string
+  companyName: string
+  items: FareSurcharge[]
+}
+
 export type MerchantProductItem = {
   id: string
   merchantId: string
@@ -2129,6 +2135,37 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(body),
     }),
+  operatorPabiliSurcharges: () => request<PabiliSurchargeList>('/api/operator/pabili-surcharges'),
+  createOperatorPabiliSurcharge: (body: {
+    kind: SurchargeKind
+    name: string
+    amount: number
+    windowStart?: string | null
+    windowEnd?: string | null
+    rangeStartUtc?: string | null
+    rangeEndUtc?: string | null
+    isActive: boolean
+  }) =>
+    request<PabiliSurchargeList>('/api/operator/pabili-surcharges', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateOperatorPabiliSurcharge: (id: string, body: {
+    kind: SurchargeKind
+    name: string
+    amount: number
+    windowStart?: string | null
+    windowEnd?: string | null
+    rangeStartUtc?: string | null
+    rangeEndUtc?: string | null
+    isActive: boolean
+  }) =>
+    request<PabiliSurchargeList>(`/api/operator/pabili-surcharges/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteOperatorPabiliSurcharge: (id: string) =>
+    request<PabiliSurchargeList>(`/api/operator/pabili-surcharges/${id}/delete`, { method: 'POST' }),
   createOperatorMerchantAddonGroup: (merchantId: string, body: ProductAddonGroupItem) =>
     request<ProductAddonGroupItem>(`/api/operator/merchants/${merchantId}/addon-groups`, {
       method: 'POST',

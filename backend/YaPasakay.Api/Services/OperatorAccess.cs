@@ -148,6 +148,11 @@ public static class OperatorAccess
             return "pabili-matrix";
         }
 
+        if (value.StartsWith("/api/operator/pabili-surcharges"))
+        {
+            return "pabili-surcharges";
+        }
+
         if (value.StartsWith("/api/operator/support"))
         {
             return "support";
