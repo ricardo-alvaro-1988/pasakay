@@ -89,11 +89,12 @@ function ProductSuggest({
 const DAY_LABELS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 function defaultHours(): MerchantOperatingHourItem[] {
+  // Empty times = open all day (matches customer IsMerchantOpen).
   return DAY_LABELS.map((_, day) => ({
     dayOfWeek: day,
-    isClosed: day === 0,
-    openTime: day === 0 ? null : '08:00',
-    closeTime: day === 0 ? null : '20:00',
+    isClosed: false,
+    openTime: null,
+    closeTime: null,
   }))
 }
 
@@ -472,7 +473,9 @@ function MerchantListView({
 
               <section className="form-section">
                 <h3>Operating hours</h3>
-                <p className="form-hint">Philippine local time. Closed days skip open/close.</p>
+                <p className="form-hint">
+                  Philippine local time. Leave open/close empty for open all day. Mark Closed only for days the store does not operate.
+                </p>
                 <div className="merchant-hours">
                   {form.operatingHours.map((h) => (
                     <div key={h.dayOfWeek} className={`merchant-hour-row${h.isClosed ? ' is-closed' : ''}`}>
@@ -487,8 +490,8 @@ function MerchantListView({
                                 ? {
                                     ...x,
                                     isClosed: e.target.checked,
-                                    openTime: e.target.checked ? null : x.openTime || '08:00',
-                                    closeTime: e.target.checked ? null : x.closeTime || '20:00',
+                                    openTime: e.target.checked ? null : x.openTime,
+                                    closeTime: e.target.checked ? null : x.closeTime,
                                   }
                                 : x,
                             )

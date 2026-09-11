@@ -1111,7 +1111,8 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         {
             byDay.TryGetValue(day, out var item);
             var existing = merchant.OperatingHours.FirstOrDefault(x => x.DayOfWeek == day);
-            var isClosed = item?.IsClosed ?? true;
+            // Missing day defaults to open all day (null times), not closed.
+            var isClosed = item?.IsClosed ?? false;
             TimeSpan? open = null;
             TimeSpan? close = null;
             if (!isClosed && item is not null)
@@ -1208,14 +1209,15 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
 
             var open = ParseTime(item.OpenTime);
             var close = ParseTime(item.CloseTime);
-            if (open is null || close is null)
+            // Both empty = open all day. A window needs both open and close.
+            if (open is null && close is null)
             {
-                return "Open and close times are required for open days.";
+                continue;
             }
 
-            if (open >= close)
+            if (open is null || close is null)
             {
-                return "Open time must be before close time.";
+                return "Set both open and close times, or leave both empty for open all day.";
             }
         }
 
