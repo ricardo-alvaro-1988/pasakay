@@ -108,43 +108,40 @@ using (var scope = app.Services.CreateScope())
     if (app.Configuration.GetValue("Database:SkipMigrate", false))
     {
         migrateLogger.LogWarning("Database:SkipMigrate is enabled; starting without MigrateAsync.");
+        try
+        {
+            await MerchantCatalogBootstrap.EnsureUsersMerchantIdAsync(db);
+        }
+        catch (Exception ex)
+        {
+            migrateLogger.LogCritical(ex, "Failed to ensure Users.MerchantId.");
+        }
     }
     else
     {
-                try
+        try
         {
-            using var migrateCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            using var migrateCts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             await db.Database.MigrateAsync(migrateCts.Token);
         }
         catch (Exception first)
         {
-            migrateLogger.LogError(first, "Database migrate failed; repairing merchant catalog leftovers and retrying once.");
+            migrateLogger.LogError(first, "Database migrate failed; applying merchant catalog bootstrap SQL.");
             try
             {
-                await db.Database.ExecuteSqlRawAsync("""
-                    IF OBJECT_ID(N'[ProductAddonOptions]', N'U') IS NOT NULL DROP TABLE [ProductAddonOptions];
-                    IF OBJECT_ID(N'[ProductAddonGroups]', N'U') IS NOT NULL DROP TABLE [ProductAddonGroups];
-                    IF OBJECT_ID(N'[MerchantProducts]', N'U') IS NOT NULL DROP TABLE [MerchantProducts];
-                    IF OBJECT_ID(N'[MerchantProductCategories]', N'U') IS NOT NULL DROP TABLE [MerchantProductCategories];
-                    IF OBJECT_ID(N'[MerchantOperatingHours]', N'U') IS NOT NULL DROP TABLE [MerchantOperatingHours];
-                    IF OBJECT_ID(N'[Merchants]', N'U') IS NOT NULL DROP TABLE [Merchants];
-                    IF EXISTS (
-                        SELECT 1 FROM sys.indexes
-                        WHERE name = N'IX_Users_MerchantId' AND object_id = OBJECT_ID(N'[Users]')
-                    )
-                        DROP INDEX [IX_Users_MerchantId] ON [Users];
-                    IF COL_LENGTH(N'Users', N'MerchantId') IS NOT NULL
-                        ALTER TABLE [Users] DROP COLUMN [MerchantId];
-                    DELETE FROM [__EFMigrationsHistory]
-                    WHERE [MigrationId] = N'20260911014037_OperatorMerchantCatalog';
-                    """);
-                using var retryCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-                await db.Database.MigrateAsync(retryCts.Token);
+                await MerchantCatalogBootstrap.EnsureAsync(db);
             }
             catch (Exception second)
             {
-                // Keep the API up for login/rides even if merchant catalog migrate is blocked.
-                migrateLogger.LogCritical(second, "Database migrate still failing after repair; starting API without pending merchant migration.");
+                migrateLogger.LogCritical(second, "Merchant catalog bootstrap failed; ensuring Users.MerchantId so login can work.");
+                try
+                {
+                    await MerchantCatalogBootstrap.EnsureUsersMerchantIdAsync(db);
+                }
+                catch (Exception third)
+                {
+                    migrateLogger.LogCritical(third, "Failed to ensure Users.MerchantId.");
+                }
             }
         }
     }
