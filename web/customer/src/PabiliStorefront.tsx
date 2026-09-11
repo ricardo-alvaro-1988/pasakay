@@ -191,7 +191,11 @@ export function PabiliStorefront({
   const [locationQuery, setLocationQuery] = useState('')
   const [locationHints, setLocationHints] = useState<Prediction[]>([])
   const [locationHits, setLocationHits] = useState<Array<{ label: string; details: string; lat: number; lng: number }>>([])
+  const [pinDraft, setPinDraft] = useState<{ lat: number; lng: number; label: string } | null>(null)
   const mapsRef = useRef<Awaited<ReturnType<typeof loadGoogleMaps>> | null>(null)
+  const locationMapEl = useRef<HTMLDivElement>(null)
+  const locationMapRef = useRef<MapHandle | null>(null)
+  const locationMarkerRef = useRef<MarkerHandle | null>(null)
   const locateGen = useRef(0)
   const locationTimer = useRef<number | null>(null)
   const [quote, setQuote] = useState<Quote | null>(null)
@@ -273,7 +277,21 @@ export function PabiliStorefront({
     setLocationQuery('')
     setLocationHints([])
     setLocationHits([])
+    setPinDraft(null)
     setError('')
+  }
+
+  async function setMapPin(next: { lat: number; lng: number }, preferredLabel?: string) {
+    setPinDraft({ lat: next.lat, lng: next.lng, label: preferredLabel || 'Selected pin' })
+    locationMarkerRef.current?.setPosition(next)
+    locationMapRef.current?.panTo(next)
+    try {
+      const maps = await ensureMaps()
+      const label = preferredLabel || (await reverseGeocode(maps, next.lat, next.lng))
+      setPinDraft({ lat: next.lat, lng: next.lng, label })
+    } catch {
+      /* keep draft label */
+    }
   }
 
   async function useCurrentLocation() {
@@ -292,7 +310,11 @@ export function PabiliStorefront({
         /* keep fallback label */
       }
       if (gen !== locateGen.current) return
-      await applyLocation(next, label)
+      if (locationPickerOpen) {
+        await setMapPin(next, label)
+      } else {
+        await applyLocation(next, label)
+      }
     } catch (e) {
       if (gen === locateGen.current) {
         setError(e instanceof Error ? e.message : 'Could not get your location.')
@@ -307,8 +329,58 @@ export function PabiliStorefront({
     setLocationQuery('')
     setLocationHints([])
     setLocationHits([])
+    setPinDraft({ lat: gps.lat, lng: gps.lng, label: dropoffLabel })
     setError('')
   }
+
+  useEffect(() => {
+    if (!locationPickerOpen) {
+      locationMapRef.current = null
+      locationMarkerRef.current = null
+      return
+    }
+    let dead = false
+    void (async () => {
+      try {
+        const maps = await ensureMaps()
+        if (dead || !locationMapEl.current) return
+        const center = { lat: gps.lat, lng: gps.lng }
+        const map = new maps.Map(locationMapEl.current, {
+          center,
+          zoom: 16,
+          disableDefaultUI: true,
+          zoomControl: true,
+          gestureHandling: 'greedy',
+        })
+        locationMapRef.current = map
+        const marker = new maps.Marker({
+          map,
+          position: center,
+          draggable: true,
+          title: 'Delivery pin',
+        })
+        locationMarkerRef.current = marker
+        map.addListener('click', (e) => {
+          const clickLat = e.latLng?.lat()
+          const clickLng = e.latLng?.lng()
+          if (clickLat == null || clickLng == null) return
+          void setMapPin({ lat: clickLat, lng: clickLng })
+        })
+        marker.addListener('dragend', () => {
+          const pos = marker.getPosition()
+          if (!pos) return
+          void setMapPin({ lat: pos.lat(), lng: pos.lng() })
+        })
+        setPinDraft((prev) => prev ?? { lat: center.lat, lng: center.lng, label: dropoffLabel })
+      } catch {
+        /* map optional — search still works */
+      }
+    })()
+    return () => {
+      dead = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationPickerOpen])
 
   useEffect(() => {
     if (!locationPickerOpen) return
@@ -350,15 +422,21 @@ export function PabiliStorefront({
   async function chooseLocationPrediction(item: Prediction) {
     try {
       const maps = await ensureMaps()
-      const place = await placeDetails(maps, item.place_id)
-      await applyLocation({ lat: place.lat, lng: place.lng }, place.address)
+      const place = await placeDetails(maps, item.place_id, locationMapRef.current)
+      await setMapPin({ lat: place.lat, lng: place.lng }, place.address)
+      setLocationQuery('')
+      setLocationHints([])
+      setLocationHits([])
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not set that location.')
     }
   }
 
   async function chooseLocationHit(item: { label: string; details: string; lat: number; lng: number }) {
-    await applyLocation({ lat: item.lat, lng: item.lng }, item.details || item.label)
+    await setMapPin({ lat: item.lat, lng: item.lng }, item.details || item.label)
+    setLocationQuery('')
+    setLocationHints([])
+    setLocationHits([])
   }
 
   async function confirmTypedLocation() {
@@ -368,10 +446,13 @@ export function PabiliStorefront({
       const maps = await ensureMaps()
       const hits = await geocodeText(maps, term, gps)
       if (hits[0]) {
-        await applyLocation({ lat: hits[0].lat, lng: hits[0].lng }, hits[0].details || hits[0].label)
+        await setMapPin({ lat: hits[0].lat, lng: hits[0].lng }, hits[0].details || hits[0].label)
+        setLocationQuery('')
+        setLocationHints([])
+        setLocationHits([])
         return
       }
-      setError('No matching place. Try another address.')
+      setError('No matching place. Try another address or tap the map.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not find that place.')
     }
@@ -1030,9 +1111,15 @@ export function PabiliStorefront({
 
           {view === 'checkout' && cart.length ? (
             <div className="pb-checkout-stack">
-              <section className="pb-info-card">
-                <span className="pb-info-label">Deliver to</span>
+              <section className="pb-info-card pb-deliver-card">
+                <div className="pb-deliver-head">
+                  <span className="pb-info-label">Deliver to</span>
+                  <button type="button" className="pb-loc-fix" onClick={openLocationPicker}>
+                    Change
+                  </button>
+                </div>
                 <b>{dropoffLabel}</b>
+                <p className="muted pb-deliver-hint">Search, tap the map, or drag the pin</p>
               </section>
               <section className="pb-info-card">
                 <span className="pb-info-label">Payment</span>
@@ -1252,6 +1339,7 @@ export function PabiliStorefront({
               setLocationQuery('')
               setLocationHints([])
               setLocationHits([])
+              setPinDraft(null)
             }}
           >
             Back
@@ -1269,6 +1357,23 @@ export function PabiliStorefront({
               }
             }}
           />
+          <div className="pb-loc-map" ref={locationMapEl} role="application" aria-label="Delivery map" />
+          <p className="muted pb-loc-map-hint">Tap the map or drag the pin to set delivery</p>
+          {pinDraft ? (
+            <div className="pb-loc-pin-card">
+              <div>
+                <span className="muted">Pinned</span>
+                <b>{pinDraft.label}</b>
+              </div>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void applyLocation({ lat: pinDraft.lat, lng: pinDraft.lng }, pinDraft.label)}
+              >
+                Use this pin
+              </button>
+            </div>
+          ) : null}
           <button type="button" className="picker-item" disabled={locating} onClick={() => void useCurrentLocation()}>
             <b>{locating ? 'Getting your location…' : 'Use current location'}</b>
             <div className="muted">{locating ? 'Keep this screen open while GPS locks' : 'GPS delivery pin'}</div>
