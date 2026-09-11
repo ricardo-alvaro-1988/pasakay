@@ -565,6 +565,13 @@ select {
   text-align: left;
   cursor: pointer;
 }
+.brand-pill-logo {
+  padding: 6px;
+  cursor: default;
+}
+.brand-pill-install {
+  padding: 6px 10px 6px 6px;
+}
 button.brand-pill:hover {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
 }
@@ -1596,6 +1603,44 @@ button.brand-pill:active { transform: scale(.98); }
   justify-content: space-between;
   gap: 12px;
   margin-bottom: 8px;
+}
+button.where-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0 0 8px;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+button.where-toggle .where { pointer-events: none; }
+.where-chevron {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+.where-summary {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  margin: 0 0 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg-soft);
+  text-align: left;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.where-summary small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
 }
 .book-sheet .primary { padding: 12px 14px; }
 .pay-ref { margin: 0 0 8px; gap: 4px; }
@@ -2634,11 +2679,16 @@ button.brand-pill:active { transform: scale(.98); }
   to { opacity: 1; transform: scale(1.06); }
 }
 .app-pabili {
+  height: 100%;
   min-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
   background: #f3f5f7;
 }
 .pb-shell {
-  min-height: 100dvh;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   padding-bottom: 78px;
@@ -2660,38 +2710,41 @@ button.brand-pill:active { transform: scale(.98); }
   background: color-mix(in srgb, var(--accent) 12%, #fff);
   box-shadow: 0 6px 18px color-mix(in srgb, #000 6%, transparent);
 }
-.pb-mode-sm {
-  width: fit-content;
-  max-width: 168px;
-  margin: 8px 12px 0;
-  padding: 2px;
-  gap: 2px;
-  box-shadow: none;
-}
-.pb-mode-sm .pb-mode-btn {
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 700;
-}
-.pb-mode-sm .pb-mode-btn.on {
-  box-shadow: none;
-}
-.pasakay-mode {
-  margin: 0 0 8px;
-  max-width: 168px;
-}
 .pb-mode-btn {
   border: 0;
   border-radius: 999px;
   padding: 8px 12px;
   background: transparent;
   font-weight: 800;
+  font-size: 13px;
+  line-height: 1.2;
   color: color-mix(in srgb, var(--accent) 70%, #333);
 }
 .pb-mode-btn.on {
   background: var(--accent);
   color: #fff;
   box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+/* Same compact size on Pasakay map HUD and Pabili shell */
+.pb-mode-sm {
+  width: fit-content;
+  max-width: 152px;
+  margin: 8px 12px 0;
+  padding: 2px;
+  gap: 2px;
+  box-shadow: none;
+}
+.pb-mode-sm .pb-mode-btn {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.pb-mode-sm .pb-mode-btn.on {
+  box-shadow: none;
+}
+.pasakay-mode {
+  margin: 0 0 8px;
 }
 .pb-hero {
   margin: 10px 12px 0;

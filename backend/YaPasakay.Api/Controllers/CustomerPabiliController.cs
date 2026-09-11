@@ -120,6 +120,112 @@ public class CustomerPabiliController(
         return Ok(items);
     }
 
+    [HttpGet("ads")]
+    public async Task<ActionResult<IReadOnlyList<CustomerPabiliAdCard>>> Ads(
+        [FromQuery] double lat,
+        [FromQuery] double lng,
+        [FromQuery] Guid? barangayId,
+        CancellationToken cancellationToken)
+    {
+        var (customer, status, message) = await CustomerContext.RequireAsync(db, User, cancellationToken);
+        if (customer is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var op = await ResolveOperatorAsync(barangayId, lat, lng, cancellationToken);
+        if (op is null)
+        {
+            return Ok(Array.Empty<CustomerPabiliAdCard>());
+        }
+
+        var rows = await db.OperatorAds
+            .AsNoTracking()
+            .Where(x => x.OperatorId == op.Id && x.IsActive && x.ImagePath != null && x.ImagePath != "")
+            .OrderBy(x => x.SortOrder)
+            .ThenByDescending(x => x.CreatedAtUtc)
+            .Take(20)
+            .ToListAsync(cancellationToken);
+
+        return Ok(rows.Select(x => new CustomerPabiliAdCard(
+            x.Id,
+            x.Title,
+            UploadUrls.FromPath(x.ImagePath),
+            x.RedirectUrl)).ToList());
+    }
+
+    [HttpGet("search/suggest")]
+    public async Task<ActionResult<CustomerPabiliSuggestResponse>> Suggest(
+        [FromQuery] double lat,
+        [FromQuery] double lng,
+        [FromQuery] Guid? barangayId,
+        [FromQuery] string? q,
+        CancellationToken cancellationToken)
+    {
+        var (customer, status, message) = await CustomerContext.RequireAsync(db, User, cancellationToken);
+        if (customer is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var term = (q ?? string.Empty).Trim();
+        if (term.Length < 1)
+        {
+            return Ok(new CustomerPabiliSuggestResponse([], []));
+        }
+
+        var op = await ResolveOperatorAsync(barangayId, lat, lng, cancellationToken);
+        if (op is null)
+        {
+            return Ok(new CustomerPabiliSuggestResponse([], []));
+        }
+
+        var merchantRows = await db.Merchants
+            .AsNoTracking()
+            .Where(x => x.OperatorId == op.Id && x.IsActive
+                && (x.BusinessName.Contains(term) || x.PinnedAddress.Contains(term)))
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.BusinessName)
+            .Take(8)
+            .ToListAsync(cancellationToken);
+
+        var merchants = merchantRows
+            .Select(x => new CustomerPabiliSuggestMerchant(
+                x.Id,
+                x.BusinessName,
+                x.PinnedAddress,
+                UploadUrls.FromPath(x.LogoPath)))
+            .ToList();
+
+        var products = await db.MerchantProducts
+            .AsNoTracking()
+            .Include(x => x.Merchant)
+            .Where(x => x.Merchant.OperatorId == op.Id
+                && x.Merchant.IsActive
+                && x.AvailableOnStorefront
+                && (x.Name.Contains(term)
+                    || x.Description.Contains(term)
+                    || x.Merchant.BusinessName.Contains(term)))
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Name)
+            .Take(10)
+            .ToListAsync(cancellationToken);
+
+        var productCards = products
+            .Where(x => PabiliPricingService.IsProductAvailableNow(x))
+            .Take(8)
+            .Select(x => new CustomerPabiliSuggestProduct(
+                x.Id,
+                x.MerchantId,
+                x.Merchant.BusinessName,
+                x.Name,
+                x.SellingPrice,
+                UploadUrls.FromPath(x.ImagePath)))
+            .ToList();
+
+        return Ok(new CustomerPabiliSuggestResponse(merchants, productCards));
+    }
+
     [HttpGet("merchants/{id:guid}")]
     public async Task<ActionResult<CustomerPabiliStoreResponse>> Store(Guid id, CancellationToken cancellationToken)
     {

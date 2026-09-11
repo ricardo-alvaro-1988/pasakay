@@ -39,6 +39,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RiderApplication> RiderApplications => Set<RiderApplication>();
     public DbSet<OperatorCashInBankAccount> OperatorCashInBankAccounts => Set<OperatorCashInBankAccount>();
     public DbSet<OperatorPromo> OperatorPromos => Set<OperatorPromo>();
+    public DbSet<OperatorAd> OperatorAds => Set<OperatorAd>();
     public DbSet<PromoRedemption> PromoRedemptions => Set<PromoRedemption>();
     public DbSet<DeriveFareZone> DeriveFareZones => Set<DeriveFareZone>();
     public DbSet<DeriveFareMatrix> DeriveFareMatrices => Set<DeriveFareMatrix>();
@@ -608,6 +609,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.Code).HasMaxLength(16).IsRequired();
             entity.HasOne(x => x.Operator)
                 .WithMany(x => x.Promos)
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OperatorAd>(entity =>
+        {
+            entity.HasIndex(x => new { x.OperatorId, x.SortOrder });
+            entity.Property(x => x.Title).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.ImagePath).HasMaxLength(500);
+            entity.Property(x => x.RedirectUrl).HasMaxLength(500).IsRequired();
+            entity.HasOne(x => x.Operator)
+                .WithMany(x => x.Ads)
                 .HasForeignKey(x => x.OperatorId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

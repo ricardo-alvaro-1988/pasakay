@@ -304,6 +304,7 @@ function Home({
   const locateGen = useRef(0)
   const [locating, setLocating] = useState(false)
   const [mapReady, setMapReady] = useState(false)
+  const [bookSheetOpen, setBookSheetOpen] = useState(true)
   const trip = desk.activeTrip
   const hail = desk.hailedRider
   const pendingRate = usePendingRating(desk)
@@ -927,15 +928,18 @@ function Home({
               </button>
             </div>
             {installed ? (
-              <div className="brand-pill">
-                <img src={brandLogo} alt="" />
-                <span>{brandName}</span>
+              <div className="brand-pill brand-pill-logo" title={brandName}>
+                <img src={brandLogo} alt={brandName} />
               </div>
             ) : (
-              <button type="button" className={`brand-pill${canInstall ? ' ready' : ''}`} onClick={() => void installOnPhone()} title="Install on my Android phone">
+              <button
+                type="button"
+                className={`brand-pill brand-pill-install${canInstall ? ' ready' : ''}`}
+                onClick={() => void installOnPhone()}
+                title="Install on my Android phone"
+              >
                 <img src={brandLogo} alt="" />
                 <span>
-                  {brandName}
                   <small>
                     <InstallMark />
                     Tap to install
@@ -966,9 +970,23 @@ function Home({
               />
             ) : (
               <>
-                <div className="sheet-head">
+                <button
+                  type="button"
+                  className={`sheet-head where-toggle${bookSheetOpen ? ' open' : ''}`}
+                  onClick={() => setBookSheetOpen((open) => !open)}
+                  aria-expanded={bookSheetOpen}
+                >
                   <h2 className="where">Where to?</h2>
-                </div>
+                  <span className="where-chevron" aria-hidden>{bookSheetOpen ? '▾' : '▸'}</span>
+                </button>
+                {!bookSheetOpen && (dropoff || pickup) ? (
+                  <button type="button" className="where-summary" onClick={() => setBookSheetOpen(true)}>
+                    <small>{dropoff ? 'Drop-off' : 'Pickup'}</small>
+                    {dropoff?.label ?? pickup?.label}
+                  </button>
+                ) : null}
+                {bookSheetOpen ? (
+                  <>
                 {hail && (
                   <div className="hail">
                     {hail.photoUrl
@@ -1157,6 +1175,8 @@ function Home({
                 <button className={`primary${searchingArea ? ' searching pulse' : ''}`} disabled={busy || !canBook} onClick={openBoostModal}>
                   {bookLabel}
                 </button>
+                  </>
+                ) : null}
               </>
             )}
             {error && trip && <p className="error">{error}</p>}

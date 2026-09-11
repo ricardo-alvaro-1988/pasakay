@@ -956,6 +956,23 @@ public record SaveOperatorPromoRequest(
 
 public record OperatorPromoListResponse(IReadOnlyList<OperatorPromoItem> Items);
 
+public record OperatorAdItem(
+    Guid Id,
+    string Title,
+    string? ImageUrl,
+    string RedirectUrl,
+    bool IsActive,
+    int SortOrder,
+    DateTime CreatedAtUtc);
+
+public record SaveOperatorAdRequest(
+    string Title,
+    string RedirectUrl,
+    bool IsActive,
+    int SortOrder);
+
+public record OperatorAdListResponse(IReadOnlyList<OperatorAdItem> Items);
+
 public record MerchantOperatingHourItem(
     int DayOfWeek,
     bool IsClosed,
@@ -1171,6 +1188,30 @@ public record CustomerPabiliPopularProduct(
     decimal SellingPrice,
     string? ImageUrl,
     bool MerchantOpen);
+
+public record CustomerPabiliAdCard(
+    Guid Id,
+    string Title,
+    string? ImageUrl,
+    string RedirectUrl);
+
+public record CustomerPabiliSuggestMerchant(
+    Guid Id,
+    string Name,
+    string Address,
+    string? LogoUrl);
+
+public record CustomerPabiliSuggestProduct(
+    Guid Id,
+    Guid MerchantId,
+    string MerchantName,
+    string Name,
+    decimal SellingPrice,
+    string? ImageUrl);
+
+public record CustomerPabiliSuggestResponse(
+    IReadOnlyList<CustomerPabiliSuggestMerchant> Merchants,
+    IReadOnlyList<CustomerPabiliSuggestProduct> Products);
 
 public record CustomerPabiliAddonOption(
     Guid Id,
