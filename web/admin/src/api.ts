@@ -33,6 +33,7 @@ export type PageId =
   | 'company'
   | 'wallet'
   | 'promos'
+  | 'merchants'
 
 export type Me = {
   id: string
@@ -363,6 +364,97 @@ export type SaveOperatorPromoBody = {
   startsAtUtc: string | null
   endsAtUtc: string | null
   maxRedemptions: number | null
+}
+
+export type MerchantOperatingHourItem = {
+  dayOfWeek: number
+  isClosed: boolean
+  openTime: string | null
+  closeTime: string | null
+}
+
+export type MerchantListItem = {
+  id: string
+  businessName: string
+  contactPerson: string
+  pinnedAddress: string
+  managedByMerchant: boolean
+  mobile: string
+  email: string
+  logoUrl: string | null
+  backgroundUrl: string | null
+  isActive: boolean
+  sortOrder: number
+  createdAtUtc: string
+}
+
+export type MerchantDetailItem = MerchantListItem & {
+  latitude: number
+  longitude: number
+  operatingHours: MerchantOperatingHourItem[]
+}
+
+export type SaveMerchantBody = {
+  businessName: string
+  contactPerson: string
+  latitude: number
+  longitude: number
+  pinnedAddress: string
+  managedByMerchant: boolean
+  mobile?: string | null
+  email?: string | null
+  password?: string | null
+  isActive: boolean
+  sortOrder: number
+  operatingHours: MerchantOperatingHourItem[]
+}
+
+export type MerchantProductCategoryItem = {
+  id: string
+  name: string
+  sortOrder: number
+  isActive: boolean
+}
+
+export type ProductAddonOptionItem = {
+  id?: string | null
+  name: string
+  priceDelta: number
+  sortOrder: number
+  isActive: boolean
+}
+
+export type ProductAddonGroupItem = {
+  id?: string | null
+  name: string
+  minSelect: number
+  maxSelect: number
+  sortOrder: number
+  isActive: boolean
+  options: ProductAddonOptionItem[]
+}
+
+export type MerchantProductItem = {
+  id: string
+  merchantId: string
+  categoryId: string | null
+  categoryName: string | null
+  name: string
+  description: string
+  basePrice: number
+  availableOnStorefront: boolean
+  sortOrder: number
+  imageUrl: string | null
+  addonGroups: ProductAddonGroupItem[]
+}
+
+export type SaveMerchantProductBody = {
+  categoryId?: string | null
+  name: string
+  description: string
+  basePrice: number
+  availableOnStorefront: boolean
+  sortOrder: number
 }
 
 export type RideStop = {
@@ -1907,6 +1999,71 @@ export const api = {
     }),
   toggleOperatorPromo: (id: string) =>
     request<OperatorPromoItem>(`/api/operator/promos/${id}/toggle`, { method: 'POST' }),
+  operatorMerchants: () => request<{ items: MerchantListItem[] }>('/api/operator/merchants'),
+  operatorMerchant: (id: string) => request<MerchantDetailItem>(`/api/operator/merchants/${id}`),
+  createOperatorMerchant: (body: SaveMerchantBody) =>
+    request<MerchantDetailItem>('/api/operator/merchants', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateOperatorMerchant: (id: string, body: SaveMerchantBody) =>
+    request<MerchantDetailItem>(`/api/operator/merchants/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  toggleOperatorMerchant: (id: string) =>
+    request<MerchantDetailItem>(`/api/operator/merchants/${id}/toggle`, { method: 'POST' }),
+  uploadOperatorMerchantLogo: (id: string, file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request<MerchantDetailItem>(`/api/operator/merchants/${id}/logo`, { method: 'POST', body: data })
+  },
+  uploadOperatorMerchantBackground: (id: string, file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request<MerchantDetailItem>(`/api/operator/merchants/${id}/background`, { method: 'POST', body: data })
+  },
+  operatorMerchantCategories: (merchantId: string) =>
+    request<{ items: MerchantProductCategoryItem[] }>(`/api/operator/merchants/${merchantId}/categories`),
+  createOperatorMerchantCategory: (merchantId: string, body: { name: string; sortOrder: number; isActive: boolean }) =>
+    request<MerchantProductCategoryItem>(`/api/operator/merchants/${merchantId}/categories`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateOperatorMerchantCategory: (
+    merchantId: string,
+    id: string,
+    body: { name: string; sortOrder: number; isActive: boolean },
+  ) =>
+    request<MerchantProductCategoryItem>(`/api/operator/merchants/${merchantId}/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteOperatorMerchantCategory: (merchantId: string, id: string) =>
+    request<void>(`/api/operator/merchants/${merchantId}/categories/${id}`, { method: 'DELETE' }),
+  operatorMerchantProducts: (merchantId: string) =>
+    request<{ items: MerchantProductItem[] }>(`/api/operator/merchants/${merchantId}/products`),
+  createOperatorMerchantProduct: (merchantId: string, body: SaveMerchantProductBody) =>
+    request<MerchantProductItem>(`/api/operator/merchants/${merchantId}/products`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateOperatorMerchantProduct: (merchantId: string, id: string, body: SaveMerchantProductBody) =>
+    request<MerchantProductItem>(`/api/operator/merchants/${merchantId}/products/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  toggleOperatorMerchantProductStorefront: (merchantId: string, id: string) =>
+    request<MerchantProductItem>(`/api/operator/merchants/${merchantId}/products/${id}/storefront`, {
+      method: 'POST',
+    }),
+  deleteOperatorMerchantProduct: (merchantId: string, id: string) =>
+    request<void>(`/api/operator/merchants/${merchantId}/products/${id}`, { method: 'DELETE' }),
+  saveOperatorMerchantProductAddons: (merchantId: string, id: string, groups: ProductAddonGroupItem[]) =>
+    request<MerchantProductItem>(`/api/operator/merchants/${merchantId}/products/${id}/addons`, {
+      method: 'PUT',
+      body: JSON.stringify({ groups }),
+    }),
   operatorRiderWallet: (riderId: string) => request<RiderWalletDetail>(`/api/operator/wallet/riders/${riderId}`),
   approveWalletRequest: (id: string) =>
     request<{ transaction: WalletTransaction; balance: number }>(`/api/operator/wallet/requests/${id}/approve`, { method: 'POST' }),

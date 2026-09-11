@@ -125,6 +125,7 @@ import logoCircle from './asset/logo-circle.png'
 import FleetMap from './FleetMap'
 import TripLiveMap from './TripLiveMap'
 import { DeriveZoneMap } from './DeriveZoneMap'
+import { OperatorMerchantsPage } from './OperatorMerchantsPage'
 import {
   ADMIN_MENU_GROUPS,
   OPERATOR_MENU_GROUPS,
@@ -7237,6 +7238,7 @@ function OperatorShell({
         {page === 'billing' && <OperatorBillingPage />}
         {page === 'wallet' && <OperatorWalletPage />}
         {page === 'promos' && <OperatorPromosPage />}
+        {page === 'merchants' && <OperatorMerchantsPage />}
         {page === 'commission' && <CommissionReportPage mode="operator" />}
         {page === 'booking-report' && <OperatorBookingReportPage />}
         {page === 'rider-report' && <OperatorRiderReportPage />}
