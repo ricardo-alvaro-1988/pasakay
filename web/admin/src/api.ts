@@ -2306,6 +2306,7 @@ export const api = {
     adjustmentLabel: string
     customerTotal: number
     paymentMethod: string
+    paymentReference: string | null
     riderId: string | null
     riderName: string | null
     riderPhone: string | null
@@ -2353,6 +2354,7 @@ export const api = {
       adjustmentLabel: string
       customerTotal: number
       paymentMethod: string
+      paymentReference: string | null
       riderId: string | null
       riderName: string | null
       riderPhone: string | null
@@ -2403,6 +2405,7 @@ export const api = {
       adjustmentLabel: string
       customerTotal: number
       paymentMethod: string
+      paymentReference: string | null
       riderId: string | null
       riderName: string | null
       riderPhone: string | null
