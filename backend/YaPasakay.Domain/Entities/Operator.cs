@@ -20,6 +20,10 @@ public class Operator : BaseEntity
     public bool IsActive { get; set; } = true;
     public decimal MotorcycleCommissionPercent { get; set; } = 10;
     public decimal TricycleCommissionPercent { get; set; } = 5;
+    /// <summary>Admin-set system share for Pabili fare commission (read-only for operators).</summary>
+    public decimal PabiliFareSystemCommissionPercent { get; set; } = 10;
+    /// <summary>Admin-set system share for Pabili markup commission (read-only for operators).</summary>
+    public decimal PabiliMarkupSystemCommissionPercent { get; set; } = 10;
     public BookingDispatchMode BookingDispatchMode { get; set; } = BookingDispatchMode.Broadcast;
     /// <summary>Max distance (km) for broadcast offers to nearby riders.</summary>
     public double BroadcastRadiusKm { get; set; } = 5;
@@ -43,4 +47,5 @@ public class Operator : BaseEntity
     public ICollection<OperatorPromo> Promos { get; set; } = new List<OperatorPromo>();
     public ICollection<DeriveFareZone> DeriveFareZones { get; set; } = new List<DeriveFareZone>();
     public ICollection<Merchant> Merchants { get; set; } = new List<Merchant>();
+    public PabiliMatrix? PabiliMatrix { get; set; }
 }

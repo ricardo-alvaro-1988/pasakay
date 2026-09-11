@@ -21,6 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<TripOffer> TripOffers => Set<TripOffer>();
     public DbSet<TripChatMessage> TripChatMessages => Set<TripChatMessage>();
     public DbSet<FareMatrix> FareMatrices => Set<FareMatrix>();
+    public DbSet<PabiliMatrix> PabiliMatrices => Set<PabiliMatrix>();
     public DbSet<FareSurcharge> FareSurcharges => Set<FareSurcharge>();
     public DbSet<FarePassengerTier> FarePassengerTiers => Set<FarePassengerTier>();
     public DbSet<OperatorBill> OperatorBills => Set<OperatorBill>();
@@ -93,6 +94,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.MayaQrPath).HasMaxLength(260);
             entity.Property(x => x.MotorcycleCommissionPercent).HasColumnType("decimal(5,2)").HasDefaultValue(10m);
             entity.Property(x => x.TricycleCommissionPercent).HasColumnType("decimal(5,2)").HasDefaultValue(5m);
+            entity.Property(x => x.PabiliFareSystemCommissionPercent).HasColumnType("decimal(5,2)").HasDefaultValue(10m);
+            entity.Property(x => x.PabiliMarkupSystemCommissionPercent).HasColumnType("decimal(5,2)").HasDefaultValue(10m);
             entity.Property(x => x.BroadcastRadiusKm).HasDefaultValue(5d);
             entity.Property(x => x.LiveBookingExpiryMinutes).HasDefaultValue(15);
             entity.Property(x => x.ScheduledBookingGraceMinutes).HasDefaultValue(20);
@@ -340,6 +343,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(x => x.FareMatrices)
                 .HasForeignKey(x => x.MunicipalityId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PabiliMatrix>(entity =>
+        {
+            entity.HasIndex(x => x.OperatorId).IsUnique();
+            entity.Property(x => x.BaseFareAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.KmScope).HasColumnType("decimal(6,2)");
+            entity.Property(x => x.SucceedingKm).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.FareOperatorCommissionPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.FareRiderCommissionPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.MarkupOperatorCommissionPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.MarkupRiderCommissionPercent).HasColumnType("decimal(5,2)");
+            entity.HasOne(x => x.Operator)
+                .WithOne(x => x.PabiliMatrix)
+                .HasForeignKey<PabiliMatrix>(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<FareSurcharge>(entity =>

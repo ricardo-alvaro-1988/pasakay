@@ -444,6 +444,22 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             return BadRequest(new { message = trikeError });
         }
 
+        var (pabiliFareOk, pabiliFareSystem, pabiliFareError) = ParseCommission(
+            form.PabiliFareSystemCommissionPercent ?? 10m,
+            "Pabili fare system");
+        if (!pabiliFareOk)
+        {
+            return BadRequest(new { message = pabiliFareError });
+        }
+
+        var (pabiliMarkupOk, pabiliMarkupSystem, pabiliMarkupError) = ParseCommission(
+            form.PabiliMarkupSystemCommissionPercent ?? 10m,
+            "Pabili markup system");
+        if (!pabiliMarkupOk)
+        {
+            return BadRequest(new { message = pabiliMarkupError });
+        }
+
         if (!SecretHasher.IsStrongPassword(form.Password ?? string.Empty))
         {
             return BadRequest(new { message = "Set a password of at least 6 characters." });
@@ -464,7 +480,9 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             GovernmentId = form.GovernmentId.Trim(),
             IsActive = true,
             MotorcycleCommissionPercent = motorcycleCommission,
-            TricycleCommissionPercent = tricycleCommission
+            TricycleCommissionPercent = tricycleCommission,
+            PabiliFareSystemCommissionPercent = pabiliFareSystem,
+            PabiliMarkupSystemCommissionPercent = pabiliMarkupSystem
         };
 
         var (addressOk, addressError) = await OperatorAddressSync.AssignAsync(db, op, form.AddressBarangayId, form.AddressDetails, cancellationToken);
@@ -537,6 +555,22 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             return BadRequest(new { message = trikeError });
         }
 
+        var (pabiliFareOk, pabiliFareSystem, pabiliFareError) = ParseCommission(
+            form.PabiliFareSystemCommissionPercent ?? 10m,
+            "Pabili fare system");
+        if (!pabiliFareOk)
+        {
+            return BadRequest(new { message = pabiliFareError });
+        }
+
+        var (pabiliMarkupOk, pabiliMarkupSystem, pabiliMarkupError) = ParseCommission(
+            form.PabiliMarkupSystemCommissionPercent ?? 10m,
+            "Pabili markup system");
+        if (!pabiliMarkupOk)
+        {
+            return BadRequest(new { message = pabiliMarkupError });
+        }
+
         var op = await db.Operators.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (op is null)
         {
@@ -568,12 +602,23 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         op.GovernmentId = form.GovernmentId.Trim();
         op.MotorcycleCommissionPercent = motorcycleCommission;
         op.TricycleCommissionPercent = tricycleCommission;
+        op.PabiliFareSystemCommissionPercent = pabiliFareSystem;
+        op.PabiliMarkupSystemCommissionPercent = pabiliMarkupSystem;
         op.UpdatedAtUtc = DateTime.UtcNow;
 
         var fares = await db.FareMatrices.Where(x => x.OperatorId == op.Id).ToListAsync(cancellationToken);
         foreach (var fare in fares)
         {
             FareCommissionSplit.KeepOperatorShare(fare, FareCommissionSplit.SystemPercent(op, fare.VehicleType));
+        }
+
+        var pabili = await db.PabiliMatrices.FirstOrDefaultAsync(x => x.OperatorId == op.Id, cancellationToken);
+        if (pabili is not null)
+        {
+            FareCommissionSplit.KeepOperatorShare(
+                pabili,
+                op.PabiliFareSystemCommissionPercent,
+                op.PabiliMarkupSystemCommissionPercent);
         }
 
         try
@@ -662,6 +707,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             op.IsActive,
             op.MotorcycleCommissionPercent,
             op.TricycleCommissionPercent,
+            op.PabiliFareSystemCommissionPercent,
+            op.PabiliMarkupSystemCommissionPercent,
             op.BookingDispatchMode,
             op.BroadcastRadiusKm,
             op.LiveBookingExpiryMinutes,

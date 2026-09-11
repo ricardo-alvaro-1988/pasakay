@@ -48,6 +48,27 @@ public static class FareCommissionSplit
         fare.UpdatedAtUtc = DateTime.UtcNow;
     }
 
+    public static void ApplyDefaults(PabiliMatrix matrix, decimal fareSystemPercent, decimal markupSystemPercent)
+    {
+        var fare = Defaults(fareSystemPercent);
+        matrix.FareOperatorCommissionPercent = fare.Operator;
+        matrix.FareRiderCommissionPercent = fare.Driver;
+        var markup = Defaults(markupSystemPercent);
+        matrix.MarkupOperatorCommissionPercent = markup.Operator;
+        matrix.MarkupRiderCommissionPercent = markup.Driver;
+    }
+
+    public static void KeepOperatorShare(PabiliMatrix matrix, decimal fareSystemPercent, decimal markupSystemPercent)
+    {
+        var fare = Balance(fareSystemPercent, matrix.FareOperatorCommissionPercent);
+        matrix.FareOperatorCommissionPercent = fare.Operator;
+        matrix.FareRiderCommissionPercent = fare.Driver;
+        var markup = Balance(markupSystemPercent, matrix.MarkupOperatorCommissionPercent);
+        matrix.MarkupOperatorCommissionPercent = markup.Operator;
+        matrix.MarkupRiderCommissionPercent = markup.Driver;
+        matrix.UpdatedAtUtc = DateTime.UtcNow;
+    }
+
     public static decimal SystemPercent(Operator op, VehicleType vehicleType) =>
         vehicleType == VehicleType.Tricycle ? op.TricycleCommissionPercent : op.MotorcycleCommissionPercent;
 

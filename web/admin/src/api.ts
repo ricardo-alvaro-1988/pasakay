@@ -84,6 +84,8 @@ export type OperatorListItem = {
   isActive: boolean
   motorcycleCommissionPercent: number
   tricycleCommissionPercent: number
+  pabiliFareSystemCommissionPercent?: number
+  pabiliMarkupSystemCommissionPercent?: number
   bookingDispatchMode?: BookingDispatchMode
   broadcastRadiusKm?: number
   liveBookingExpiryMinutes?: number
@@ -440,6 +442,21 @@ export type ProductAddonGroupItem = {
   sortOrder: number
   isActive: boolean
   options: ProductAddonOptionItem[]
+}
+
+export type PabiliMatrixDetail = {
+  operatorId: string
+  companyName: string
+  baseFareAmount: number
+  kmScope: number
+  succeedingKm: number
+  fareSystemCommissionPercent: number
+  fareOperatorCommissionPercent: number
+  fareRiderCommissionPercent: number
+  markupSystemCommissionPercent: number
+  markupOperatorCommissionPercent: number
+  markupRiderCommissionPercent: number
+  isActive: boolean
 }
 
 export type MerchantProductItem = {
@@ -2097,6 +2114,21 @@ export const api = {
   },
   operatorMerchantAddonGroups: (merchantId: string) =>
     request<{ items: ProductAddonGroupItem[] }>(`/api/operator/merchants/${merchantId}/addon-groups`),
+  operatorPabiliMatrix: () => request<PabiliMatrixDetail>('/api/operator/pabili-matrix'),
+  saveOperatorPabiliMatrix: (body: {
+    baseFareAmount: number
+    kmScope: number
+    succeedingKm: number
+    fareOperatorCommissionPercent: number
+    fareRiderCommissionPercent: number
+    markupOperatorCommissionPercent: number
+    markupRiderCommissionPercent: number
+    isActive: boolean
+  }) =>
+    request<PabiliMatrixDetail>('/api/operator/pabili-matrix', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
   createOperatorMerchantAddonGroup: (merchantId: string, body: ProductAddonGroupItem) =>
     request<ProductAddonGroupItem>(`/api/operator/merchants/${merchantId}/addon-groups`, {
       method: 'POST',

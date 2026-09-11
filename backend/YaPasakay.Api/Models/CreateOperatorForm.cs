@@ -15,4 +15,6 @@ public class CreateOperatorForm
     public IFormFile? GovernmentIdPhoto { get; set; }
     public decimal? MotorcycleCommissionPercent { get; set; }
     public decimal? TricycleCommissionPercent { get; set; }
+    public decimal? PabiliFareSystemCommissionPercent { get; set; }
+    public decimal? PabiliMarkupSystemCommissionPercent { get; set; }
 }

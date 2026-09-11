@@ -326,6 +326,45 @@ public static class MerchantCatalogBootstrap
             """, cancellationToken);
     }
 
+    public static async Task EnsurePabiliMatrixAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            IF COL_LENGTH(N'Operators', N'PabiliFareSystemCommissionPercent') IS NULL
+                ALTER TABLE [Operators] ADD [PabiliFareSystemCommissionPercent] decimal(5,2) NOT NULL CONSTRAINT [DF_Operators_PabiliFareSystemCommissionPercent] DEFAULT (10);
+
+            IF COL_LENGTH(N'Operators', N'PabiliMarkupSystemCommissionPercent') IS NULL
+                ALTER TABLE [Operators] ADD [PabiliMarkupSystemCommissionPercent] decimal(5,2) NOT NULL CONSTRAINT [DF_Operators_PabiliMarkupSystemCommissionPercent] DEFAULT (10);
+
+            IF OBJECT_ID(N'[PabiliMatrices]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [PabiliMatrices] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [OperatorId] uniqueidentifier NOT NULL,
+                    [BaseFareAmount] decimal(18,2) NOT NULL,
+                    [KmScope] decimal(6,2) NOT NULL,
+                    [SucceedingKm] decimal(18,2) NOT NULL,
+                    [FareOperatorCommissionPercent] decimal(5,2) NOT NULL,
+                    [FareRiderCommissionPercent] decimal(5,2) NOT NULL,
+                    [MarkupOperatorCommissionPercent] decimal(5,2) NOT NULL,
+                    [MarkupRiderCommissionPercent] decimal(5,2) NOT NULL,
+                    [IsActive] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_PabiliMatrices] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_PabiliMatrices_Operators_OperatorId] FOREIGN KEY ([OperatorId]) REFERENCES [Operators] ([Id]) ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX [IX_PabiliMatrices_OperatorId] ON [PabiliMatrices] ([OperatorId]);
+            END
+
+            IF NOT EXISTS (
+                SELECT 1 FROM [__EFMigrationsHistory]
+                WHERE [MigrationId] = N'20260911042730_PabiliMatrix'
+            )
+                INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+                VALUES (N'20260911042730_PabiliMatrix', N'9.0.8');
+            """, cancellationToken);
+    }
+
     public static async Task<bool> HasMerchantsTableAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
         var conn = db.Database.GetDbConnection();

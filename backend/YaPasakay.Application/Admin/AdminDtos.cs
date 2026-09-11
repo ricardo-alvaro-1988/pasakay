@@ -83,6 +83,8 @@ public record OperatorDetailResponse(
     bool IsActive,
     decimal MotorcycleCommissionPercent,
     decimal TricycleCommissionPercent,
+    decimal PabiliFareSystemCommissionPercent,
+    decimal PabiliMarkupSystemCommissionPercent,
     BookingDispatchMode BookingDispatchMode,
     double BroadcastRadiusKm,
     int LiveBookingExpiryMinutes,
@@ -1116,6 +1118,30 @@ public record SaveDeriveFareZoneRequest(
     FareVehicleRatesBody Tricycle);
 
 public record DeriveFareZoneListResponse(IReadOnlyList<DeriveFareZoneListItem> Items);
+
+public record PabiliMatrixResponse(
+    Guid OperatorId,
+    string CompanyName,
+    decimal BaseFareAmount,
+    decimal KmScope,
+    decimal SucceedingKm,
+    decimal FareSystemCommissionPercent,
+    decimal FareOperatorCommissionPercent,
+    decimal FareRiderCommissionPercent,
+    decimal MarkupSystemCommissionPercent,
+    decimal MarkupOperatorCommissionPercent,
+    decimal MarkupRiderCommissionPercent,
+    bool IsActive);
+
+public record SavePabiliMatrixRequest(
+    decimal BaseFareAmount,
+    decimal KmScope,
+    decimal SucceedingKm,
+    decimal FareOperatorCommissionPercent,
+    decimal FareRiderCommissionPercent,
+    decimal MarkupOperatorCommissionPercent,
+    decimal MarkupRiderCommissionPercent,
+    bool IsActive = true);
 
 public static class UploadUrls
 {

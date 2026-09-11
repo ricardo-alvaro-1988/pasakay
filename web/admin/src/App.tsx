@@ -126,6 +126,7 @@ import FleetMap from './FleetMap'
 import TripLiveMap from './TripLiveMap'
 import { DeriveZoneMap } from './DeriveZoneMap'
 import { OperatorMerchantsPage } from './OperatorMerchantsPage'
+import { OperatorPabiliMatrixPage } from './OperatorPabiliMatrixPage'
 import { OperatorProductCategoriesPage } from './OperatorProductCategoriesPage'
 import {
   ADMIN_MENU_GROUPS,
@@ -3280,6 +3281,8 @@ function OperatorFormPage({
     governmentId: '',
     motorcycleCommissionPercent: '10',
     tricycleCommissionPercent: '5',
+    pabiliFareSystemCommissionPercent: '10',
+    pabiliMarkupSystemCommissionPercent: '10',
   })
   const [address, setAddress] = useState<AddressValue>({
     province: null,
@@ -3310,6 +3313,8 @@ function OperatorFormPage({
         governmentId: op.governmentId,
         motorcycleCommissionPercent: String(op.motorcycleCommissionPercent ?? 10),
         tricycleCommissionPercent: String(op.tricycleCommissionPercent ?? 5),
+        pabiliFareSystemCommissionPercent: String(op.pabiliFareSystemCommissionPercent ?? 10),
+        pabiliMarkupSystemCommissionPercent: String(op.pabiliMarkupSystemCommissionPercent ?? 10),
       })
       setAddress({
         province: op.address?.provinceId ? { id: op.address.provinceId, name: op.address.province } : null,
@@ -3337,12 +3342,22 @@ function OperatorFormPage({
     }
     const motorcycleCommission = Number(form.motorcycleCommissionPercent)
     const tricycleCommission = Number(form.tricycleCommissionPercent)
+    const pabiliFareSystem = Number(form.pabiliFareSystemCommissionPercent)
+    const pabiliMarkupSystem = Number(form.pabiliMarkupSystemCommissionPercent)
     if (!Number.isFinite(motorcycleCommission) || motorcycleCommission < 0 || motorcycleCommission > 100) {
       setError('Motorcycle commission must be a number from 0 to 100.')
       return
     }
     if (!Number.isFinite(tricycleCommission) || tricycleCommission < 0 || tricycleCommission > 100) {
       setError('Tricycle commission must be a number from 0 to 100.')
+      return
+    }
+    if (!Number.isFinite(pabiliFareSystem) || pabiliFareSystem < 0 || pabiliFareSystem > 100) {
+      setError('Pabili fare system commission must be a number from 0 to 100.')
+      return
+    }
+    if (!Number.isFinite(pabiliMarkupSystem) || pabiliMarkupSystem < 0 || pabiliMarkupSystem > 100) {
+      setError('Pabili markup system commission must be a number from 0 to 100.')
       return
     }
     if (!isEdit && password.trim().length < 6) {
@@ -3371,6 +3386,8 @@ function OperatorFormPage({
       data.append('governmentId', form.governmentId)
       data.append('motorcycleCommissionPercent', String(motorcycleCommission))
       data.append('tricycleCommissionPercent', String(tricycleCommission))
+      data.append('pabiliFareSystemCommissionPercent', String(pabiliFareSystem))
+      data.append('pabiliMarkupSystemCommissionPercent', String(pabiliMarkupSystem))
       for (const area of areas) {
         data.append('barangayIds', area.barangayId)
       }
@@ -3510,6 +3527,31 @@ function OperatorFormPage({
                 step="0.01"
                 value={form.tricycleCommissionPercent}
                 onChange={(e) => setForm({ ...form, tricycleCommissionPercent: e.target.value })}
+              />
+            </label>
+          </div>
+          <p className="form-hint" style={{ marginTop: 14 }}>Pabili system shares are read-only for operators in Pabili Matrix.</p>
+          <div className="form-grid">
+            <label className="field">
+              <span>Pabili fare system (%)</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={form.pabiliFareSystemCommissionPercent}
+                onChange={(e) => setForm({ ...form, pabiliFareSystemCommissionPercent: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span>Pabili markup system (%)</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                value={form.pabiliMarkupSystemCommissionPercent}
+                onChange={(e) => setForm({ ...form, pabiliMarkupSystemCommissionPercent: e.target.value })}
               />
             </label>
           </div>
@@ -7244,9 +7286,7 @@ function OperatorShell({
         {page === 'pabili-orders' && (
           <ComingSoon title="Pabili orders" body="Order intake and status tracking for Pabili will live here." />
         )}
-        {page === 'pabili-matrix' && (
-          <ComingSoon title="Pabili Matrix" body="Delivery pricing matrix for Pabili will live here." />
-        )}
+        {page === 'pabili-matrix' && <OperatorPabiliMatrixPage />}
         {page === 'pabili-riders' && (
           <ComingSoon title="Pabili riders" body="Rider assignment and availability for Pabili will live here." />
         )}

@@ -208,6 +208,8 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             loaded.IsActive,
             loaded.MotorcycleCommissionPercent,
             loaded.TricycleCommissionPercent,
+            loaded.PabiliFareSystemCommissionPercent,
+            loaded.PabiliMarkupSystemCommissionPercent,
             loaded.BookingDispatchMode,
             loaded.BroadcastRadiusKm,
             loaded.LiveBookingExpiryMinutes,
