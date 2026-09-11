@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, mediaUrl, PaymentMethod, Desk, PabiliOrderDetail } from './api'
 import { AccountHub, AccountPage } from './account-screens'
-import { drawDrivingRoute, loadGoogleMaps, MapHandle, DirectionsRendererHandle, MarkerHandle, reverseGeocode } from './maps'
-import { lastKnownGps, readGps } from './gps'
+import {
+  drawDrivingRoute,
+  loadGoogleMaps,
+  MapHandle,
+  DirectionsRendererHandle,
+  MarkerHandle,
+  reverseGeocode,
+  searchPlaces,
+  placeDetails,
+  geocodeText,
+  Prediction,
+} from './maps'
+import { lastKnownGps, readGps, readPickupGps } from './gps'
 
 type View = 'home' | 'store' | 'cart' | 'checkout' | 'track' | 'orders' | 'account'
 
@@ -145,6 +156,14 @@ export function PabiliStorefront({
     return { lat: FALLBACK_LAT, lng: FALLBACK_LNG }
   })
   const [dropoffLabel, setDropoffLabel] = useState('Current location')
+  const [locating, setLocating] = useState(false)
+  const [locationPickerOpen, setLocationPickerOpen] = useState(false)
+  const [locationQuery, setLocationQuery] = useState('')
+  const [locationHints, setLocationHints] = useState<Prediction[]>([])
+  const [locationHits, setLocationHits] = useState<Array<{ label: string; details: string; lat: number; lng: number }>>([])
+  const mapsRef = useRef<Awaited<ReturnType<typeof loadGoogleMaps>> | null>(null)
+  const locateGen = useRef(0)
+  const locationTimer = useRef<number | null>(null)
   const [quote, setQuote] = useState<Quote | null>(null)
   const [order, setOrder] = useState<OrderDetail | null>(null)
   const [orders, setOrders] = useState<OrderDetail[]>([])
@@ -172,8 +191,7 @@ export function PabiliStorefront({
         const next = { lat: pos.coords.latitude, lng: pos.coords.longitude }
         setGps(next)
         try {
-          const { googleMapsBrowserKey } = await api.mapsConfig()
-          const maps = await loadGoogleMaps(googleMapsBrowserKey)
+          const maps = await ensureMaps()
           const label = await reverseGeocode(maps, next.lat, next.lng)
           if (!dead) setDropoffLabel(label)
         } catch {
@@ -187,6 +205,125 @@ export function PabiliStorefront({
       dead = true
     }
   }, [])
+
+  async function ensureMaps() {
+    if (mapsRef.current) return mapsRef.current
+    const { googleMapsBrowserKey } = await api.mapsConfig()
+    const maps = await loadGoogleMaps(googleMapsBrowserKey)
+    mapsRef.current = maps
+    return maps
+  }
+
+  async function applyLocation(next: { lat: number; lng: number }, label: string) {
+    setGps(next)
+    setDropoffLabel(label)
+    setLocationPickerOpen(false)
+    setLocationQuery('')
+    setLocationHints([])
+    setLocationHits([])
+    setError('')
+  }
+
+  async function useCurrentLocation() {
+    const gen = ++locateGen.current
+    setLocating(true)
+    setError('')
+    try {
+      const pos = await readPickupGps()
+      if (gen !== locateGen.current) return
+      const next = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+      let label = 'Current location'
+      try {
+        const maps = await ensureMaps()
+        label = await reverseGeocode(maps, next.lat, next.lng)
+      } catch {
+        /* keep fallback label */
+      }
+      if (gen !== locateGen.current) return
+      await applyLocation(next, label)
+    } catch (e) {
+      if (gen === locateGen.current) {
+        setError(e instanceof Error ? e.message : 'Could not get your location.')
+      }
+    } finally {
+      if (gen === locateGen.current) setLocating(false)
+    }
+  }
+
+  function openLocationPicker() {
+    setLocationPickerOpen(true)
+    setLocationQuery('')
+    setLocationHints([])
+    setLocationHits([])
+    setError('')
+  }
+
+  useEffect(() => {
+    if (!locationPickerOpen) return
+    if (locationTimer.current != null) window.clearTimeout(locationTimer.current)
+    const term = locationQuery.trim()
+    if (term.length < 2) {
+      setLocationHints([])
+      setLocationHits([])
+      return
+    }
+    locationTimer.current = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const maps = await ensureMaps()
+          const [hints, hits] = await Promise.all([
+            searchPlaces(maps, term, gps),
+            geocodeText(maps, term, gps),
+          ])
+          setLocationHints(hints.slice(0, 8))
+          setLocationHits(
+            hits.slice(0, 6).map((h) => ({
+              label: h.label,
+              details: h.details,
+              lat: h.lat,
+              lng: h.lng,
+            })),
+          )
+        } catch {
+          setLocationHints([])
+          setLocationHits([])
+        }
+      })()
+    }, 250)
+    return () => {
+      if (locationTimer.current != null) window.clearTimeout(locationTimer.current)
+    }
+  }, [locationQuery, locationPickerOpen, gps.lat, gps.lng])
+
+  async function chooseLocationPrediction(item: Prediction) {
+    try {
+      const maps = await ensureMaps()
+      const place = await placeDetails(maps, item.place_id)
+      await applyLocation({ lat: place.lat, lng: place.lng }, place.address)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not set that location.')
+    }
+  }
+
+  async function chooseLocationHit(item: { label: string; details: string; lat: number; lng: number }) {
+    await applyLocation({ lat: item.lat, lng: item.lng }, item.details || item.label)
+  }
+
+  async function confirmTypedLocation() {
+    const term = locationQuery.trim()
+    if (!term) return
+    try {
+      const maps = await ensureMaps()
+      const hits = await geocodeText(maps, term, gps)
+      if (hits[0]) {
+        await applyLocation({ lat: hits[0].lat, lng: hits[0].lng }, hits[0].details || hits[0].label)
+        return
+      }
+      setError('No matching place. Try another address.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not find that place.')
+    }
+  }
 
   async function loadMerchants(term = search) {
     setError('')
@@ -470,7 +607,16 @@ export function PabiliStorefront({
 
       {view === 'home' ? (
         <header className="pb-search-bar">
-          <div className="pb-search-wrap">
+          <div className="pb-loc-row">
+            <p className="pb-loc-label" title={dropoffLabel}>
+              <span className="muted">Deliver to</span>
+              <b>{dropoffLabel}</b>
+            </p>
+            <button type="button" className="pb-loc-fix" onClick={openLocationPicker}>
+              [Not accurate?]
+            </button>
+          </div>
+          <div className="pb-search-wrap pb-search-with-locate">
             <input
               className="pb-search"
               placeholder="Search food, groceries, drinks…"
@@ -491,6 +637,16 @@ export function PabiliStorefront({
               aria-autocomplete="list"
               aria-expanded={suggestOpen}
             />
+            <button
+              type="button"
+              className="pb-locate-btn"
+              disabled={locating}
+              onClick={() => void useCurrentLocation()}
+              aria-label="Use current location"
+              title="Use current location"
+            >
+              <LocatePinIcon spinning={locating} />
+            </button>
             {suggestOpen ? (
               <div className="pb-suggest" role="listbox">
                 {suggestProducts.map((p) => (
@@ -597,19 +753,19 @@ export function PabiliStorefront({
             <div className="pb-section-head">
               <h2>Popular now</h2>
             </div>
-            <div className="pb-product-grid">
+            <div className="pb-tile-grid">
               {popularProducts.map((p) => (
                 <button
                   key={`${p.merchantId}-${p.id}`}
                   type="button"
-                  className="pb-product-card"
+                  className="pb-tile-card"
                   onClick={() => void openStore(p.merchantId, p.id)}
                 >
                   <div
-                    className="pb-product-img"
+                    className="pb-tile-img"
                     style={p.imageUrl ? { backgroundImage: `url(${mediaUrl(p.imageUrl)})` } : undefined}
                   />
-                  <div className="pb-product-body">
+                  <div className="pb-tile-body">
                     <b>{p.name}</b>
                     <small className="muted">{p.merchantName}</small>
                     <span className="pb-price">{peso(p.sellingPrice)}</span>
@@ -671,14 +827,16 @@ export function PabiliStorefront({
               <span className={store.isOpen ? 'ok' : 'bad'}>{store.isOpen ? 'Open' : 'Closed'}</span>
             </div>
           </div>
-          <div className="pb-search-wrap pb-store-search">
-            <input
-              className="pb-search"
-              placeholder={`Search in ${store.name}…`}
-              value={storeSearch}
-              onChange={(e) => setStoreSearch(e.target.value)}
-              aria-label="Search store products"
-            />
+          <div className="pb-search-bar">
+            <div className="pb-search-wrap">
+              <input
+                className="pb-search"
+                placeholder={`Search in ${store.name}…`}
+                value={storeSearch}
+                onChange={(e) => setStoreSearch(e.target.value)}
+                aria-label="Search store products"
+              />
+            </div>
           </div>
           {storeCategories.length > 0 ? (
             <div className="pb-cats sticky">
@@ -918,7 +1076,80 @@ export function PabiliStorefront({
           </div>
         </div>
       ) : null}
+
+      {locationPickerOpen ? (
+        <div className="picker pb-location-picker">
+          <button
+            className="ghost"
+            type="button"
+            onClick={() => {
+              setLocationPickerOpen(false)
+              setLocationQuery('')
+              setLocationHints([])
+              setLocationHits([])
+            }}
+          >
+            Back
+          </button>
+          <h2>Set delivery location</h2>
+          <input
+            autoFocus
+            placeholder="Search a place or address"
+            value={locationQuery}
+            onChange={(e) => setLocationQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                void confirmTypedLocation()
+              }
+            }}
+          />
+          <button type="button" className="picker-item" disabled={locating} onClick={() => void useCurrentLocation()}>
+            <b>{locating ? 'Getting your location…' : 'Use current location'}</b>
+            <div className="muted">{locating ? 'Keep this screen open while GPS locks' : 'GPS delivery pin'}</div>
+          </button>
+          {locationHits.map((item) => (
+            <button
+              key={`${item.details}-${item.lat}`}
+              className="picker-item"
+              type="button"
+              onClick={() => void chooseLocationHit(item)}
+            >
+              <b>{item.label}</b>
+              <div className="muted">{item.details}</div>
+            </button>
+          ))}
+          {locationHints.map((item) => (
+            <button
+              key={item.place_id}
+              className="picker-item"
+              type="button"
+              onClick={() => void chooseLocationPrediction(item)}
+            >
+              <b>{item.structured_formatting?.main_text ?? item.description}</b>
+              <div className="muted">{item.structured_formatting?.secondary_text}</div>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
+  )
+}
+
+function LocatePinIcon({ spinning }: { spinning?: boolean }) {
+  return (
+    <svg
+      className={spinning ? 'pb-locate-spin' : undefined}
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" fill="var(--accent)" />
+      <path d="M12 3v3M12 18v3M3 12h3M18 12h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2" />
+    </svg>
   )
 }
 
