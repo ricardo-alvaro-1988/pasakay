@@ -77,7 +77,7 @@ function lineTotal(line: CartLine) {
 
 const FALLBACK_LAT = 14.5995
 const FALLBACK_LNG = 120.9842
-const HOME_CATEGORIES = ['Food', 'Groceries', 'Gadgets', 'Drinks', 'Pharmacy', 'Pets', 'Fashion', 'Home'] as const
+const HOME_CATEGORIES = ['Food', 'Groceries', 'Gadgets', 'Drinks', 'Pharmacy', 'Pets'] as const
 
 function shuffleAds<T>(items: T[]) {
   const next = [...items]

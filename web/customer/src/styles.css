@@ -2769,7 +2769,7 @@ button.where-toggle .where { pointer-events: none; }
   display: flex;
   flex-wrap: wrap;
   gap: 6px 10px;
-  margin: 8px 2px 0;
+  margin: 6px 2px 0;
 }
 .pb-quick-cat {
   border: 0;
@@ -2887,18 +2887,11 @@ button.where-toggle .where { pointer-events: none; }
   overflow: hidden;
   text-decoration: none;
   color: #fff;
-  box-shadow: 0 8px 18px color-mix(in srgb, #000 8%, transparent);
 }
 .pb-offer-media {
   position: absolute;
   inset: 0;
   background: #d9dee6 center/cover no-repeat;
-}
-.pb-offer-media::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 35%, rgba(20, 22, 26, 0.72));
 }
 .pb-offer-title {
   position: absolute;
@@ -2909,7 +2902,6 @@ button.where-toggle .where { pointer-events: none; }
   font-size: 13px;
   font-weight: 800;
   line-height: 1.25;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
 }
 .pb-store-search {
   margin: 0 0 10px;
@@ -2946,7 +2938,7 @@ button.where-toggle .where { pointer-events: none; }
 .pb-nav button { font-size: 10px; }
 .pb-nav button span { font-size: 14px; }
 .pb-brand-hint { display: none; }
-.pb-main { padding: 14px 14px 24px; }
+.pb-main { padding: 6px 14px 24px; }
 .pb-error { margin: 8px 14px 0; }
 .pb-cats {
   display: flex;
@@ -2993,7 +2985,8 @@ button.where-toggle .where { pointer-events: none; }
   background: var(--accent);
   color: #fff;
 }
-.pb-section { margin-top: 18px; }
+.pb-section { margin-top: 10px; }
+.pb-section:first-child { margin-top: 4px; }
 .pb-section-head h2 {
   margin: 0 0 10px;
   font-size: 1.15rem;
