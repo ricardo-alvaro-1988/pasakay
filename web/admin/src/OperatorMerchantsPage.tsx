@@ -651,13 +651,27 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
       setLibError('Min/max select is invalid.')
       return
     }
+    const payload: ProductAddonGroupItem = {
+      name: libForm.name.trim(),
+      minSelect: Number(libForm.minSelect) || 0,
+      maxSelect: Math.max(1, Number(libForm.maxSelect) || 1),
+      sortOrder: Number(libForm.sortOrder) || 0,
+      isActive: libForm.isActive !== false,
+      options: (libForm.options ?? []).map((o, i) => ({
+        name: o.name.trim(),
+        basePrice: Number(o.basePrice) || 0,
+        sellingPrice: Number(o.sellingPrice) || 0,
+        sortOrder: i,
+        isActive: o.isActive !== false,
+      })),
+    }
     setBusy(true)
     setLibError('')
     try {
       if (editingLib?.id) {
-        await api.updateOperatorMerchantAddonGroup(merchantId, editingLib.id, libForm)
+        await api.updateOperatorMerchantAddonGroup(merchantId, editingLib.id, payload)
       } else {
-        await api.createOperatorMerchantAddonGroup(merchantId, libForm)
+        await api.createOperatorMerchantAddonGroup(merchantId, payload)
       }
       const g = await api.operatorMerchantAddonGroups(merchantId)
       setLibrary(g.items)

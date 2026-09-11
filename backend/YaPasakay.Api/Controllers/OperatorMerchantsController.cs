@@ -421,13 +421,18 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
     [HttpPost("{merchantId:guid}/addon-groups")]
     public async Task<ActionResult<ProductAddonGroupItem>> CreateAddonLibraryGroup(
         Guid merchantId,
-        [FromBody] ProductAddonGroupItem request,
+        [FromBody] ProductAddonGroupItem? request,
         CancellationToken cancellationToken)
     {
         var (op, merchant, fail) = await RequireMerchantAsync(merchantId, cancellationToken);
         if (fail is not null)
         {
             return fail;
+        }
+
+        if (request is null)
+        {
+            return BadRequest(new { message = "Add-on group body is required." });
         }
 
         var error = ValidateAddons([request]);
@@ -439,7 +444,7 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         var group = new MerchantAddonGroup
         {
             MerchantId = merchant!.Id,
-            Name = request.Name.Trim(),
+            Name = Truncate(request.Name.Trim(), 120),
             MinSelect = request.MinSelect,
             MaxSelect = request.MaxSelect,
             SortOrder = request.SortOrder,
@@ -449,7 +454,7 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         {
             group.Options.Add(new MerchantAddonOption
             {
-                Name = option.Name.Trim(),
+                Name = Truncate(option.Name.Trim(), 120),
                 BasePrice = option.BasePrice,
                 SellingPrice = option.SellingPrice,
                 SortOrder = option.SortOrder,
@@ -457,8 +462,16 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             });
         }
 
-        db.MerchantAddonGroups.Add(group);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            db.MerchantAddonGroups.Add(group);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = $"Could not save add-on group: {RootMessage(ex)}" });
+        }
+
         return Ok(MapLibraryGroup(group));
     }
 
@@ -466,13 +479,18 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
     public async Task<ActionResult<ProductAddonGroupItem>> UpdateAddonLibraryGroup(
         Guid merchantId,
         Guid id,
-        [FromBody] ProductAddonGroupItem request,
+        [FromBody] ProductAddonGroupItem? request,
         CancellationToken cancellationToken)
     {
         var (op, merchant, fail) = await RequireMerchantAsync(merchantId, cancellationToken);
         if (fail is not null)
         {
             return fail;
+        }
+
+        if (request is null)
+        {
+            return BadRequest(new { message = "Add-on group body is required." });
         }
 
         var error = ValidateAddons([request]);
@@ -489,7 +507,7 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             return NotFound(new { message = "Add-on group not found." });
         }
 
-        group.Name = request.Name.Trim();
+        group.Name = Truncate(request.Name.Trim(), 120);
         group.MinSelect = request.MinSelect;
         group.MaxSelect = request.MaxSelect;
         group.SortOrder = request.SortOrder;
@@ -501,7 +519,7 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         {
             group.Options.Add(new MerchantAddonOption
             {
-                Name = option.Name.Trim(),
+                Name = Truncate(option.Name.Trim(), 120),
                 BasePrice = option.BasePrice,
                 SellingPrice = option.SellingPrice,
                 SortOrder = option.SortOrder,
@@ -509,7 +527,15 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             });
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = $"Could not update add-on group: {RootMessage(ex)}" });
+        }
+
         return Ok(MapLibraryGroup(group));
     }
 
@@ -1236,10 +1262,15 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         return null;
     }
 
-    static string? ValidateAddons(IReadOnlyList<ProductAddonGroupItem>? groups)
+    static string? ValidateAddons(IReadOnlyList<ProductAddonGroupItem?>? groups)
     {
         foreach (var group in groups ?? [])
         {
+            if (group is null)
+            {
+                return "Addon group body is required.";
+            }
+
             if (string.IsNullOrWhiteSpace(group.Name))
             {
                 return "Addon group name is required.";
@@ -1257,7 +1288,7 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
 
             foreach (var option in group.Options)
             {
-                if (string.IsNullOrWhiteSpace(option.Name))
+                if (option is null || string.IsNullOrWhiteSpace(option.Name))
                 {
                     return "Addon option name is required.";
                 }
@@ -1270,6 +1301,20 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         }
 
         return null;
+    }
+
+    static string Truncate(string value, int max) =>
+        value.Length <= max ? value : value[..max];
+
+    static string RootMessage(Exception ex)
+    {
+        var root = ex;
+        while (root.InnerException is not null)
+        {
+            root = root.InnerException;
+        }
+
+        return root.Message;
     }
 
     static string NormalizeOptionalPhone(string? mobile)

@@ -332,6 +332,20 @@ public static class MerchantCatalogBootstrap
 
                 IF COL_LENGTH(N'MerchantAddonOptions', N'BasePrice') IS NULL
                     ALTER TABLE [MerchantAddonOptions] ADD [BasePrice] decimal(18,2) NOT NULL CONSTRAINT [DF_MerchantAddonOptions_BasePrice] DEFAULT (0);
+
+                -- Leftover PriceDelta (NOT NULL, no default) breaks INSERTs while SELECTs still work.
+                IF COL_LENGTH(N'MerchantAddonOptions', N'PriceDelta') IS NOT NULL
+                   AND COL_LENGTH(N'MerchantAddonOptions', N'SellingPrice') IS NOT NULL
+                BEGIN
+                    EXEC(N'UPDATE [MerchantAddonOptions] SET [SellingPrice] = [PriceDelta] WHERE [SellingPrice] = 0 AND [PriceDelta] <> 0');
+                    DECLARE @priceDeltaDf sysname;
+                    SELECT @priceDeltaDf = dc.name
+                    FROM sys.default_constraints dc
+                    INNER JOIN sys.columns c ON c.default_object_id = dc.object_id
+                    WHERE dc.parent_object_id = OBJECT_ID(N'[MerchantAddonOptions]') AND c.name = N'PriceDelta';
+                    IF @priceDeltaDf IS NOT NULL EXEC(N'ALTER TABLE [MerchantAddonOptions] DROP CONSTRAINT [' + @priceDeltaDf + N']');
+                    ALTER TABLE [MerchantAddonOptions] DROP COLUMN [PriceDelta];
+                END
             END
 
             IF NOT EXISTS (
