@@ -2370,7 +2370,7 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.HasOne("YaPasakay.Domain.Entities.AppUser", "AppUser")
                         .WithMany()
                         .HasForeignKey("AppUserId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("YaPasakay.Domain.Entities.Operator", "Operator")
                         .WithMany("Merchants")

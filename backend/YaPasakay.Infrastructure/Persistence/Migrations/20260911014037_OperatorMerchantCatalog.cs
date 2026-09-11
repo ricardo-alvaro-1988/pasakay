@@ -11,260 +11,150 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<Guid>(
-                name: "MerchantId",
-                table: "Users",
-                type: "uniqueidentifier",
-                nullable: true);
+            // Idempotent: recover from a failed prior attempt that left partial objects
+            // and avoid SQL Server "multiple cascade paths" on MerchantProducts.
+            migrationBuilder.Sql("""
+                IF OBJECT_ID(N'[ProductAddonOptions]', N'U') IS NOT NULL DROP TABLE [ProductAddonOptions];
+                IF OBJECT_ID(N'[ProductAddonGroups]', N'U') IS NOT NULL DROP TABLE [ProductAddonGroups];
+                IF OBJECT_ID(N'[MerchantProducts]', N'U') IS NOT NULL DROP TABLE [MerchantProducts];
+                IF OBJECT_ID(N'[MerchantProductCategories]', N'U') IS NOT NULL DROP TABLE [MerchantProductCategories];
+                IF OBJECT_ID(N'[MerchantOperatingHours]', N'U') IS NOT NULL DROP TABLE [MerchantOperatingHours];
+                IF OBJECT_ID(N'[Merchants]', N'U') IS NOT NULL DROP TABLE [Merchants];
 
-            migrationBuilder.CreateTable(
-                name: "Merchants",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    OperatorId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    BusinessName = table.Column<string>(type: "nvarchar(160)", maxLength: 160, nullable: false),
-                    ContactPerson = table.Column<string>(type: "nvarchar(120)", maxLength: 120, nullable: false),
-                    Latitude = table.Column<double>(type: "float", nullable: false),
-                    Longitude = table.Column<double>(type: "float", nullable: false),
-                    PinnedAddress = table.Column<string>(type: "nvarchar(400)", maxLength: 400, nullable: false),
-                    ManagedByMerchant = table.Column<bool>(type: "bit", nullable: false),
-                    Mobile = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: false),
-                    Email = table.Column<string>(type: "nvarchar(160)", maxLength: 160, nullable: false),
-                    AppUserId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    LogoPath = table.Column<string>(type: "nvarchar(260)", maxLength: 260, nullable: true),
-                    BackgroundPath = table.Column<string>(type: "nvarchar(260)", maxLength: 260, nullable: true),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    SortOrder = table.Column<int>(type: "int", nullable: false),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Merchants", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Merchants_Operators_OperatorId",
-                        column: x => x.OperatorId,
-                        principalTable: "Operators",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_Merchants_Users_AppUserId",
-                        column: x => x.AppUserId,
-                        principalTable: "Users",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                });
+                IF EXISTS (
+                    SELECT 1 FROM sys.indexes
+                    WHERE name = N'IX_Users_MerchantId' AND object_id = OBJECT_ID(N'[Users]')
+                )
+                    DROP INDEX [IX_Users_MerchantId] ON [Users];
 
-            migrationBuilder.CreateTable(
-                name: "MerchantOperatingHours",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    MerchantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    DayOfWeek = table.Column<int>(type: "int", nullable: false),
-                    IsClosed = table.Column<bool>(type: "bit", nullable: false),
-                    OpenTime = table.Column<TimeSpan>(type: "time", nullable: true),
-                    CloseTime = table.Column<TimeSpan>(type: "time", nullable: true),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_MerchantOperatingHours", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_MerchantOperatingHours_Merchants_MerchantId",
-                        column: x => x.MerchantId,
-                        principalTable: "Merchants",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                IF COL_LENGTH(N'Users', N'MerchantId') IS NULL
+                    ALTER TABLE [Users] ADD [MerchantId] uniqueidentifier NULL;
 
-            migrationBuilder.CreateTable(
-                name: "MerchantProductCategories",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    MerchantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(120)", maxLength: 120, nullable: false),
-                    SortOrder = table.Column<int>(type: "int", nullable: false),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_MerchantProductCategories", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_MerchantProductCategories_Merchants_MerchantId",
-                        column: x => x.MerchantId,
-                        principalTable: "Merchants",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                CREATE TABLE [Merchants] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [OperatorId] uniqueidentifier NOT NULL,
+                    [BusinessName] nvarchar(160) NOT NULL,
+                    [ContactPerson] nvarchar(120) NOT NULL,
+                    [Latitude] float NOT NULL,
+                    [Longitude] float NOT NULL,
+                    [PinnedAddress] nvarchar(400) NOT NULL,
+                    [ManagedByMerchant] bit NOT NULL,
+                    [Mobile] nvarchar(20) NOT NULL,
+                    [Email] nvarchar(160) NOT NULL,
+                    [AppUserId] uniqueidentifier NULL,
+                    [LogoPath] nvarchar(260) NULL,
+                    [BackgroundPath] nvarchar(260) NULL,
+                    [IsActive] bit NOT NULL,
+                    [SortOrder] int NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_Merchants] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_Merchants_Operators_OperatorId] FOREIGN KEY ([OperatorId]) REFERENCES [Operators] ([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [FK_Merchants_Users_AppUserId] FOREIGN KEY ([AppUserId]) REFERENCES [Users] ([Id]) ON DELETE NO ACTION
+                );
 
-            migrationBuilder.CreateTable(
-                name: "MerchantProducts",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    MerchantId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    CategoryId = table.Column<Guid>(type: "uniqueidentifier", nullable: true),
-                    Name = table.Column<string>(type: "nvarchar(160)", maxLength: 160, nullable: false),
-                    Description = table.Column<string>(type: "nvarchar(1000)", maxLength: 1000, nullable: false),
-                    BasePrice = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    AvailableOnStorefront = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
-                    SortOrder = table.Column<int>(type: "int", nullable: false),
-                    ImagePath = table.Column<string>(type: "nvarchar(260)", maxLength: 260, nullable: true),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_MerchantProducts", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_MerchantProducts_MerchantProductCategories_CategoryId",
-                        column: x => x.CategoryId,
-                        principalTable: "MerchantProductCategories",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "FK_MerchantProducts_Merchants_MerchantId",
-                        column: x => x.MerchantId,
-                        principalTable: "Merchants",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                CREATE TABLE [MerchantOperatingHours] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [MerchantId] uniqueidentifier NOT NULL,
+                    [DayOfWeek] int NOT NULL,
+                    [IsClosed] bit NOT NULL,
+                    [OpenTime] time NULL,
+                    [CloseTime] time NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_MerchantOperatingHours] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_MerchantOperatingHours_Merchants_MerchantId] FOREIGN KEY ([MerchantId]) REFERENCES [Merchants] ([Id]) ON DELETE CASCADE
+                );
 
-            migrationBuilder.CreateTable(
-                name: "ProductAddonGroups",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    ProductId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(120)", maxLength: 120, nullable: false),
-                    MinSelect = table.Column<int>(type: "int", nullable: false),
-                    MaxSelect = table.Column<int>(type: "int", nullable: false),
-                    SortOrder = table.Column<int>(type: "int", nullable: false),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ProductAddonGroups", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ProductAddonGroups_MerchantProducts_ProductId",
-                        column: x => x.ProductId,
-                        principalTable: "MerchantProducts",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                CREATE TABLE [MerchantProductCategories] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [MerchantId] uniqueidentifier NOT NULL,
+                    [Name] nvarchar(120) NOT NULL,
+                    [SortOrder] int NOT NULL,
+                    [IsActive] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_MerchantProductCategories] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_MerchantProductCategories_Merchants_MerchantId] FOREIGN KEY ([MerchantId]) REFERENCES [Merchants] ([Id]) ON DELETE CASCADE
+                );
 
-            migrationBuilder.CreateTable(
-                name: "ProductAddonOptions",
-                columns: table => new
-                {
-                    Id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    AddonGroupId = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
-                    Name = table.Column<string>(type: "nvarchar(120)", maxLength: 120, nullable: false),
-                    PriceDelta = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
-                    SortOrder = table.Column<int>(type: "int", nullable: false),
-                    IsActive = table.Column<bool>(type: "bit", nullable: false),
-                    CreatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAtUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ProductAddonOptions", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ProductAddonOptions_ProductAddonGroups_AddonGroupId",
-                        column: x => x.AddonGroupId,
-                        principalTable: "ProductAddonGroups",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
+                CREATE TABLE [MerchantProducts] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [MerchantId] uniqueidentifier NOT NULL,
+                    [CategoryId] uniqueidentifier NULL,
+                    [Name] nvarchar(160) NOT NULL,
+                    [Description] nvarchar(1000) NOT NULL,
+                    [BasePrice] decimal(18,2) NOT NULL,
+                    [AvailableOnStorefront] bit NOT NULL CONSTRAINT [DF_MerchantProducts_AvailableOnStorefront] DEFAULT CAST(1 AS bit),
+                    [SortOrder] int NOT NULL,
+                    [ImagePath] nvarchar(260) NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_MerchantProducts] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_MerchantProducts_Merchants_MerchantId] FOREIGN KEY ([MerchantId]) REFERENCES [Merchants] ([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [FK_MerchantProducts_MerchantProductCategories_CategoryId] FOREIGN KEY ([CategoryId]) REFERENCES [MerchantProductCategories] ([Id]) ON DELETE NO ACTION
+                );
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Users_MerchantId",
-                table: "Users",
-                column: "MerchantId");
+                CREATE TABLE [ProductAddonGroups] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [ProductId] uniqueidentifier NOT NULL,
+                    [Name] nvarchar(120) NOT NULL,
+                    [MinSelect] int NOT NULL,
+                    [MaxSelect] int NOT NULL,
+                    [SortOrder] int NOT NULL,
+                    [IsActive] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_ProductAddonGroups] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_ProductAddonGroups_MerchantProducts_ProductId] FOREIGN KEY ([ProductId]) REFERENCES [MerchantProducts] ([Id]) ON DELETE CASCADE
+                );
 
-            migrationBuilder.CreateIndex(
-                name: "IX_MerchantOperatingHours_MerchantId_DayOfWeek",
-                table: "MerchantOperatingHours",
-                columns: new[] { "MerchantId", "DayOfWeek" },
-                unique: true);
+                CREATE TABLE [ProductAddonOptions] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [AddonGroupId] uniqueidentifier NOT NULL,
+                    [Name] nvarchar(120) NOT NULL,
+                    [PriceDelta] decimal(18,2) NOT NULL,
+                    [SortOrder] int NOT NULL,
+                    [IsActive] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_ProductAddonOptions] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_ProductAddonOptions_ProductAddonGroups_AddonGroupId] FOREIGN KEY ([AddonGroupId]) REFERENCES [ProductAddonGroups] ([Id]) ON DELETE CASCADE
+                );
 
-            migrationBuilder.CreateIndex(
-                name: "IX_MerchantProductCategories_MerchantId_Name",
-                table: "MerchantProductCategories",
-                columns: new[] { "MerchantId", "Name" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_MerchantProducts_CategoryId",
-                table: "MerchantProducts",
-                column: "CategoryId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_MerchantProducts_MerchantId",
-                table: "MerchantProducts",
-                column: "MerchantId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Merchants_AppUserId",
-                table: "Merchants",
-                column: "AppUserId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Merchants_OperatorId",
-                table: "Merchants",
-                column: "OperatorId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Merchants_OperatorId_BusinessName",
-                table: "Merchants",
-                columns: new[] { "OperatorId", "BusinessName" });
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ProductAddonGroups_ProductId",
-                table: "ProductAddonGroups",
-                column: "ProductId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ProductAddonOptions_AddonGroupId",
-                table: "ProductAddonOptions",
-                column: "AddonGroupId");
+                CREATE INDEX [IX_Users_MerchantId] ON [Users] ([MerchantId]);
+                CREATE UNIQUE INDEX [IX_MerchantOperatingHours_MerchantId_DayOfWeek] ON [MerchantOperatingHours] ([MerchantId], [DayOfWeek]);
+                CREATE INDEX [IX_MerchantProductCategories_MerchantId_Name] ON [MerchantProductCategories] ([MerchantId], [Name]);
+                CREATE INDEX [IX_MerchantProducts_CategoryId] ON [MerchantProducts] ([CategoryId]);
+                CREATE INDEX [IX_MerchantProducts_MerchantId] ON [MerchantProducts] ([MerchantId]);
+                CREATE INDEX [IX_Merchants_AppUserId] ON [Merchants] ([AppUserId]);
+                CREATE INDEX [IX_Merchants_OperatorId] ON [Merchants] ([OperatorId]);
+                CREATE INDEX [IX_Merchants_OperatorId_BusinessName] ON [Merchants] ([OperatorId], [BusinessName]);
+                CREATE INDEX [IX_ProductAddonGroups_ProductId] ON [ProductAddonGroups] ([ProductId]);
+                CREATE INDEX [IX_ProductAddonOptions_AddonGroupId] ON [ProductAddonOptions] ([AddonGroupId]);
+                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "MerchantOperatingHours");
+            migrationBuilder.Sql("""
+                IF OBJECT_ID(N'[ProductAddonOptions]', N'U') IS NOT NULL DROP TABLE [ProductAddonOptions];
+                IF OBJECT_ID(N'[ProductAddonGroups]', N'U') IS NOT NULL DROP TABLE [ProductAddonGroups];
+                IF OBJECT_ID(N'[MerchantProducts]', N'U') IS NOT NULL DROP TABLE [MerchantProducts];
+                IF OBJECT_ID(N'[MerchantProductCategories]', N'U') IS NOT NULL DROP TABLE [MerchantProductCategories];
+                IF OBJECT_ID(N'[MerchantOperatingHours]', N'U') IS NOT NULL DROP TABLE [MerchantOperatingHours];
+                IF OBJECT_ID(N'[Merchants]', N'U') IS NOT NULL DROP TABLE [Merchants];
 
-            migrationBuilder.DropTable(
-                name: "ProductAddonOptions");
+                IF EXISTS (
+                    SELECT 1 FROM sys.indexes
+                    WHERE name = N'IX_Users_MerchantId' AND object_id = OBJECT_ID(N'[Users]')
+                )
+                    DROP INDEX [IX_Users_MerchantId] ON [Users];
 
-            migrationBuilder.DropTable(
-                name: "ProductAddonGroups");
-
-            migrationBuilder.DropTable(
-                name: "MerchantProducts");
-
-            migrationBuilder.DropTable(
-                name: "MerchantProductCategories");
-
-            migrationBuilder.DropTable(
-                name: "Merchants");
-
-            migrationBuilder.DropIndex(
-                name: "IX_Users_MerchantId",
-                table: "Users");
-
-            migrationBuilder.DropColumn(
-                name: "MerchantId",
-                table: "Users");
+                IF COL_LENGTH(N'Users', N'MerchantId') IS NOT NULL
+                    ALTER TABLE [Users] DROP COLUMN [MerchantId];
+                """);
         }
     }
 }

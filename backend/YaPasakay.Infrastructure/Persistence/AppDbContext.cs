@@ -643,7 +643,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.AppUser)
                 .WithMany()
                 .HasForeignKey(x => x.AppUserId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<MerchantOperatingHour>(entity =>
