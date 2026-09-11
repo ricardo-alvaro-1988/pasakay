@@ -649,25 +649,35 @@ export function AccountHub({
   if (page === 'privacy') return <Legal title="Privacy Policy" body={PRIVACY} onBack={() => onPage('menu')} />
 
   return (
-    <div className="page">
-      <h2>Account</h2>
-      <article className="card profile-card">
+    <div className="page account-hub">
+      <header className="account-hero">
         <div className="avatar lg">{(desk.fullName || 'C').trim().charAt(0).toUpperCase()}</div>
-        <div className="profile-details">
-          <b>{desk.fullName}</b>
-          <div className="muted">{desk.phoneNumber}</div>
-          <div className="muted">{desk.email || 'No email yet'}</div>
+        <div className="account-hero-copy">
+          <h2>{desk.fullName || 'Customer'}</h2>
+          <p className="muted">{desk.phoneNumber}</p>
+          <p className="muted">{desk.email || 'No email yet'}</p>
         </div>
-      </article>
-      <p className="section-title">Account management</p>
-      <button className="menu-row" type="button" onClick={() => onPage('profile')}>Profile</button>
-      <button className="menu-row" type="button" onClick={() => onPage('pin')}>{desk.hasPin ? 'Change PIN' : 'Set PIN'}</button>
-      <button className="menu-row" type="button" onClick={() => onPage('mobile')}>Change Mobile</button>
-      <button className="menu-row danger-row" type="button" onClick={() => onPage('delete')}>Account Deletion</button>
-      <button className="menu-row" type="button" onClick={onLogout}>Logout</button>
-      <p className="section-title">Legal</p>
-      <button className="menu-row" type="button" onClick={() => onPage('terms')}>Terms and Condition</button>
-      <button className="menu-row" type="button" onClick={() => onPage('privacy')}>Privacy Policy</button>
+      </header>
+
+      <section className="account-group">
+        <h3>Account management</h3>
+        <div className="account-list">
+          <button className="menu-row" type="button" onClick={() => onPage('profile')}>Profile</button>
+          <button className="menu-row" type="button" onClick={() => onPage('pin')}>{desk.hasPin ? 'Change PIN' : 'Set PIN'}</button>
+          <button className="menu-row" type="button" onClick={() => onPage('mobile')}>Change mobile</button>
+          <button className="menu-row danger-row" type="button" onClick={() => onPage('delete')}>Account deletion</button>
+        </div>
+      </section>
+
+      <section className="account-group">
+        <h3>Legal</h3>
+        <div className="account-list">
+          <button className="menu-row" type="button" onClick={() => onPage('terms')}>Terms and conditions</button>
+          <button className="menu-row" type="button" onClick={() => onPage('privacy')}>Privacy policy</button>
+        </div>
+      </section>
+
+      <button className="account-logout" type="button" onClick={onLogout}>Log out</button>
     </div>
   )
 }

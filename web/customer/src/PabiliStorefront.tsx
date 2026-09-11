@@ -761,10 +761,11 @@ export function PabiliStorefront({
                   className="pb-tile-card"
                   onClick={() => void openStore(p.merchantId, p.id)}
                 >
-                  <div
-                    className="pb-tile-img"
-                    style={p.imageUrl ? { backgroundImage: `url(${mediaUrl(p.imageUrl)})` } : undefined}
-                  />
+                  <div className="pb-tile-img">
+                    {p.imageUrl ? (
+                      <img src={mediaUrl(p.imageUrl)} alt="" loading="lazy" />
+                    ) : null}
+                  </div>
                   <div className="pb-tile-body">
                     <b>{p.name}</b>
                     <small className="muted">{p.merchantName}</small>
@@ -886,48 +887,102 @@ export function PabiliStorefront({
       {(view === 'cart' || view === 'checkout') && (
         <main className="pb-main pb-checkout">
           <div className="pb-page-head">
-            <button type="button" className="ghost" onClick={() => setView(view === 'checkout' ? 'cart' : store ? 'store' : 'home')}>
+            <button
+              type="button"
+              className="pb-icon-back"
+              onClick={() => setView(view === 'checkout' ? 'cart' : store ? 'store' : 'home')}
+              aria-label="Back"
+            >
               ←
             </button>
-            <h2>{view === 'cart' ? 'Cart' : 'Checkout'}</h2>
-          </div>
-          {cart.map((line) => (
-            <div key={line.key} className="pb-line">
-              <div
-                className="pb-line-img"
-                style={line.imageUrl ? { backgroundImage: `url(${mediaUrl(line.imageUrl)})` } : undefined}
-              />
-              <div className="pb-line-copy">
-                <b>{line.name}</b>
-                <small>{peso(line.unitSellingPrice)} each</small>
-                {line.addons.length ? <small className="muted">{line.addons.map((a) => a.name).join(', ')}</small> : null}
-                <div className="pb-qty">
-                  <button type="button" onClick={() => setCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))}>−</button>
-                  <span>{line.quantity}</span>
-                  <button type="button" onClick={() => setCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: x.quantity + 1 } : x)))}>+</button>
-                </div>
-              </div>
-              <div className="pb-line-total">
-                <b>{peso(lineTotal(line))}</b>
-                <button type="button" className="ghost" onClick={() => setCart((c) => c.filter((x) => x.key !== line.key))}>🗑</button>
-              </div>
+            <div className="pb-page-copy">
+              <h2>{view === 'cart' ? 'Your cart' : 'Checkout'}</h2>
+              <p className="muted">
+                {view === 'cart'
+                  ? (cartCount ? `${cartCount} item${cartCount === 1 ? '' : 's'}` : 'No items yet')
+                  : (store?.name || 'Confirm and place order')}
+              </p>
             </div>
-          ))}
-          {!cart.length ? <p className="muted">Your basket is empty.</p> : null}
+          </div>
 
-          {view === 'checkout' ? (
-            <>
-              <p className="pb-deliver-to muted">Deliver to · {dropoffLabel}</p>
-              <label className="pb-field">
-                Payment
-                <select value={payment} onChange={(e) => setPayment(e.target.value as PaymentMethod)}>
-                  <option value="Cash">Cash</option>
-                  <option value="GCash">GCash</option>
-                  <option value="Maya">Maya</option>
-                </select>
-              </label>
+          {cart.length ? (
+            <div className="pb-cart-list">
+              {cart.map((line) => (
+                <article key={line.key} className="pb-line">
+                  <div className="pb-line-img">
+                    {line.imageUrl ? <img src={mediaUrl(line.imageUrl)} alt="" /> : null}
+                  </div>
+                  <div className="pb-line-copy">
+                    <b>{line.name}</b>
+                    <small className="muted">{peso(line.unitSellingPrice)} each</small>
+                    {line.addons.length ? (
+                      <small className="muted pb-line-addons">{line.addons.map((a) => a.name).join(' · ')}</small>
+                    ) : null}
+                    <div className="pb-qty" role="group" aria-label={`Quantity for ${line.name}`}>
+                      <button
+                        type="button"
+                        aria-label="Decrease quantity"
+                        onClick={() => setCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))}
+                      >
+                        −
+                      </button>
+                      <span>{line.quantity}</span>
+                      <button
+                        type="button"
+                        aria-label="Increase quantity"
+                        onClick={() => setCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: x.quantity + 1 } : x)))}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div className="pb-line-total">
+                    <b>{peso(lineTotal(line))}</b>
+                    <button
+                      type="button"
+                      className="pb-line-remove"
+                      onClick={() => setCart((c) => c.filter((x) => x.key !== line.key))}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="pb-empty-card">
+              <div className="pb-empty-ico" aria-hidden>🛒</div>
+              <h3>Your cart is empty</h3>
+              <p className="muted">Browse stores and add items to get started.</p>
+              <button type="button" className="pb-secondary-btn" onClick={() => setView('home')}>
+                Browse stores
+              </button>
+            </div>
+          )}
+
+          {view === 'checkout' && cart.length ? (
+            <div className="pb-checkout-stack">
+              <section className="pb-info-card">
+                <span className="pb-info-label">Deliver to</span>
+                <b>{dropoffLabel}</b>
+              </section>
+              <section className="pb-info-card">
+                <span className="pb-info-label">Payment</span>
+                <div className="pb-pay-options" role="group" aria-label="Payment method">
+                  {(['Cash', 'GCash', 'Maya'] as PaymentMethod[]).map((method) => (
+                    <button
+                      key={method}
+                      type="button"
+                      className={payment === method ? 'on' : ''}
+                      onClick={() => setPayment(method)}
+                    >
+                      {method}
+                    </button>
+                  ))}
+                </div>
+              </section>
               {quote ? (
-                <div className="pb-summary">
+                <section className="pb-summary">
                   <div><span>Subtotal</span><b>{peso(quote.goodsSubtotal)}</b></div>
                   <div><span>Delivery fee</span><b>{quote.deliveryFee <= 0 ? 'Free' : peso(quote.deliveryFee)}</b></div>
                   {quote.adjustmentAmount !== 0 ? (
@@ -937,19 +992,27 @@ export function PabiliStorefront({
                     </div>
                   ) : null}
                   <div className="total"><span>Total</span><b>{peso(quote.customerTotal)}</b></div>
-                </div>
+                </section>
               ) : (
-                <p className="muted">{busy ? 'Quoting…' : 'Getting delivery quote…'}</p>
+                <p className="muted pb-quote-wait">{busy ? 'Quoting…' : 'Getting delivery quote…'}</p>
               )}
               <button type="button" className="primary pb-primary" disabled={busy || !quote} onClick={() => void placeOrder()}>
-                Place order
+                Place order{quote ? ` · ${peso(quote.customerTotal)}` : ''}
               </button>
-            </>
-          ) : (
-            <button type="button" className="primary pb-primary" disabled={!cart.length} onClick={() => setView('checkout')}>
-              Checkout · {peso(cartGoods)}
-            </button>
-          )}
+            </div>
+          ) : null}
+
+          {view === 'cart' && cart.length ? (
+            <div className="pb-cart-footer">
+              <div>
+                <span className="muted">Subtotal</span>
+                <b>{peso(cartGoods)}</b>
+              </div>
+              <button type="button" className="primary pb-primary" onClick={() => setView('checkout')}>
+                Checkout
+              </button>
+            </div>
+          ) : null}
         </main>
       )}
 
@@ -1048,7 +1111,12 @@ export function PabiliStorefront({
       {sheetProduct ? (
         <div className="pb-sheet" role="dialog" aria-modal="true">
           <div className="pb-sheet-card">
-            <button type="button" className="ghost" onClick={() => setSheetProduct(null)}>Close</button>
+            <button type="button" className="ghost pb-sheet-close" onClick={() => setSheetProduct(null)}>Close</button>
+            <div className="pb-sheet-img">
+              {sheetProduct.imageUrl ? (
+                <img src={mediaUrl(sheetProduct.imageUrl)} alt="" />
+              ) : null}
+            </div>
             <h3>{sheetProduct.name}</h3>
             <p className="muted">{sheetProduct.description}</p>
             <p className="pb-price">{peso(sheetProduct.sellingPrice)}</p>
