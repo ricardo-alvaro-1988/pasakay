@@ -125,6 +125,7 @@ export type PabiliOrderDetail = {
   adjustmentLabel: string
   customerTotal: number
   paymentMethod: string
+  paymentReference: string | null
   riderName: string | null
   riderPhone: string | null
   canCancel: boolean
@@ -689,6 +690,7 @@ export const api = {
     dropoffLng: number
     dropoffBarangayId?: string
     paymentMethod: PaymentMethod
+    paymentReference?: string
     notes?: string
     items: Array<{ productId: string; quantity: number; addons?: Array<{ optionId: string; quantity: number }> }>
   }) =>

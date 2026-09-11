@@ -618,6 +618,10 @@ public static class MerchantCatalogBootstrap
                     ADD CONSTRAINT [FK_RiderWalletTransactions_PabiliOrders_PabiliOrderId]
                     FOREIGN KEY ([PabiliOrderId]) REFERENCES [PabiliOrders] ([Id]) ON DELETE NO ACTION;
 
+            IF OBJECT_ID(N'[PabiliOrders]', N'U') IS NOT NULL
+               AND COL_LENGTH(N'PabiliOrders', N'PaymentReference') IS NULL
+                ALTER TABLE [PabiliOrders] ADD [PaymentReference] nvarchar(80) NULL;
+
             IF NOT EXISTS (
                 SELECT 1 FROM [__EFMigrationsHistory]
                 WHERE [MigrationId] = N'20260911083227_PabiliOrders'

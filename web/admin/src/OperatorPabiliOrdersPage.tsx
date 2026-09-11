@@ -38,6 +38,7 @@ type OrderDetail = {
   adjustmentLabel: string
   customerTotal: number
   paymentMethod: string
+  paymentReference: string | null
   riderId: string | null
   riderName: string | null
   riderPhone: string | null
@@ -321,7 +322,10 @@ export function OperatorPabiliOrdersPage() {
                 <div>
                   <b>Total · {peso(detail.customerTotal)}</b>
                 </div>
-                <div className="muted">{detail.distanceKm.toFixed(1)} km · {detail.paymentMethod}</div>
+                <div className="muted">
+                  {detail.distanceKm.toFixed(1)} km · {detail.paymentMethod}
+                  {detail.paymentReference ? ` · Ref ${detail.paymentReference}` : ''}
+                </div>
               </div>
 
               <div style={{ marginTop: 16, borderTop: '1px solid var(--border, #ddd)', paddingTop: 12 }}>

@@ -226,6 +226,7 @@ public class OperatorPabiliOrdersController(AppDbContext db, LiveNotify live) : 
             order.AdjustmentLabel,
             order.CustomerTotal,
             order.PaymentMethod.ToString(),
+            order.PaymentReference,
             order.RiderId,
             order.Rider?.AppUser.FullName,
             order.Rider?.AppUser.PhoneNumber,

@@ -1319,6 +1319,7 @@ public record CustomerPabiliPlaceRequest(
     double DropoffLng,
     Guid? DropoffBarangayId,
     PaymentMethod PaymentMethod,
+    string? PaymentReference,
     string? Notes,
     IReadOnlyList<CustomerPabiliCartItemRequest> Items);
 
@@ -1356,6 +1357,7 @@ public record CustomerPabiliOrderDetail(
     string AdjustmentLabel,
     decimal CustomerTotal,
     string PaymentMethod,
+    string? PaymentReference,
     string? RiderName,
     string? RiderPhone,
     string? Notes,
@@ -1404,6 +1406,7 @@ public record OperatorPabiliOrderDetail(
     string AdjustmentLabel,
     decimal CustomerTotal,
     string PaymentMethod,
+    string? PaymentReference,
     Guid? RiderId,
     string? RiderName,
     string? RiderPhone,

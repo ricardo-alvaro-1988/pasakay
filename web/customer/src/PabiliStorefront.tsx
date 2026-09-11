@@ -201,6 +201,7 @@ export function PabiliStorefront({
   const [sheetQty, setSheetQty] = useState(1)
   const [sheetPicks, setSheetPicks] = useState<Record<string, string[]>>({})
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
+  const [paymentRef, setPaymentRef] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
   const [storeSearch, setStoreSearch] = useState('')
   const [error, setError] = useState('')
@@ -554,6 +555,10 @@ export function PabiliStorefront({
 
   async function placeOrder() {
     if (!store || !cart.length) return
+    if (payment !== 'Cash' && !paymentRef.trim()) {
+      setError('Enter the payment reference number.')
+      return
+    }
     setBusy(true)
     setError('')
     try {
@@ -563,6 +568,7 @@ export function PabiliStorefront({
         dropoffLat: lat,
         dropoffLng: lng,
         paymentMethod: payment,
+        paymentReference: payment === 'Cash' ? undefined : paymentRef.trim(),
         items: cart.map((c) => ({
           productId: c.productId,
           quantity: c.quantity,
@@ -572,6 +578,7 @@ export function PabiliStorefront({
       setOrder(row)
       setCart([])
       writePersistedCart(null, [])
+      setPaymentRef('')
       setView('track')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not place order.')
@@ -1035,7 +1042,10 @@ export function PabiliStorefront({
                       key={item.method}
                       type="button"
                       className={payment === item.method ? 'on' : ''}
-                      onClick={() => setPayment(item.method)}
+                      onClick={() => {
+                        setPayment(item.method)
+                        if (item.method === 'Cash') setPaymentRef('')
+                      }}
                     >
                       {item.label || item.method}
                     </button>
@@ -1051,6 +1061,18 @@ export function PabiliStorefront({
                     </div>
                   )
                 })()}
+                {payment !== 'Cash' ? (
+                  <label className="pb-pay-ref">
+                    <span>Reference number</span>
+                    <input
+                      value={paymentRef}
+                      onChange={(e) => setPaymentRef(e.target.value)}
+                      placeholder="Enter wallet / transfer reference"
+                      autoComplete="off"
+                      inputMode="text"
+                    />
+                  </label>
+                ) : null}
               </section>
               {quote ? (
                 <section className="pb-summary">
@@ -1119,6 +1141,10 @@ export function PabiliStorefront({
                 <b>{order.riderName ?? 'Finding rider…'}</b>
                 <div className="muted">{order.status} · {order.reference}</div>
                 <div className="muted">{order.merchantName}</div>
+                <div className="muted">
+                  {order.paymentMethod}
+                  {order.paymentReference ? ` · Ref ${order.paymentReference}` : ''}
+                </div>
               </div>
               <div className="pb-rider-actions">
                 {order.riderPhone ? (

@@ -452,6 +452,21 @@ public class CustomerPabiliController(
             return BadRequest(new { message = "That payment method is not available for this area." });
         }
 
+        string? paymentReference = null;
+        if (request.PaymentMethod != PaymentMethod.Cash)
+        {
+            paymentReference = (request.PaymentReference ?? string.Empty).Trim();
+            if (paymentReference.Length == 0)
+            {
+                return BadRequest(new { message = "Enter the payment reference number." });
+            }
+
+            if (paymentReference.Length > 80)
+            {
+                return BadRequest(new { message = "Payment reference is too long." });
+            }
+        }
+
         await db.Entry(customer).Reference(x => x.AppUser).LoadAsync(cancellationToken);
         var now = DateTime.UtcNow;
         var order = new PabiliOrder
@@ -480,6 +495,7 @@ public class CustomerPabiliController(
             AdjustmentLabel = string.Empty,
             CustomerTotal = PabiliPricingService.CustomerTotal(built.GoodsSelling, delivery.DeliveryFee, 0),
             PaymentMethod = request.PaymentMethod,
+            PaymentReference = paymentReference,
             Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim()
         };
 
@@ -895,6 +911,7 @@ public class CustomerPabiliController(
             order.AdjustmentLabel,
             order.CustomerTotal,
             order.PaymentMethod.ToString(),
+            order.PaymentReference,
             order.Rider?.AppUser.FullName,
             order.Rider?.AppUser.PhoneNumber,
             order.Notes,

@@ -35,6 +35,8 @@ public class PabiliOrder : BaseEntity
     public string AdjustmentLabel { get; set; } = string.Empty;
     public decimal CustomerTotal { get; set; }
     public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.Cash;
+    /// <summary>Customer-entered wallet payment reference (GCash / Maya / Other).</summary>
+    public string? PaymentReference { get; set; }
     public string? Notes { get; set; }
     public DateTime? AcceptedAtUtc { get; set; }
     public DateTime? PickedUpAtUtc { get; set; }

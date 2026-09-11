@@ -825,6 +825,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.PickupAddress).HasMaxLength(260).IsRequired();
             entity.Property(x => x.DropoffAddress).HasMaxLength(260).IsRequired();
             entity.Property(x => x.AdjustmentLabel).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.PaymentReference).HasMaxLength(80);
             entity.Property(x => x.Notes).HasMaxLength(500);
             entity.Property(x => x.CancelReason).HasMaxLength(200);
             entity.Property(x => x.DistanceKm).HasColumnType("decimal(18,2)");
