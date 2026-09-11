@@ -3221,7 +3221,7 @@ button.where-toggle .where { pointer-events: none; }
   width: 100%;
   aspect-ratio: 1 / 1;
   overflow: hidden;
-  background: #e8ebef;
+  background: #fff;
 }
 .pb-tile-img img {
   display: block;
