@@ -2301,6 +2301,242 @@ button.brand-pill:active { transform: scale(.98); }
   .pabili-soon-glow { animation: none; box-shadow: none; }
 }
 
+.pabili-panel {
+  padding: 0 !important;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 64px);
+}
+.pabili-app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background:
+    radial-gradient(120% 80% at 10% -10%, color-mix(in srgb, var(--accent, #c45c26) 18%, transparent), transparent 55%),
+    linear-gradient(180deg, #fff8f2 0%, #f4f6f8 42%, #eef1f5 100%);
+}
+.pabili-top {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: 12px 14px 10px;
+  background: color-mix(in srgb, #fff8f2 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid color-mix(in srgb, #000 6%, transparent);
+}
+.pabili-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pabili-brand {
+  font-family: "Segoe UI Semibold", "Trebuchet MS", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.pabili-back { min-width: 40px; }
+.pabili-loc {
+  margin-top: 8px;
+  display: grid;
+  gap: 4px;
+}
+.pabili-loc select,
+.pabili-search,
+.pabili-checkout select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #000 10%, transparent);
+  padding: 10px 12px;
+  background: #fff;
+}
+.pabili-error { margin: 8px 14px 0; }
+.pabili-market,
+.pabili-store,
+.pabili-cart,
+.pabili-checkout,
+.pabili-orders,
+.pabili-order {
+  padding: 14px 14px 88px;
+}
+.pabili-hero-title {
+  margin: 4px 0 0;
+  font-size: 2rem;
+  line-height: 1.1;
+  font-family: "Segoe UI Semibold", "Trebuchet MS", sans-serif;
+}
+.pabili-hero-copy {
+  margin: 6px 0 14px;
+  color: #5b6470;
+}
+.pabili-merchant-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+.pabili-merchant-card {
+  text-align: left;
+  border: 0;
+  padding: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 8px 24px color-mix(in srgb, #1a1a1a 8%, transparent);
+}
+.pabili-merchant-cover {
+  height: 110px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent, #c45c26) 35%, #fff), #f0f2f5);
+  background-size: cover;
+  background-position: center;
+}
+.pabili-merchant-body {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  align-items: flex-start;
+}
+.pabili-merchant-logo {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #eee;
+}
+.pabili-open {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.pabili-open.yes { color: #1b7a3d; }
+.pabili-open.no { color: #a33; }
+.pabili-store-hero {
+  margin: -14px -14px 12px;
+  min-height: 160px;
+  background: linear-gradient(135deg, #2b3038, #5a4638);
+  background-size: cover;
+  background-position: center;
+  color: #fff;
+  padding: 18px 14px 16px;
+}
+.pabili-store-hero-inner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+.pabili-store-hero img {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #fff;
+}
+.pabili-store-hero h2 { margin: 0; }
+.pabili-store-hero .muted { color: rgba(255,255,255,0.78); }
+.pabili-product-list { display: grid; gap: 10px; }
+.pabili-product {
+  display: grid;
+  grid-template-columns: 1fr 84px;
+  gap: 10px;
+  text-align: left;
+  border: 0;
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: 0 4px 16px color-mix(in srgb, #1a1a1a 6%, transparent);
+}
+.pabili-product img,
+.pabili-product-ph {
+  width: 84px;
+  height: 84px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #eceff3;
+}
+.pabili-price { font-weight: 700; margin-top: 6px; }
+.pabili-cart-bar {
+  position: sticky;
+  bottom: 72px;
+  width: calc(100% - 8px);
+  margin: 16px 4px 0;
+  border: 0;
+  border-radius: 14px;
+  padding: 14px 16px;
+  background: var(--accent, #c45c26);
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--accent, #c45c26) 35%, transparent);
+}
+.pabili-cart-line,
+.pabili-order-row {
+  display: grid;
+  gap: 8px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 0;
+  text-align: left;
+  width: 100%;
+}
+.pabili-qty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pabili-qty button {
+  min-width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+.pabili-breakdown {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: #fff;
+}
+.pabili-status {
+  display: inline-block;
+  font-weight: 700;
+  color: var(--accent, #c45c26);
+}
+.pabili-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(20, 22, 26, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+}
+.pabili-sheet-card {
+  width: min(520px, 100%);
+  max-height: 86vh;
+  overflow: auto;
+  background: #fff;
+  border-radius: 18px 18px 14px 14px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+.pabili-addon-group { display: grid; gap: 6px; }
+.pabili-addon {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f4f6f8;
+}
+.pabili-addon.on {
+  background: color-mix(in srgb, var(--accent, #c45c26) 14%, #fff);
+}
+
 .pabili-soon {
   position: relative;
   min-height: min(62dvh, 520px);

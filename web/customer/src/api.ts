@@ -517,6 +517,186 @@ export const api = {
   },
   sos: (tripId: string, lat?: number, lng?: number) =>
     request('/api/sos', { method: 'POST', body: JSON.stringify({ tripId, message: 'Customer SOS', lat, lng }) }),
+  pabiliMerchants: (opts: { lat: number; lng: number; barangayId?: string; q?: string }) => {
+    const params = new URLSearchParams({
+      lat: String(opts.lat),
+      lng: String(opts.lng),
+    })
+    if (opts.barangayId) params.set('barangayId', opts.barangayId)
+    if (opts.q?.trim()) params.set('q', opts.q.trim())
+    return request<Array<{
+      id: string
+      name: string
+      address: string
+      logoUrl: string | null
+      coverUrl: string | null
+      isOpen: boolean
+      latitude: number
+      longitude: number
+    }>>(`/api/customer/pabili/merchants?${params}`)
+  },
+  pabiliStore: (id: string) =>
+    request<{
+      id: string
+      name: string
+      address: string
+      logoUrl: string | null
+      coverUrl: string | null
+      isOpen: boolean
+      latitude: number
+      longitude: number
+      categories: Array<{ id: string; name: string }>
+      products: Array<{
+        id: string
+        categoryId: string | null
+        categoryName: string
+        name: string
+        description: string
+        sellingPrice: number
+        imageUrl: string | null
+        addonGroups: Array<{
+          id: string
+          name: string
+          minSelect: number
+          maxSelect: number
+          options: Array<{ id: string; name: string; sellingPrice: number; basePrice: number }>
+        }>
+      }>
+    }>(`/api/customer/pabili/merchants/${id}`),
+  pabiliQuote: (body: {
+    merchantId: string
+    dropoffLat: number
+    dropoffLng: number
+    dropoffBarangayId?: string
+    items: Array<{ productId: string; quantity: number; addons?: Array<{ optionId: string; quantity: number }> }>
+  }) =>
+    request<{
+      merchantId: string
+      merchantName: string
+      goodsSubtotal: number
+      deliveryFee: number
+      surchargeTotal: number
+      distanceKm: number
+      adjustmentAmount: number
+      adjustmentLabel: string
+      customerTotal: number
+    }>('/api/customer/pabili/quote', { method: 'POST', body: JSON.stringify(body) }),
+  pabiliPlace: (body: {
+    merchantId: string
+    dropoffAddress: string
+    dropoffLat: number
+    dropoffLng: number
+    dropoffBarangayId?: string
+    paymentMethod: PaymentMethod
+    notes?: string
+    items: Array<{ productId: string; quantity: number; addons?: Array<{ optionId: string; quantity: number }> }>
+  }) =>
+    request<{
+      id: string
+      reference: string
+      status: string
+      merchantName: string
+      pickupAddress: string
+      dropoffAddress: string
+      goodsSubtotal: number
+      deliveryFee: number
+      surchargeTotal: number
+      adjustmentAmount: number
+      adjustmentLabel: string
+      customerTotal: number
+      paymentMethod: string
+      riderName: string | null
+      riderPhone: string | null
+      canCancel: boolean
+      items: Array<{
+        id: string
+        name: string
+        quantity: number
+        lineSellingTotal: number
+        addons: Array<{ name: string }>
+      }>
+    }>('/api/customer/pabili/orders', { method: 'POST', body: JSON.stringify(body) }),
+  pabiliOrders: () =>
+    request<Array<{
+      id: string
+      reference: string
+      status: string
+      merchantName: string
+      pickupAddress: string
+      dropoffAddress: string
+      goodsSubtotal: number
+      deliveryFee: number
+      surchargeTotal: number
+      adjustmentAmount: number
+      adjustmentLabel: string
+      customerTotal: number
+      paymentMethod: string
+      riderName: string | null
+      riderPhone: string | null
+      canCancel: boolean
+      items: Array<{
+        id: string
+        name: string
+        quantity: number
+        lineSellingTotal: number
+        addons: Array<{ name: string }>
+      }>
+    }>>('/api/customer/pabili/orders'),
+  pabiliOrder: (id: string) =>
+    request<{
+      id: string
+      reference: string
+      status: string
+      merchantName: string
+      pickupAddress: string
+      dropoffAddress: string
+      goodsSubtotal: number
+      deliveryFee: number
+      surchargeTotal: number
+      adjustmentAmount: number
+      adjustmentLabel: string
+      customerTotal: number
+      paymentMethod: string
+      riderName: string | null
+      riderPhone: string | null
+      canCancel: boolean
+      items: Array<{
+        id: string
+        name: string
+        quantity: number
+        lineSellingTotal: number
+        addons: Array<{ name: string }>
+      }>
+    }>(`/api/customer/pabili/orders/${id}`),
+  pabiliCancelOrder: (id: string, reason?: string) =>
+    request<{
+      id: string
+      reference: string
+      status: string
+      merchantName: string
+      pickupAddress: string
+      dropoffAddress: string
+      goodsSubtotal: number
+      deliveryFee: number
+      surchargeTotal: number
+      adjustmentAmount: number
+      adjustmentLabel: string
+      customerTotal: number
+      paymentMethod: string
+      riderName: string | null
+      riderPhone: string | null
+      canCancel: boolean
+      items: Array<{
+        id: string
+        name: string
+        quantity: number
+        lineSellingTotal: number
+        addons: Array<{ name: string }>
+      }>
+    }>(`/api/customer/pabili/orders/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   updateProfile: (body: { firstName: string; lastName: string; gender: Gender; email: string }) =>
     request<Desk>('/api/customer/account/profile', { method: 'PUT', body: JSON.stringify(body) }),
   setPin: (pin: string, currentPin?: string) =>

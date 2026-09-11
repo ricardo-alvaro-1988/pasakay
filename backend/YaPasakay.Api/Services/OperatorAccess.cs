@@ -143,6 +143,11 @@ public static class OperatorAccess
             return value.Contains("/surcharge", StringComparison.Ordinal) ? "surcharges" : "fares";
         }
 
+        if (value.StartsWith("/api/operator/pabili-orders"))
+        {
+            return "pabili-orders";
+        }
+
         if (value.StartsWith("/api/operator/pabili-matrix"))
         {
             return "pabili-matrix";

@@ -193,11 +193,20 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
                 pickupBarangayId,
                 cancellationToken) is not null;
 
-        var busy = await db.Trips
+        var tripBusy = await db.Trips
             .Where(x => x.OperatorId == operatorId
                 && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing))
             .Select(x => x.RiderId)
             .ToListAsync(cancellationToken);
+        var pabiliBusy = await db.PabiliOrders
+            .Where(x => x.OperatorId == operatorId
+                && x.RiderId != null
+                && (x.Status == PabiliOrderStatus.Waiting
+                    || x.Status == PabiliOrderStatus.PickedUp
+                    || x.Status == PabiliOrderStatus.Delivering))
+            .Select(x => x.RiderId!.Value)
+            .ToListAsync(cancellationToken);
+        var busy = tripBusy.Concat(pabiliBusy).ToHashSet();
         var hailed = await LiveHailedRiderIdsAsync(cancellationToken);
 
         var riders = await db.RiderProfiles

@@ -52,6 +52,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MerchantAddonGroup> MerchantAddonGroups => Set<MerchantAddonGroup>();
     public DbSet<MerchantAddonOption> MerchantAddonOptions => Set<MerchantAddonOption>();
     public DbSet<MerchantProductAddon> MerchantProductAddons => Set<MerchantProductAddon>();
+    public DbSet<PabiliOrder> PabiliOrders => Set<PabiliOrder>();
+    public DbSet<PabiliOrderItem> PabiliOrderItems => Set<PabiliOrderItem>();
+    public DbSet<PabiliOrderItemAddon> PabiliOrderItemAddons => Set<PabiliOrderItemAddon>();
+    public DbSet<PabiliOrderOffer> PabiliOrderOffers => Set<PabiliOrderOffer>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -188,6 +192,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.Trip)
                 .WithMany()
                 .HasForeignKey(x => x.TripId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.PabiliOrderId).IsUnique().HasFilter("[PabiliOrderId] IS NOT NULL");
+            entity.HasOne(x => x.PabiliOrder)
+                .WithMany()
+                .HasForeignKey(x => x.PabiliOrderId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.ResolvedByUser)
                 .WithMany()
@@ -773,6 +782,105 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.AddonGroup)
                 .WithMany(x => x.ProductLinks)
                 .HasForeignKey(x => x.AddonGroupId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PabiliOrder>(entity =>
+        {
+            entity.HasIndex(x => x.OperatorId);
+            entity.HasIndex(x => new { x.OperatorId, x.Status, x.CreatedAtUtc });
+            entity.HasIndex(x => x.CustomerId);
+            entity.HasIndex(x => x.RiderId);
+            entity.HasIndex(x => x.Reference);
+            entity.Property(x => x.Reference).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CustomerName).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.CustomerPhone).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.MerchantName).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.PickupAddress).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.DropoffAddress).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.AdjustmentLabel).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.Property(x => x.CancelReason).HasMaxLength(200);
+            entity.Property(x => x.DistanceKm).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.GoodsSubtotal).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.GoodsBaseSubtotal).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.DeliveryFee).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.SurchargeTotal).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.AdjustmentAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.CustomerTotal).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.FareSystemPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.FareOperatorPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.FareRiderPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.MarkupSystemPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.MarkupOperatorPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.MarkupRiderPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.FareSystemAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.FareOperatorAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.FareRiderAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.MarkupSystemAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.MarkupOperatorAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.MarkupRiderAmount).HasColumnType("decimal(18,2)");
+            entity.HasOne(x => x.Operator)
+                .WithMany()
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Merchant)
+                .WithMany()
+                .HasForeignKey(x => x.MerchantId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Customer)
+                .WithMany()
+                .HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Rider)
+                .WithMany()
+                .HasForeignKey(x => x.RiderId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.DropoffBarangay)
+                .WithMany()
+                .HasForeignKey(x => x.DropoffBarangayId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<PabiliOrderItem>(entity =>
+        {
+            entity.HasIndex(x => x.OrderId);
+            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.UnitBasePrice).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.UnitSellingPrice).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.LineBaseTotal).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.LineSellingTotal).HasColumnType("decimal(18,2)");
+            entity.HasOne(x => x.Order)
+                .WithMany(x => x.Items)
+                .HasForeignKey(x => x.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PabiliOrderItemAddon>(entity =>
+        {
+            entity.HasIndex(x => x.OrderItemId);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.UnitBasePrice).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.UnitSellingPrice).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.LineBaseTotal).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.LineSellingTotal).HasColumnType("decimal(18,2)");
+            entity.HasOne(x => x.OrderItem)
+                .WithMany(x => x.Addons)
+                .HasForeignKey(x => x.OrderItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PabiliOrderOffer>(entity =>
+        {
+            entity.HasIndex(x => new { x.OrderId, x.RiderId }).IsUnique();
+            entity.HasIndex(x => new { x.RiderId, x.Status });
+            entity.HasOne(x => x.Order)
+                .WithMany(x => x.Offers)
+                .HasForeignKey(x => x.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Rider)
+                .WithMany()
+                .HasForeignKey(x => x.RiderId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

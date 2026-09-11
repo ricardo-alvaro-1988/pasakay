@@ -24,6 +24,16 @@ public enum TripStatus
     Waiting = 5
 }
 
+public enum PabiliOrderStatus
+{
+    Pending = 1,
+    Waiting = 2,
+    PickedUp = 3,
+    Delivering = 4,
+    Completed = 5,
+    Cancelled = 6
+}
+
 public enum ChatSender
 {
     Customer = 1,

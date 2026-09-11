@@ -2180,6 +2180,167 @@ export const api = {
     request<RiderListItem>(`/api/operator/pabili-riders/${id}/link`, { method: 'POST' }),
   unlinkOperatorPabiliRider: (id: string) =>
     request<RiderListItem>(`/api/operator/pabili-riders/${id}/unlink`, { method: 'POST' }),
+  operatorPabiliOrders: (q = '', status = '', page = 1, pageSize = 20) =>
+    request<{ total: number; page: number; pageSize: number; items: Array<{
+      id: string
+      reference: string
+      status: string
+      merchantName: string
+      customerName: string
+      customerPhone: string
+      customerTotal: number
+      adjustmentAmount: number
+      riderName: string | null
+      createdAtUtc: string
+    }> }>(
+      `/api/operator/pabili-orders?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}&page=${page}&pageSize=${pageSize}`,
+    ),
+  operatorPabiliOrder: (id: string) => request<{
+    id: string
+    reference: string
+    status: string
+    merchantId: string
+    merchantName: string
+    customerId: string
+    customerName: string
+    customerPhone: string
+    pickupAddress: string
+    pickupLat: number
+    pickupLng: number
+    dropoffAddress: string
+    dropoffLat: number
+    dropoffLng: number
+    distanceKm: number
+    goodsSubtotal: number
+    goodsBaseSubtotal: number
+    deliveryFee: number
+    surchargeTotal: number
+    adjustmentAmount: number
+    adjustmentLabel: string
+    customerTotal: number
+    paymentMethod: string
+    riderId: string | null
+    riderName: string | null
+    riderPhone: string | null
+    notes: string | null
+    cancelReason: string | null
+    createdAtUtc: string
+    acceptedAtUtc: string | null
+    pickedUpAtUtc: string | null
+    deliveringAtUtc: string | null
+    completedAtUtc: string | null
+    cancelledAtUtc: string | null
+    canAdjust: boolean
+    canCancel: boolean
+    items: Array<{
+      id: string
+      name: string
+      quantity: number
+      unitSellingPrice: number
+      lineSellingTotal: number
+      addons: Array<{ id: string; name: string; quantity: number; unitSellingPrice: number; lineSellingTotal: number }>
+    }>
+  }>(`/api/operator/pabili-orders/${id}`),
+  patchOperatorPabiliOrderAdjustment: (id: string, body: { adjustmentAmount: number; adjustmentLabel?: string }) =>
+    request<{
+      id: string
+      reference: string
+      status: string
+      merchantId: string
+      merchantName: string
+      customerId: string
+      customerName: string
+      customerPhone: string
+      pickupAddress: string
+      pickupLat: number
+      pickupLng: number
+      dropoffAddress: string
+      dropoffLat: number
+      dropoffLng: number
+      distanceKm: number
+      goodsSubtotal: number
+      goodsBaseSubtotal: number
+      deliveryFee: number
+      surchargeTotal: number
+      adjustmentAmount: number
+      adjustmentLabel: string
+      customerTotal: number
+      paymentMethod: string
+      riderId: string | null
+      riderName: string | null
+      riderPhone: string | null
+      notes: string | null
+      cancelReason: string | null
+      createdAtUtc: string
+      acceptedAtUtc: string | null
+      pickedUpAtUtc: string | null
+      deliveringAtUtc: string | null
+      completedAtUtc: string | null
+      cancelledAtUtc: string | null
+      canAdjust: boolean
+      canCancel: boolean
+      items: Array<{
+        id: string
+        name: string
+        quantity: number
+        unitSellingPrice: number
+        lineSellingTotal: number
+        addons: Array<{ id: string; name: string; quantity: number; unitSellingPrice: number; lineSellingTotal: number }>
+      }>
+    }>(`/api/operator/pabili-orders/${id}/adjustment`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  cancelOperatorPabiliOrder: (id: string, reason?: string) =>
+    request<{
+      id: string
+      reference: string
+      status: string
+      merchantId: string
+      merchantName: string
+      customerId: string
+      customerName: string
+      customerPhone: string
+      pickupAddress: string
+      pickupLat: number
+      pickupLng: number
+      dropoffAddress: string
+      dropoffLat: number
+      dropoffLng: number
+      distanceKm: number
+      goodsSubtotal: number
+      goodsBaseSubtotal: number
+      deliveryFee: number
+      surchargeTotal: number
+      adjustmentAmount: number
+      adjustmentLabel: string
+      customerTotal: number
+      paymentMethod: string
+      riderId: string | null
+      riderName: string | null
+      riderPhone: string | null
+      notes: string | null
+      cancelReason: string | null
+      createdAtUtc: string
+      acceptedAtUtc: string | null
+      pickedUpAtUtc: string | null
+      deliveringAtUtc: string | null
+      completedAtUtc: string | null
+      cancelledAtUtc: string | null
+      canAdjust: boolean
+      canCancel: boolean
+      items: Array<{
+        id: string
+        name: string
+        quantity: number
+        unitSellingPrice: number
+        lineSellingTotal: number
+        addons: Array<{ id: string; name: string; quantity: number; unitSellingPrice: number; lineSellingTotal: number }>
+      }>
+    }>(`/api/operator/pabili-orders/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   createOperatorMerchantAddonGroup: (merchantId: string, body: ProductAddonGroupItem) =>
     request<ProductAddonGroupItem>(`/api/operator/merchants/${merchantId}/addon-groups`, {
       method: 'POST',

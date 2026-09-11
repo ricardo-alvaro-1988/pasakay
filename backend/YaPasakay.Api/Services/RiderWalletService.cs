@@ -253,6 +253,65 @@ public class RiderWalletService(AppDbContext db)
         return (tx, null);
     }
 
+    public async Task<(RiderWalletTransaction? Transaction, string? Error)> ApplyPabiliCommissionAsync(
+        PabiliOrder order,
+        CancellationToken cancellationToken)
+    {
+        if (order.Status != PabiliOrderStatus.Completed)
+        {
+            return (null, "Commission applies only to completed Pabili orders.");
+        }
+
+        if (order.RiderId is null)
+        {
+            return (null, "Completed Pabili order has no rider.");
+        }
+
+        if (await db.RiderWalletTransactions.AnyAsync(
+                x => x.PabiliOrderId == order.Id && x.Kind == WalletTransactionKind.Commission,
+                cancellationToken))
+        {
+            return (null, "Commission was already deducted for this Pabili order.");
+        }
+
+        var op = order.Operator
+            ?? await db.Operators.FirstAsync(x => x.Id == order.OperatorId, cancellationToken);
+        var matrix = await db.PabiliMatrices
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.OperatorId == order.OperatorId, cancellationToken);
+        var breakdown = PabiliCommissionCalculator.ForOrder(order, op, matrix);
+        if (breakdown is null || breakdown.RemitAmount <= 0)
+        {
+            return (null, null);
+        }
+
+        PabiliCommissionCalculator.Snapshot(order, breakdown);
+        order.UpdatedAtUtc = DateTime.UtcNow;
+
+        var rider = await db.RiderProfiles
+            .Include(x => x.Wallet)
+            .FirstAsync(x => x.Id == order.RiderId, cancellationToken);
+        var wallet = await EnsureWalletAsync(rider, cancellationToken);
+        wallet.Balance = CommissionCut.Round(wallet.Balance - breakdown.RemitAmount);
+        wallet.UpdatedAtUtc = DateTime.UtcNow;
+
+        var tx = new RiderWalletTransaction
+        {
+            WalletId = wallet.Id,
+            RiderId = rider.Id,
+            Kind = WalletTransactionKind.Commission,
+            Status = WalletTransactionStatus.Approved,
+            Amount = breakdown.RemitAmount,
+            BalanceAfter = wallet.Balance,
+            PabiliOrderId = order.Id,
+            Note = $"Pabili system+operator for {order.Reference}",
+            ResolvedAtUtc = DateTime.UtcNow
+        };
+        db.RiderWalletTransactions.Add(tx);
+        await db.SaveChangesAsync(cancellationToken);
+        return (tx, null);
+    }
+
     public static WalletTransactionItem Map(
         RiderWalletTransaction tx,
         string? tripReference = null,

@@ -9,9 +9,114 @@ function StatusLabel({ active }: { active: boolean }) {
   return <span className={`tag status ${active ? 'active' : 'inactive'}`}>{active ? 'Active' : 'Inactive'}</span>
 }
 
+function RiderAvatar({ name, photoUrl }: { name: string; photoUrl: string | null }) {
+  if (photoUrl) {
+    return <img className="avatar" src={photoUrl} alt="" width={36} height={36} style={{ objectFit: 'cover', borderRadius: '50%' }} />
+  }
+  return <div className="avatar">{name.trim().slice(0, 1).toUpperCase() || '?'}</div>
+}
+
+type SuggestRow = {
+  id: string
+  name: string
+  phone: string
+  photoUrl: string | null
+  extra?: string
+  vehicleType?: VehicleType
+}
+
+function RiderSuggest({
+  value,
+  onChange,
+  items,
+  placeholder,
+  onPick,
+  emptyLabel = 'No matches',
+}: {
+  value: string
+  onChange: (value: string) => void
+  items: SuggestRow[]
+  placeholder: string
+  onPick: (item: SuggestRow) => void
+  emptyLabel?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const q = value.trim().toLowerCase()
+  const filtered = items
+    .filter((item) => {
+      if (!q) return true
+      return (
+        item.name.toLowerCase().includes(q) ||
+        item.phone.includes(q) ||
+        (item.extra ?? '').toLowerCase().includes(q)
+      )
+    })
+    .sort((a, b) => {
+      if (!q) return a.name.localeCompare(b.name)
+      const aStarts = a.name.toLowerCase().startsWith(q)
+      const bStarts = b.name.toLowerCase().startsWith(q)
+      if (aStarts !== bStarts) return aStarts ? -1 : 1
+      return a.name.localeCompare(b.name)
+    })
+
+  return (
+    <div className="ac" style={{ minWidth: 260 }}>
+      <input
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(e) => {
+          onChange(e.target.value)
+          setOpen(true)
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 160)}
+      />
+      {open ? (
+        <div className="suggest">
+          {filtered.length === 0 ? (
+            <div className="suggest-empty">{emptyLabel}</div>
+          ) : (
+            filtered.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onPick(item)
+                  setOpen(false)
+                }}
+              >
+                <RiderAvatar name={item.name} photoUrl={item.photoUrl} />
+                <span className="ac-text">
+                  <span className="suggest-name">{item.name}</span>
+                  <small>{item.extra ? `${item.phone} · ${item.extra}` : item.phone}</small>
+                </span>
+                {item.vehicleType ? <VehicleLabel type={item.vehicleType} /> : null}
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function toSuggest(row: RiderListItem): SuggestRow {
+  return {
+    id: row.id,
+    name: row.fullName,
+    phone: row.phoneNumber,
+    photoUrl: row.profilePhotoUrl,
+    extra: row.plateNumber,
+    vehicleType: row.vehicleType,
+  }
+}
+
 export function OperatorPabiliRidersPage({ onOpenRider }: { onOpenRider?: (id: string) => void }) {
   const [q, setQ] = useState('')
   const [items, setItems] = useState<RiderListItem[]>([])
+  const [suggest, setSuggest] = useState<RiderListItem[]>([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [error, setError] = useState('')
@@ -20,10 +125,11 @@ export function OperatorPabiliRidersPage({ onOpenRider }: { onOpenRider?: (id: s
   const [linkOpen, setLinkOpen] = useState(false)
   const [candidateQ, setCandidateQ] = useState('')
   const [candidates, setCandidates] = useState<RiderListItem[]>([])
+  const [candidateSuggest, setCandidateSuggest] = useState<RiderListItem[]>([])
   const [candidateBusy, setCandidateBusy] = useState(false)
   const pageSize = 10
 
-  function reload() {
+  function reloadList() {
     api.operatorPabiliRiders(q, page, pageSize)
       .then((data) => {
         setItems(data.items)
@@ -34,7 +140,12 @@ export function OperatorPabiliRidersPage({ onOpenRider }: { onOpenRider?: (id: s
   }
 
   useEffect(() => {
-    const handle = window.setTimeout(reload, 200)
+    const handle = window.setTimeout(() => {
+      reloadList()
+      api.operatorPabiliRiders(q, 1, 8)
+        .then((data) => setSuggest(data.items))
+        .catch(() => setSuggest([]))
+    }, 200)
     return () => window.clearTimeout(handle)
   }, [q, page])
 
@@ -43,8 +154,14 @@ export function OperatorPabiliRidersPage({ onOpenRider }: { onOpenRider?: (id: s
     setCandidateBusy(true)
     const handle = window.setTimeout(() => {
       api.operatorPabiliRiderCandidates(candidateQ, 1, 12)
-        .then((data) => setCandidates(data.items))
-        .catch(() => setCandidates([]))
+        .then((data) => {
+          setCandidates(data.items)
+          setCandidateSuggest(data.items)
+        })
+        .catch(() => {
+          setCandidates([])
+          setCandidateSuggest([])
+        })
         .finally(() => setCandidateBusy(false))
     }, 200)
     return () => window.clearTimeout(handle)
@@ -58,7 +175,10 @@ export function OperatorPabiliRidersPage({ onOpenRider }: { onOpenRider?: (id: s
       setNotice(`${name} linked to Pabili.`)
       setLinkOpen(false)
       setCandidateQ('')
-      reload()
+      setQ('')
+      setPage(1)
+      reloadList()
+      api.operatorPabiliRiders('', 1, 8).then((data) => setSuggest(data.items)).catch(() => setSuggest([]))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not link rider.')
     } finally {
@@ -75,7 +195,8 @@ export function OperatorPabiliRidersPage({ onOpenRider }: { onOpenRider?: (id: s
     try {
       await api.unlinkOperatorPabiliRider(row.id)
       setNotice(`${row.fullName} unlinked from Pabili.`)
-      reload()
+      reloadList()
+      api.operatorPabiliRiders(q, 1, 8).then((data) => setSuggest(data.items)).catch(() => setSuggest([]))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not unlink rider.')
     } finally {
@@ -93,11 +214,17 @@ export function OperatorPabiliRidersPage({ onOpenRider }: { onOpenRider?: (id: s
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input
+          <RiderSuggest
             value={q}
-            onChange={(e) => { setQ(e.target.value); setPage(1) }}
-            placeholder="Search linked riders"
-            style={{ minWidth: 200 }}
+            onChange={(value) => { setQ(value); setPage(1) }}
+            placeholder="Search name, phone, or plate"
+            items={suggest.map(toSuggest)}
+            emptyLabel={q.trim() ? 'No linked riders match' : 'No linked riders yet'}
+            onPick={(item) => {
+              setQ(item.name)
+              setPage(1)
+              onOpenRider?.(item.id)
+            }}
           />
           <button className="btn" type="button" style={{ width: 'auto', whiteSpace: 'nowrap' }} onClick={() => setLinkOpen(true)}>
             Link rider
@@ -127,7 +254,10 @@ export function OperatorPabiliRidersPage({ onOpenRider }: { onOpenRider?: (id: s
             ) : items.map((row) => (
               <tr key={row.id}>
                 <td>
-                  <strong>{row.fullName}</strong>
+                  <div className="person-cell">
+                    <RiderAvatar name={row.fullName} photoUrl={row.profilePhotoUrl} />
+                    <strong>{row.fullName}</strong>
+                  </div>
                 </td>
                 <td>{row.phoneNumber}</td>
                 <td><VehicleLabel type={row.vehicleType} /></td>
@@ -187,15 +317,20 @@ export function OperatorPabiliRidersPage({ onOpenRider }: { onOpenRider?: (id: s
               </div>
               <button className="btn tiny" type="button" onClick={() => setLinkOpen(false)}>Close</button>
             </div>
-            <label className="field wide">
+            <div className="field wide">
               <span>Search</span>
-              <input
+              <RiderSuggest
                 value={candidateQ}
-                onChange={(e) => setCandidateQ(e.target.value)}
-                placeholder="Name, phone, or plate"
-                autoFocus
+                onChange={setCandidateQ}
+                placeholder="Search name, phone, or plate"
+                items={candidateSuggest.map(toSuggest)}
+                emptyLabel={candidateBusy ? 'Searching…' : candidateQ.trim() ? 'No unlinked riders match' : 'Type to find a rider'}
+                onPick={(item) => {
+                  setCandidateQ(item.name)
+                  void link(item.id, item.name)
+                }}
               />
-            </label>
+            </div>
             <div className="table-wrap" style={{ marginTop: 12 }}>
               <table>
                 <thead>
@@ -218,8 +353,13 @@ export function OperatorPabiliRidersPage({ onOpenRider }: { onOpenRider?: (id: s
                   ) : candidates.map((row) => (
                     <tr key={row.id}>
                       <td>
-                        <strong>{row.fullName}</strong>
-                        <div className="muted" style={{ fontSize: 12 }}>{row.phoneNumber}</div>
+                        <div className="person-cell">
+                          <RiderAvatar name={row.fullName} photoUrl={row.profilePhotoUrl} />
+                          <div>
+                            <strong>{row.fullName}</strong>
+                            <div className="muted" style={{ fontSize: 12 }}>{row.phoneNumber}</div>
+                          </div>
+                        </div>
                       </td>
                       <td><VehicleLabel type={row.vehicleType} /></td>
                       <td>{row.plateNumber}</td>

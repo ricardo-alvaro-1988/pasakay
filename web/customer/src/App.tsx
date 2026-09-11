@@ -43,6 +43,7 @@ import {
 import { AuthScreen, CompleteMobile } from './auth-screens'
 import { LoginBrandPanel } from './login-brand-panel'
 import { AccountHub, AccountPage, BookingScreen, PaymentBar } from './account-screens'
+import { PabiliStorefront } from './PabiliStorefront'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
 import { VEHICLE_ART } from './vehicle-art'
 import { ShowQrButton, ShowQrOverlay } from './scan-qr'
@@ -1115,8 +1116,13 @@ function Home({
           </section>
         )}
         {tab === 'pabili' && (
-          <section className="panel page-panel">
-            <PabiliComingSoon brandName={brandName} brandLogo={brandLogo} />
+          <section className="panel page-panel pabili-panel">
+            <PabiliStorefront
+              brandName={brandName}
+              places={desk.places}
+              mapLat={desk.mapLat}
+              mapLng={desk.mapLng}
+            />
           </section>
         )}
         {tab === 'account' && (
@@ -1507,26 +1513,6 @@ function PabiliIcon() {
       <path d="M6.5 8.5h11l-.7 10.2a1.6 1.6 0 0 1-1.6 1.5H8.8a1.6 1.6 0 0 1-1.6-1.5L6.5 8.5z" {...navStroke()} />
       <path d="M9 8.5V7a3 3 0 0 1 6 0v1.5" {...navStroke()} />
     </svg>
-  )
-}
-
-function PabiliComingSoon({ brandName, brandLogo }: { brandName: string; brandLogo: string }) {
-  return (
-    <div className="pabili-soon">
-      <div className="pabili-soon-glow" aria-hidden="true" />
-      <div className="pabili-soon-card">
-        <div className="pabili-soon-badge" aria-hidden="true">
-          <img src={brandLogo} alt="" />
-        </div>
-        <p className="pabili-soon-kicker">{brandName}</p>
-        <h2>Pabili</h2>
-        <p className="pabili-soon-headline">Coming soon</p>
-        <p className="pabili-soon-copy">
-          Order food, groceries, and errands for pickup and delivery — right from the same app you ride with on {brandName}.
-        </p>
-        <div className="pabili-soon-pill">We’re cooking this up for you</div>
-      </div>
-    </div>
   )
 }
 

@@ -16,6 +16,8 @@ public class RiderWalletTransaction : BaseEntity
     public decimal? BalanceAfter { get; set; }
     public Guid? TripId { get; set; }
     public Trip? Trip { get; set; }
+    public Guid? PabiliOrderId { get; set; }
+    public PabiliOrder? PabiliOrder { get; set; }
     public string? Note { get; set; }
     public string? RejectionReason { get; set; }
     public Guid? ResolvedByUserId { get; set; }

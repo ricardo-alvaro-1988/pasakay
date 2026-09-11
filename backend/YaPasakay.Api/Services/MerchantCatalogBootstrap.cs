@@ -428,6 +428,191 @@ public static class MerchantCatalogBootstrap
             """, cancellationToken);
     }
 
+    public static async Task EnsurePabiliOrdersAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            IF COL_LENGTH(N'RiderWalletTransactions', N'PabiliOrderId') IS NULL
+                ALTER TABLE [RiderWalletTransactions] ADD [PabiliOrderId] uniqueidentifier NULL;
+            """, cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            IF COL_LENGTH(N'RiderWalletTransactions', N'PabiliOrderId') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_RiderWalletTransactions_PabiliOrderId' AND object_id = OBJECT_ID(N'[RiderWalletTransactions]'))
+                CREATE UNIQUE INDEX [IX_RiderWalletTransactions_PabiliOrderId]
+                    ON [RiderWalletTransactions] ([PabiliOrderId])
+                    WHERE [PabiliOrderId] IS NOT NULL;
+            """, cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            IF OBJECT_ID(N'[PabiliOrders]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [PabiliOrders] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [OperatorId] uniqueidentifier NOT NULL,
+                    [MerchantId] uniqueidentifier NOT NULL,
+                    [CustomerId] uniqueidentifier NOT NULL,
+                    [RiderId] uniqueidentifier NULL,
+                    [Reference] nvarchar(40) NOT NULL,
+                    [Status] int NOT NULL,
+                    [CustomerName] nvarchar(120) NOT NULL,
+                    [CustomerPhone] nvarchar(20) NOT NULL,
+                    [MerchantName] nvarchar(160) NOT NULL,
+                    [PickupAddress] nvarchar(260) NOT NULL,
+                    [PickupLat] float NOT NULL,
+                    [PickupLng] float NOT NULL,
+                    [DropoffAddress] nvarchar(260) NOT NULL,
+                    [DropoffLat] float NOT NULL,
+                    [DropoffLng] float NOT NULL,
+                    [DropoffBarangayId] uniqueidentifier NULL,
+                    [DistanceKm] decimal(18,2) NOT NULL,
+                    [GoodsSubtotal] decimal(18,2) NOT NULL,
+                    [GoodsBaseSubtotal] decimal(18,2) NOT NULL,
+                    [DeliveryFee] decimal(18,2) NOT NULL,
+                    [SurchargeTotal] decimal(18,2) NOT NULL,
+                    [AdjustmentAmount] decimal(18,2) NOT NULL,
+                    [AdjustmentLabel] nvarchar(120) NOT NULL,
+                    [CustomerTotal] decimal(18,2) NOT NULL,
+                    [PaymentMethod] int NOT NULL,
+                    [Notes] nvarchar(500) NULL,
+                    [AcceptedAtUtc] datetime2 NULL,
+                    [PickedUpAtUtc] datetime2 NULL,
+                    [DeliveringAtUtc] datetime2 NULL,
+                    [CompletedAtUtc] datetime2 NULL,
+                    [CancelledAtUtc] datetime2 NULL,
+                    [CancelledBy] int NOT NULL,
+                    [CancelReason] nvarchar(200) NULL,
+                    [FareSystemPercent] decimal(5,2) NULL,
+                    [FareOperatorPercent] decimal(5,2) NULL,
+                    [FareRiderPercent] decimal(5,2) NULL,
+                    [MarkupSystemPercent] decimal(5,2) NULL,
+                    [MarkupOperatorPercent] decimal(5,2) NULL,
+                    [MarkupRiderPercent] decimal(5,2) NULL,
+                    [FareSystemAmount] decimal(18,2) NULL,
+                    [FareOperatorAmount] decimal(18,2) NULL,
+                    [FareRiderAmount] decimal(18,2) NULL,
+                    [MarkupSystemAmount] decimal(18,2) NULL,
+                    [MarkupOperatorAmount] decimal(18,2) NULL,
+                    [MarkupRiderAmount] decimal(18,2) NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_PabiliOrders] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_PabiliOrders_Operators_OperatorId] FOREIGN KEY ([OperatorId]) REFERENCES [Operators] ([Id]) ON DELETE NO ACTION,
+                    CONSTRAINT [FK_PabiliOrders_Merchants_MerchantId] FOREIGN KEY ([MerchantId]) REFERENCES [Merchants] ([Id]) ON DELETE NO ACTION,
+                    CONSTRAINT [FK_PabiliOrders_CustomerProfiles_CustomerId] FOREIGN KEY ([CustomerId]) REFERENCES [CustomerProfiles] ([Id]) ON DELETE NO ACTION,
+                    CONSTRAINT [FK_PabiliOrders_RiderProfiles_RiderId] FOREIGN KEY ([RiderId]) REFERENCES [RiderProfiles] ([Id]) ON DELETE NO ACTION,
+                    CONSTRAINT [FK_PabiliOrders_Barangays_DropoffBarangayId] FOREIGN KEY ([DropoffBarangayId]) REFERENCES [Barangays] ([Id]) ON DELETE NO ACTION
+                );
+            END
+            """, cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            IF OBJECT_ID(N'[PabiliOrders]', N'U') IS NOT NULL
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PabiliOrders_OperatorId' AND object_id = OBJECT_ID(N'[PabiliOrders]'))
+                    CREATE INDEX [IX_PabiliOrders_OperatorId] ON [PabiliOrders] ([OperatorId]);
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PabiliOrders_OperatorId_Status_CreatedAtUtc' AND object_id = OBJECT_ID(N'[PabiliOrders]'))
+                    CREATE INDEX [IX_PabiliOrders_OperatorId_Status_CreatedAtUtc] ON [PabiliOrders] ([OperatorId], [Status], [CreatedAtUtc]);
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PabiliOrders_CustomerId' AND object_id = OBJECT_ID(N'[PabiliOrders]'))
+                    CREATE INDEX [IX_PabiliOrders_CustomerId] ON [PabiliOrders] ([CustomerId]);
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PabiliOrders_RiderId' AND object_id = OBJECT_ID(N'[PabiliOrders]'))
+                    CREATE INDEX [IX_PabiliOrders_RiderId] ON [PabiliOrders] ([RiderId]);
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PabiliOrders_Reference' AND object_id = OBJECT_ID(N'[PabiliOrders]'))
+                    CREATE INDEX [IX_PabiliOrders_Reference] ON [PabiliOrders] ([Reference]);
+            END
+            """, cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            IF OBJECT_ID(N'[PabiliOrderItems]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [PabiliOrderItems] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [OrderId] uniqueidentifier NOT NULL,
+                    [ProductId] uniqueidentifier NULL,
+                    [Name] nvarchar(160) NOT NULL,
+                    [Quantity] int NOT NULL,
+                    [UnitBasePrice] decimal(18,2) NOT NULL,
+                    [UnitSellingPrice] decimal(18,2) NOT NULL,
+                    [LineBaseTotal] decimal(18,2) NOT NULL,
+                    [LineSellingTotal] decimal(18,2) NOT NULL,
+                    [SortOrder] int NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_PabiliOrderItems] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_PabiliOrderItems_PabiliOrders_OrderId] FOREIGN KEY ([OrderId]) REFERENCES [PabiliOrders] ([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_PabiliOrderItems_OrderId] ON [PabiliOrderItems] ([OrderId]);
+            END
+            """, cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            IF OBJECT_ID(N'[PabiliOrderItemAddons]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [PabiliOrderItemAddons] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [OrderItemId] uniqueidentifier NOT NULL,
+                    [AddonOptionId] uniqueidentifier NULL,
+                    [Name] nvarchar(120) NOT NULL,
+                    [Quantity] int NOT NULL,
+                    [UnitBasePrice] decimal(18,2) NOT NULL,
+                    [UnitSellingPrice] decimal(18,2) NOT NULL,
+                    [LineBaseTotal] decimal(18,2) NOT NULL,
+                    [LineSellingTotal] decimal(18,2) NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_PabiliOrderItemAddons] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_PabiliOrderItemAddons_PabiliOrderItems_OrderItemId] FOREIGN KEY ([OrderItemId]) REFERENCES [PabiliOrderItems] ([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_PabiliOrderItemAddons_OrderItemId] ON [PabiliOrderItemAddons] ([OrderItemId]);
+            END
+            """, cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            IF OBJECT_ID(N'[PabiliOrderOffers]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [PabiliOrderOffers] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [OrderId] uniqueidentifier NOT NULL,
+                    [RiderId] uniqueidentifier NOT NULL,
+                    [Status] int NOT NULL,
+                    [DistanceKm] decimal(18,2) NULL,
+                    [OfferedAtUtc] datetime2 NOT NULL,
+                    [ExpiresAtUtc] datetime2 NOT NULL,
+                    [RespondedAtUtc] datetime2 NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_PabiliOrderOffers] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_PabiliOrderOffers_PabiliOrders_OrderId] FOREIGN KEY ([OrderId]) REFERENCES [PabiliOrders] ([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [FK_PabiliOrderOffers_RiderProfiles_RiderId] FOREIGN KEY ([RiderId]) REFERENCES [RiderProfiles] ([Id]) ON DELETE NO ACTION
+                );
+            END
+            """, cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync("""
+            IF OBJECT_ID(N'[PabiliOrderOffers]', N'U') IS NOT NULL
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PabiliOrderOffers_OrderId_RiderId' AND object_id = OBJECT_ID(N'[PabiliOrderOffers]'))
+                    CREATE UNIQUE INDEX [IX_PabiliOrderOffers_OrderId_RiderId] ON [PabiliOrderOffers] ([OrderId], [RiderId]);
+                IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'IX_PabiliOrderOffers_RiderId_Status' AND object_id = OBJECT_ID(N'[PabiliOrderOffers]'))
+                    CREATE INDEX [IX_PabiliOrderOffers_RiderId_Status] ON [PabiliOrderOffers] ([RiderId], [Status]);
+            END
+
+            IF COL_LENGTH(N'RiderWalletTransactions', N'PabiliOrderId') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1 FROM sys.foreign_keys WHERE name = N'FK_RiderWalletTransactions_PabiliOrders_PabiliOrderId'
+               )
+                ALTER TABLE [RiderWalletTransactions] WITH CHECK
+                    ADD CONSTRAINT [FK_RiderWalletTransactions_PabiliOrders_PabiliOrderId]
+                    FOREIGN KEY ([PabiliOrderId]) REFERENCES [PabiliOrders] ([Id]) ON DELETE NO ACTION;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM [__EFMigrationsHistory]
+                WHERE [MigrationId] = N'20260911083227_PabiliOrders'
+            )
+                INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+                VALUES (N'20260911083227_PabiliOrders', N'9.0.8');
+            """, cancellationToken);
+    }
+
     public static async Task<bool> HasMerchantsTableAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
         var conn = db.Database.GetDbConnection();

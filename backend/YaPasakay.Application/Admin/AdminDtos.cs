@@ -1152,6 +1152,233 @@ public record PabiliSurchargeListResponse(
     string CompanyName,
     IReadOnlyList<FareSurchargeItem> Items);
 
+public record CustomerPabiliMerchantCard(
+    Guid Id,
+    string Name,
+    string Address,
+    string? LogoUrl,
+    string? CoverUrl,
+    bool IsOpen,
+    double Latitude,
+    double Longitude);
+
+public record CustomerPabiliAddonOption(
+    Guid Id,
+    string Name,
+    decimal SellingPrice,
+    decimal BasePrice);
+
+public record CustomerPabiliAddonGroup(
+    Guid Id,
+    string Name,
+    int MinSelect,
+    int MaxSelect,
+    IReadOnlyList<CustomerPabiliAddonOption> Options);
+
+public record CustomerPabiliProductCard(
+    Guid Id,
+    Guid? CategoryId,
+    string CategoryName,
+    string Name,
+    string Description,
+    decimal SellingPrice,
+    string? ImageUrl,
+    IReadOnlyList<CustomerPabiliAddonGroup> AddonGroups);
+
+public record CustomerPabiliCategoryTab(Guid Id, string Name);
+
+public record CustomerPabiliStoreResponse(
+    Guid Id,
+    string Name,
+    string Address,
+    string? LogoUrl,
+    string? CoverUrl,
+    bool IsOpen,
+    double Latitude,
+    double Longitude,
+    IReadOnlyList<CustomerPabiliCategoryTab> Categories,
+    IReadOnlyList<CustomerPabiliProductCard> Products);
+
+public record CustomerPabiliCartAddonRequest(Guid OptionId, int Quantity = 1);
+
+public record CustomerPabiliCartItemRequest(
+    Guid ProductId,
+    int Quantity,
+    IReadOnlyList<CustomerPabiliCartAddonRequest>? Addons);
+
+public record CustomerPabiliQuoteRequest(
+    Guid MerchantId,
+    double DropoffLat,
+    double DropoffLng,
+    Guid? DropoffBarangayId,
+    IReadOnlyList<CustomerPabiliCartItemRequest> Items);
+
+public record CustomerPabiliQuoteAddonLine(string Name, decimal SellingPrice);
+
+public record CustomerPabiliQuoteLine(
+    Guid ProductId,
+    string Name,
+    int Quantity,
+    decimal UnitSellingPrice,
+    decimal LineSellingTotal,
+    IReadOnlyList<CustomerPabiliQuoteAddonLine> Addons);
+
+public record CustomerPabiliQuoteResponse(
+    Guid MerchantId,
+    string MerchantName,
+    decimal GoodsSubtotal,
+    decimal DeliveryFee,
+    decimal SurchargeTotal,
+    decimal DistanceKm,
+    decimal AdjustmentAmount,
+    string AdjustmentLabel,
+    decimal CustomerTotal,
+    IReadOnlyList<CustomerPabiliQuoteLine> Lines);
+
+public record CustomerPabiliPlaceRequest(
+    Guid MerchantId,
+    string DropoffAddress,
+    double DropoffLat,
+    double DropoffLng,
+    Guid? DropoffBarangayId,
+    PaymentMethod PaymentMethod,
+    string? Notes,
+    IReadOnlyList<CustomerPabiliCartItemRequest> Items);
+
+public record CustomerPabiliOrderAddonItem(
+    Guid Id,
+    string Name,
+    int Quantity,
+    decimal UnitSellingPrice,
+    decimal LineSellingTotal);
+
+public record CustomerPabiliOrderLineItem(
+    Guid Id,
+    string Name,
+    int Quantity,
+    decimal UnitSellingPrice,
+    decimal LineSellingTotal,
+    IReadOnlyList<CustomerPabiliOrderAddonItem> Addons);
+
+public record CustomerPabiliOrderDetail(
+    Guid Id,
+    string Reference,
+    string Status,
+    string MerchantName,
+    string PickupAddress,
+    string DropoffAddress,
+    double PickupLat,
+    double PickupLng,
+    double DropoffLat,
+    double DropoffLng,
+    decimal DistanceKm,
+    decimal GoodsSubtotal,
+    decimal DeliveryFee,
+    decimal SurchargeTotal,
+    decimal AdjustmentAmount,
+    string AdjustmentLabel,
+    decimal CustomerTotal,
+    string PaymentMethod,
+    string? RiderName,
+    string? RiderPhone,
+    string? Notes,
+    DateTime CreatedAtUtc,
+    DateTime? AcceptedAtUtc,
+    DateTime? PickedUpAtUtc,
+    DateTime? DeliveringAtUtc,
+    DateTime? CompletedAtUtc,
+    DateTime? CancelledAtUtc,
+    bool CanCancel,
+    IReadOnlyList<CustomerPabiliOrderLineItem> Items);
+
+public record OperatorPabiliOrderListItem(
+    Guid Id,
+    string Reference,
+    string Status,
+    string MerchantName,
+    string CustomerName,
+    string CustomerPhone,
+    decimal CustomerTotal,
+    decimal AdjustmentAmount,
+    string? RiderName,
+    DateTime CreatedAtUtc);
+
+public record OperatorPabiliOrderDetail(
+    Guid Id,
+    string Reference,
+    string Status,
+    Guid MerchantId,
+    string MerchantName,
+    Guid CustomerId,
+    string CustomerName,
+    string CustomerPhone,
+    string PickupAddress,
+    double PickupLat,
+    double PickupLng,
+    string DropoffAddress,
+    double DropoffLat,
+    double DropoffLng,
+    decimal DistanceKm,
+    decimal GoodsSubtotal,
+    decimal GoodsBaseSubtotal,
+    decimal DeliveryFee,
+    decimal SurchargeTotal,
+    decimal AdjustmentAmount,
+    string AdjustmentLabel,
+    decimal CustomerTotal,
+    string PaymentMethod,
+    Guid? RiderId,
+    string? RiderName,
+    string? RiderPhone,
+    string? Notes,
+    string? CancelReason,
+    DateTime CreatedAtUtc,
+    DateTime? AcceptedAtUtc,
+    DateTime? PickedUpAtUtc,
+    DateTime? DeliveringAtUtc,
+    DateTime? CompletedAtUtc,
+    DateTime? CancelledAtUtc,
+    bool CanAdjust,
+    bool CanCancel,
+    IReadOnlyList<CustomerPabiliOrderLineItem> Items);
+
+public record PatchPabiliAdjustmentRequest(decimal AdjustmentAmount, string? AdjustmentLabel);
+
+public record CancelPabiliOrderRequest(string? Reason);
+
+public record RiderPabiliOfferItem(
+    Guid OfferId,
+    Guid OrderId,
+    string Reference,
+    string Status,
+    string MerchantName,
+    string PickupAddress,
+    string DropoffAddress,
+    decimal CustomerTotal,
+    decimal DeliveryFee,
+    double? DistanceKm,
+    DateTime ExpiresAtUtc);
+
+public record RiderPabiliOrderDetail(
+    Guid Id,
+    string Reference,
+    string Status,
+    string MerchantName,
+    string CustomerName,
+    string CustomerPhone,
+    string PickupAddress,
+    double PickupLat,
+    double PickupLng,
+    string DropoffAddress,
+    double DropoffLat,
+    double DropoffLng,
+    decimal GoodsSubtotal,
+    decimal DeliveryFee,
+    decimal AdjustmentAmount,
+    string AdjustmentLabel,
+    decimal CustomerTotal,
+    IReadOnlyList<CustomerPabiliOrderLineItem> Items);
+
 public static class UploadUrls
 {
     public static string? FromPath(string? relativePath) =>

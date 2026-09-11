@@ -24,6 +24,8 @@ builder.Services.AddSingleton<YaPasakay.Api.Services.UploadStore>();
 builder.Services.AddSingleton<YaPasakay.Api.Services.BrandShell>();
 builder.Services.AddScoped<YaPasakay.Api.Services.RiderWalletService>();
 builder.Services.AddScoped<YaPasakay.Api.Services.TripBroadcastService>();
+builder.Services.AddScoped<YaPasakay.Api.Services.PabiliOrderBroadcastService>();
+builder.Services.AddScoped<YaPasakay.Api.Services.PabiliPricingService>();
 builder.Services.AddSingleton<YaPasakay.Api.Services.TripChatRealtime>();
 builder.Services.AddScoped<YaPasakay.Api.Services.OperatorPromoService>();
 builder.Services.AddScoped<YaPasakay.Api.Services.DeriveFarePricingService>();
@@ -163,6 +165,7 @@ using (var scope = app.Services.CreateScope())
         await MerchantCatalogBootstrap.EnsureDualPricingAsync(db);
         await MerchantCatalogBootstrap.EnsurePabiliMatrixAsync(db);
         await MerchantCatalogBootstrap.EnsurePabiliRiderFlagsAsync(db);
+        await MerchantCatalogBootstrap.EnsurePabiliOrdersAsync(db);
     }
     catch (Exception schemaEx)
     {

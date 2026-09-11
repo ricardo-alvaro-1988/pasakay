@@ -127,6 +127,7 @@ import TripLiveMap from './TripLiveMap'
 import { DeriveZoneMap } from './DeriveZoneMap'
 import { OperatorMerchantsPage } from './OperatorMerchantsPage'
 import { OperatorPabiliMatrixPage } from './OperatorPabiliMatrixPage'
+import { OperatorPabiliOrdersPage } from './OperatorPabiliOrdersPage'
 import { OperatorPabiliRidersPage } from './OperatorPabiliRidersPage'
 import { OperatorPabiliSurchargesPage } from './OperatorPabiliSurchargesPage'
 import { OperatorProductCategoriesPage } from './OperatorProductCategoriesPage'
@@ -7285,9 +7286,7 @@ function OperatorShell({
         {page === 'promos' && <OperatorPromosPage />}
         {page === 'merchants' && <OperatorMerchantsPage />}
         {page === 'product-categories' && <OperatorProductCategoriesPage />}
-        {page === 'pabili-orders' && (
-          <ComingSoon title="Pabili orders" body="Order intake and status tracking for Pabili will live here." />
-        )}
+        {page === 'pabili-orders' && <OperatorPabiliOrdersPage />}
         {page === 'pabili-matrix' && <OperatorPabiliMatrixPage />}
         {page === 'pabili-riders' && (
           <OperatorPabiliRidersPage
