@@ -105,43 +105,59 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var migrateLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbMigrate");
-    try
+    if (app.Configuration.GetValue("Database:SkipMigrate", false))
     {
-        await db.Database.MigrateAsync();
+        migrateLogger.LogWarning("Database:SkipMigrate is enabled; starting without MigrateAsync.");
     }
-    catch (Exception first)
+    else
     {
-        migrateLogger.LogError(first, "Database migrate failed; repairing merchant catalog leftovers and retrying once.");
-        try
+                try
         {
-            await db.Database.ExecuteSqlRawAsync("""
-                IF OBJECT_ID(N'[ProductAddonOptions]', N'U') IS NOT NULL DROP TABLE [ProductAddonOptions];
-                IF OBJECT_ID(N'[ProductAddonGroups]', N'U') IS NOT NULL DROP TABLE [ProductAddonGroups];
-                IF OBJECT_ID(N'[MerchantProducts]', N'U') IS NOT NULL DROP TABLE [MerchantProducts];
-                IF OBJECT_ID(N'[MerchantProductCategories]', N'U') IS NOT NULL DROP TABLE [MerchantProductCategories];
-                IF OBJECT_ID(N'[MerchantOperatingHours]', N'U') IS NOT NULL DROP TABLE [MerchantOperatingHours];
-                IF OBJECT_ID(N'[Merchants]', N'U') IS NOT NULL DROP TABLE [Merchants];
-                IF EXISTS (
-                    SELECT 1 FROM sys.indexes
-                    WHERE name = N'IX_Users_MerchantId' AND object_id = OBJECT_ID(N'[Users]')
-                )
-                    DROP INDEX [IX_Users_MerchantId] ON [Users];
-                IF COL_LENGTH(N'Users', N'MerchantId') IS NOT NULL
-                    ALTER TABLE [Users] DROP COLUMN [MerchantId];
-                DELETE FROM [__EFMigrationsHistory]
-                WHERE [MigrationId] = N'20260911014037_OperatorMerchantCatalog';
-                """);
-            await db.Database.MigrateAsync();
+            using var migrateCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await db.Database.MigrateAsync(migrateCts.Token);
         }
-        catch (Exception second)
+        catch (Exception first)
         {
-            // Keep the API up for login/rides even if merchant catalog migrate is blocked.
-            migrateLogger.LogCritical(second, "Database migrate still failing after repair; starting API without pending merchant migration.");
+            migrateLogger.LogError(first, "Database migrate failed; repairing merchant catalog leftovers and retrying once.");
+            try
+            {
+                await db.Database.ExecuteSqlRawAsync("""
+                    IF OBJECT_ID(N'[ProductAddonOptions]', N'U') IS NOT NULL DROP TABLE [ProductAddonOptions];
+                    IF OBJECT_ID(N'[ProductAddonGroups]', N'U') IS NOT NULL DROP TABLE [ProductAddonGroups];
+                    IF OBJECT_ID(N'[MerchantProducts]', N'U') IS NOT NULL DROP TABLE [MerchantProducts];
+                    IF OBJECT_ID(N'[MerchantProductCategories]', N'U') IS NOT NULL DROP TABLE [MerchantProductCategories];
+                    IF OBJECT_ID(N'[MerchantOperatingHours]', N'U') IS NOT NULL DROP TABLE [MerchantOperatingHours];
+                    IF OBJECT_ID(N'[Merchants]', N'U') IS NOT NULL DROP TABLE [Merchants];
+                    IF EXISTS (
+                        SELECT 1 FROM sys.indexes
+                        WHERE name = N'IX_Users_MerchantId' AND object_id = OBJECT_ID(N'[Users]')
+                    )
+                        DROP INDEX [IX_Users_MerchantId] ON [Users];
+                    IF COL_LENGTH(N'Users', N'MerchantId') IS NOT NULL
+                        ALTER TABLE [Users] DROP COLUMN [MerchantId];
+                    DELETE FROM [__EFMigrationsHistory]
+                    WHERE [MigrationId] = N'20260911014037_OperatorMerchantCatalog';
+                    """);
+                using var retryCts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                await db.Database.MigrateAsync(retryCts.Token);
+            }
+            catch (Exception second)
+            {
+                // Keep the API up for login/rides even if merchant catalog migrate is blocked.
+                migrateLogger.LogCritical(second, "Database migrate still failing after repair; starting API without pending merchant migration.");
+            }
         }
     }
 
     var seederLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbSeeder");
-    await DbSeeder.SeedAsync(db, seederLogger, uploadRoot);
+    try
+    {
+        await DbSeeder.SeedAsync(db, seederLogger, uploadRoot);
+    }
+    catch (Exception seedEx)
+    {
+        migrateLogger.LogCritical(seedEx, "DbSeeder failed; starting API anyway.");
+    }
 }
 
 app.UseForwardedHeaders();

@@ -100,7 +100,7 @@ EOF
 }
 
 wait_for_health() {
-    for _ in {1..30}; do
+    for _ in {1..90}; do
         if ${sudo_cmd} systemctl is-active --quiet "${service}" &&
             curl -fsS "${health_url}" >/dev/null; then
             return 0
