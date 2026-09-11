@@ -40,6 +40,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<OperatorCashInBankAccount> OperatorCashInBankAccounts => Set<OperatorCashInBankAccount>();
     public DbSet<OperatorPromo> OperatorPromos => Set<OperatorPromo>();
     public DbSet<OperatorAd> OperatorAds => Set<OperatorAd>();
+    public DbSet<OperatorPabiliPaymentMethod> OperatorPabiliPaymentMethods => Set<OperatorPabiliPaymentMethod>();
     public DbSet<PromoRedemption> PromoRedemptions => Set<PromoRedemption>();
     public DbSet<DeriveFareZone> DeriveFareZones => Set<DeriveFareZone>();
     public DbSet<DeriveFareMatrix> DeriveFareMatrices => Set<DeriveFareMatrix>();
@@ -621,6 +622,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.RedirectUrl).HasMaxLength(500).IsRequired();
             entity.HasOne(x => x.Operator)
                 .WithMany(x => x.Ads)
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OperatorPabiliPaymentMethod>(entity =>
+        {
+            entity.HasIndex(x => new { x.OperatorId, x.Method }).IsUnique();
+            entity.HasIndex(x => new { x.OperatorId, x.SortOrder });
+            entity.Property(x => x.Label).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.QrImagePath).HasMaxLength(500);
+            entity.HasOne(x => x.Operator)
+                .WithMany(x => x.PabiliPaymentMethods)
                 .HasForeignKey(x => x.OperatorId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

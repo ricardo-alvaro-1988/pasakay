@@ -3510,7 +3510,7 @@ button.where-toggle .where { pointer-events: none; }
 }
 .pb-pay-options {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
   gap: 8px;
 }
 .pb-pay-options button {
@@ -3527,6 +3527,23 @@ button.where-toggle .where { pointer-events: none; }
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 12%, #fff);
   color: var(--accent);
+}
+.pb-pay-qr {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid #eef1f4;
+}
+.pb-pay-qr img {
+  width: min(180px, 56vw);
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: contain;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e8ebef;
 }
 .pb-quote-wait { margin: 4px 2px 0; }
 .pb-field { display: grid; gap: 6px; margin: 12px 0; font-weight: 700; }

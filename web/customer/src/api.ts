@@ -604,6 +604,19 @@ export const api = {
       redirectUrl: string
     }>>(`/api/customer/pabili/ads?${params}`)
   },
+  pabiliPaymentMethods: (opts: { lat: number; lng: number; barangayId?: string }) => {
+    const params = new URLSearchParams({
+      lat: String(opts.lat),
+      lng: String(opts.lng),
+    })
+    if (opts.barangayId) params.set('barangayId', opts.barangayId)
+    return request<Array<{
+      method: PaymentMethod
+      label: string
+      qrImageUrl: string | null
+      sortOrder: number
+    }>>(`/api/customer/pabili/payment-methods?${params}`)
+  },
   pabiliSuggest: (opts: { lat: number; lng: number; barangayId?: string; q: string }) => {
     const params = new URLSearchParams({
       lat: String(opts.lat),

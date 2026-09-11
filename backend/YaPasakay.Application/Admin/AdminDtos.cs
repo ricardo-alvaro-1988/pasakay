@@ -976,6 +976,29 @@ public record SaveOperatorAdRequest(
 
 public record OperatorAdListResponse(IReadOnlyList<OperatorAdItem> Items);
 
+public record OperatorPabiliPaymentMethodItem(
+    Guid Id,
+    PaymentMethod Method,
+    string Label,
+    string? QrImageUrl,
+    bool IsActive,
+    int SortOrder,
+    DateTime CreatedAtUtc);
+
+public record SaveOperatorPabiliPaymentMethodRequest(
+    PaymentMethod Method,
+    string? Label,
+    bool IsActive,
+    int SortOrder);
+
+public record OperatorPabiliPaymentMethodListResponse(IReadOnlyList<OperatorPabiliPaymentMethodItem> Items);
+
+public record CustomerPabiliPaymentMethodCard(
+    PaymentMethod Method,
+    string Label,
+    string? QrImageUrl,
+    int SortOrder);
+
 public record MerchantOperatingHourItem(
     int DayOfWeek,
     bool IsClosed,

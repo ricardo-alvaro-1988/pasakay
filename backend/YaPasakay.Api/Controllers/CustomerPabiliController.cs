@@ -162,6 +162,44 @@ public class CustomerPabiliController(
         return Ok(items);
     }
 
+    [HttpGet("payment-methods")]
+    public async Task<ActionResult<IReadOnlyList<CustomerPabiliPaymentMethodCard>>> PaymentMethods(
+        [FromQuery] double lat,
+        [FromQuery] double lng,
+        [FromQuery] Guid? barangayId,
+        CancellationToken cancellationToken)
+    {
+        var (customer, status, message) = await CustomerContext.RequireAsync(db, User, cancellationToken);
+        if (customer is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var op = await ResolveOperatorAsync(barangayId, lat, lng, cancellationToken);
+        if (op is null)
+        {
+            return Ok(DefaultPaymentMethods());
+        }
+
+        var rows = await db.OperatorPabiliPaymentMethods
+            .AsNoTracking()
+            .Where(x => x.OperatorId == op.Id && x.IsActive)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Method)
+            .ToListAsync(cancellationToken);
+
+        if (rows.Count == 0)
+        {
+            return Ok(DefaultPaymentMethods());
+        }
+
+        return Ok(rows.Select(x => new CustomerPabiliPaymentMethodCard(
+            x.Method,
+            string.IsNullOrWhiteSpace(x.Label) ? x.Method.ToString() : x.Label,
+            UploadUrls.FromPath(x.QrImagePath),
+            x.SortOrder)).ToList());
+    }
+
     [HttpGet("ads")]
     public async Task<ActionResult<IReadOnlyList<CustomerPabiliAdCard>>> Ads(
         [FromQuery] double lat,
@@ -405,6 +443,15 @@ public class CustomerPabiliController(
             return BadRequest(new { message = delivery.Error });
         }
 
+        var paymentOk = await IsPaymentMethodAllowedAsync(
+            built.Merchant.OperatorId,
+            request.PaymentMethod,
+            cancellationToken);
+        if (!paymentOk)
+        {
+            return BadRequest(new { message = "That payment method is not available for this area." });
+        }
+
         await db.Entry(customer).Reference(x => x.AppUser).LoadAsync(cancellationToken);
         var now = DateTime.UtcNow;
         var order = new PabiliOrder
@@ -562,6 +609,30 @@ public class CustomerPabiliController(
 
         await live.CustomerChangedAsync(customer.Id, "pabili-cancelled", cancellationToken);
         return Ok(await LoadOrderDetailAsync(order.Id, customer.Id, cancellationToken));
+    }
+
+    private static IReadOnlyList<CustomerPabiliPaymentMethodCard> DefaultPaymentMethods() =>
+    [
+        new(PaymentMethod.Cash, "Cash", null, 0)
+    ];
+
+    private async Task<bool> IsPaymentMethodAllowedAsync(
+        Guid operatorId,
+        PaymentMethod method,
+        CancellationToken cancellationToken)
+    {
+        var active = await db.OperatorPabiliPaymentMethods
+            .AsNoTracking()
+            .Where(x => x.OperatorId == operatorId && x.IsActive)
+            .Select(x => x.Method)
+            .ToListAsync(cancellationToken);
+
+        if (active.Count == 0)
+        {
+            return method == PaymentMethod.Cash;
+        }
+
+        return active.Contains(method);
     }
 
     private async Task<Operator?> ResolveOperatorAsync(

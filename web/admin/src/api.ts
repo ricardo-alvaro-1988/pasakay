@@ -36,6 +36,7 @@ export type PageId =
   | 'merchants'
   | 'product-categories'
   | 'pabili-ads'
+  | 'pabili-payments'
   | 'pabili-orders'
   | 'pabili-matrix'
   | 'pabili-riders'
@@ -391,6 +392,23 @@ export type OperatorAdItem = {
 export type SaveOperatorAdBody = {
   title: string
   redirectUrl: string
+  isActive: boolean
+  sortOrder: number
+}
+
+export type OperatorPabiliPaymentMethodItem = {
+  id: string
+  method: PaymentMethod
+  label: string
+  qrImageUrl: string | null
+  isActive: boolean
+  sortOrder: number
+  createdAtUtc: string
+}
+
+export type SaveOperatorPabiliPaymentMethodBody = {
+  method: PaymentMethod
+  label?: string
   isActive: boolean
   sortOrder: number
 }
@@ -2096,6 +2114,30 @@ export const api = {
     const data = new FormData()
     data.append('file', file)
     return request<OperatorAdItem>(`/api/operator/ads/${id}/image`, { method: 'POST', body: data })
+  },
+  operatorPabiliPayments: () =>
+    request<{ items: OperatorPabiliPaymentMethodItem[] }>('/api/operator/pabili-payments'),
+  createOperatorPabiliPayment: (body: SaveOperatorPabiliPaymentMethodBody) =>
+    request<OperatorPabiliPaymentMethodItem>('/api/operator/pabili-payments', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateOperatorPabiliPayment: (id: string, body: SaveOperatorPabiliPaymentMethodBody) =>
+    request<OperatorPabiliPaymentMethodItem>(`/api/operator/pabili-payments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  toggleOperatorPabiliPayment: (id: string) =>
+    request<OperatorPabiliPaymentMethodItem>(`/api/operator/pabili-payments/${id}/toggle`, { method: 'POST' }),
+  deleteOperatorPabiliPayment: (id: string) =>
+    request<void>(`/api/operator/pabili-payments/${id}`, { method: 'DELETE' }),
+  uploadOperatorPabiliPaymentQr: (id: string, file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request<OperatorPabiliPaymentMethodItem>(`/api/operator/pabili-payments/${id}/qr`, {
+      method: 'POST',
+      body: data,
+    })
   },
   operatorMerchants: () => request<{ items: MerchantListItem[] }>('/api/operator/merchants'),
   operatorMerchant: (id: string) => request<MerchantDetailItem>(`/api/operator/merchants/${id}`),

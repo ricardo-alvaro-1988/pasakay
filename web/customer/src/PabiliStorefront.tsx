@@ -128,6 +128,7 @@ function shuffleAds<T>(items: T[]) {
 }
 
 type AdCard = { id: string; title: string; imageUrl: string | null; redirectUrl: string }
+type PayMethodCard = { method: PaymentMethod; label: string; qrImageUrl: string | null; sortOrder: number }
 type SuggestMerchant = { id: string; name: string; address: string; logoUrl: string | null }
 type SuggestProduct = {
   id: string
@@ -171,6 +172,7 @@ export function PabiliStorefront({
     merchantOpen: boolean
   }>>([])
   const [ads, setAds] = useState<AdCard[]>([])
+  const [payMethods, setPayMethods] = useState<PayMethodCard[]>([{ method: 'Cash', label: 'Cash', qrImageUrl: null, sortOrder: 0 }])
   const [suggestMerchants, setSuggestMerchants] = useState<SuggestMerchant[]>([])
   const [suggestProducts, setSuggestProducts] = useState<SuggestProduct[]>([])
   const [suggestOpen, setSuggestOpen] = useState(false)
@@ -377,14 +379,22 @@ export function PabiliStorefront({
   async function loadMerchants(term = search) {
     setError('')
     try {
-      const [rows, popular, exclusive] = await Promise.all([
+      const [rows, popular, exclusive, payments] = await Promise.all([
         api.pabiliMerchants({ lat, lng, q: term }),
         api.pabiliPopularProducts({ lat, lng, q: term }),
         api.pabiliAds({ lat, lng }),
+        api.pabiliPaymentMethods({ lat, lng }),
       ])
       setMerchants(rows)
       setPopularProducts(popular)
       setAds(shuffleAds(exclusive))
+      const nextPay = payments.length
+        ? payments
+        : [{ method: 'Cash' as PaymentMethod, label: 'Cash', qrImageUrl: null, sortOrder: 0 }]
+      setPayMethods(nextPay)
+      if (!nextPay.some((p) => p.method === payment)) {
+        setPayment(nextPay[0].method)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load stores.')
     }
@@ -1019,17 +1029,27 @@ export function PabiliStorefront({
               <section className="pb-info-card">
                 <span className="pb-info-label">Payment</span>
                 <div className="pb-pay-options" role="group" aria-label="Payment method">
-                  {(['Cash', 'GCash', 'Maya'] as PaymentMethod[]).map((method) => (
+                  {payMethods.map((item) => (
                     <button
-                      key={method}
+                      key={item.method}
                       type="button"
-                      className={payment === method ? 'on' : ''}
-                      onClick={() => setPayment(method)}
+                      className={payment === item.method ? 'on' : ''}
+                      onClick={() => setPayment(item.method)}
                     >
-                      {method}
+                      {item.label || item.method}
                     </button>
                   ))}
                 </div>
+                {(() => {
+                  const selected = payMethods.find((p) => p.method === payment)
+                  if (!selected?.qrImageUrl) return null
+                  return (
+                    <div className="pb-pay-qr">
+                      <img src={mediaUrl(selected.qrImageUrl)} alt={`${selected.label} QR`} />
+                      <small className="muted">Scan to pay via {selected.label}</small>
+                    </div>
+                  )
+                })()}
               </section>
               {quote ? (
                 <section className="pb-summary">

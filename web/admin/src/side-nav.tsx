@@ -264,6 +264,7 @@ export const OPERATOR_MENU_GROUPS: SideNavGroup[] = [
       { id: 'pabili-orders', label: 'Order', icon: '▢' },
       { id: 'merchants', label: 'Merchant', icon: '◇' },
       { id: 'pabili-ads', label: 'Exclusive Offer', icon: '★' },
+      { id: 'pabili-payments', label: 'Payment methods', icon: '◎' },
       { id: 'product-categories', label: 'Product Categories', icon: '☰' },
       { id: 'pabili-matrix', label: 'Pabili Matrix', icon: '₱' },
       { id: 'pabili-riders', label: 'Rider', icon: '▣' },
