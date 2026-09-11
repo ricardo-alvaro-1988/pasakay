@@ -127,7 +127,7 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         column: x => x.CategoryId,
                         principalTable: "MerchantProductCategories",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_MerchantProducts_Merchants_MerchantId",
                         column: x => x.MerchantId,

@@ -2402,7 +2402,7 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.HasOne("YaPasakay.Domain.Entities.MerchantProductCategory", "Category")
                         .WithMany("Products")
                         .HasForeignKey("CategoryId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("YaPasakay.Domain.Entities.Merchant", "Merchant")
                         .WithMany("Products")
