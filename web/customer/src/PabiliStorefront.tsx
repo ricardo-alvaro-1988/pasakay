@@ -192,11 +192,14 @@ export function PabiliStorefront({
   const [locationHints, setLocationHints] = useState<Prediction[]>([])
   const [locationHits, setLocationHits] = useState<Array<{ label: string; details: string; lat: number; lng: number }>>([])
   const [pinDraft, setPinDraft] = useState<{ lat: number; lng: number; label: string } | null>(null)
+  const [locationSearching, setLocationSearching] = useState(false)
+  const [locationSearchNote, setLocationSearchNote] = useState('')
   const mapsRef = useRef<Awaited<ReturnType<typeof loadGoogleMaps>> | null>(null)
   const locationMapEl = useRef<HTMLDivElement>(null)
   const locationMapRef = useRef<MapHandle | null>(null)
   const locationMarkerRef = useRef<MarkerHandle | null>(null)
   const locateGen = useRef(0)
+  const locationSearchGen = useRef(0)
   const locationTimer = useRef<number | null>(null)
   const [quote, setQuote] = useState<Quote | null>(null)
   const [order, setOrder] = useState<OrderDetail | null>(null)
@@ -277,6 +280,8 @@ export function PabiliStorefront({
     setLocationQuery('')
     setLocationHints([])
     setLocationHits([])
+    setLocationSearching(false)
+    setLocationSearchNote('')
     setPinDraft(null)
     setError('')
   }
@@ -329,8 +334,11 @@ export function PabiliStorefront({
     setLocationQuery('')
     setLocationHints([])
     setLocationHits([])
+    setLocationSearching(false)
+    setLocationSearchNote('')
     setPinDraft({ lat: gps.lat, lng: gps.lng, label: dropoffLabel })
     setError('')
+    void ensureMaps().catch(() => undefined)
   }
 
   useEffect(() => {
@@ -387,33 +395,45 @@ export function PabiliStorefront({
     if (locationTimer.current != null) window.clearTimeout(locationTimer.current)
     const term = locationQuery.trim()
     if (term.length < 2) {
+      locationSearchGen.current += 1
       setLocationHints([])
       setLocationHits([])
+      setLocationSearching(false)
+      setLocationSearchNote('')
       return
     }
+    const gen = ++locationSearchGen.current
+    setLocationSearching(true)
+    setLocationSearchNote('')
     locationTimer.current = window.setTimeout(() => {
       void (async () => {
         try {
-          const maps = await ensureMaps()
+          const maps = mapsRef.current ?? await ensureMaps()
           const [hints, hits] = await Promise.all([
-            searchPlaces(maps, term, gps),
-            geocodeText(maps, term, gps),
+            searchPlaces(maps, term, { lat: gps.lat, lng: gps.lng }),
+            geocodeText(maps, term, { lat: gps.lat, lng: gps.lng }),
           ])
-          setLocationHints(hints.slice(0, 8))
-          setLocationHits(
-            hits.slice(0, 6).map((h) => ({
-              label: h.label,
-              details: h.details,
-              lat: h.lat,
-              lng: h.lng,
-            })),
-          )
-        } catch {
+          if (gen !== locationSearchGen.current) return
+          const nextHints = hints.slice(0, 8)
+          const nextHits = hits.slice(0, 6).map((h) => ({
+            label: h.label,
+            details: h.details,
+            lat: h.lat,
+            lng: h.lng,
+          }))
+          setLocationHints(nextHints)
+          setLocationHits(nextHits)
+          setLocationSearchNote(nextHints.length || nextHits.length ? '' : 'No matching places. Try another address or tap the map.')
+        } catch (e) {
+          if (gen !== locationSearchGen.current) return
           setLocationHints([])
           setLocationHits([])
+          setLocationSearchNote(e instanceof Error ? e.message : 'Could not search places right now.')
+        } finally {
+          if (gen === locationSearchGen.current) setLocationSearching(false)
         }
       })()
-    }, 250)
+    }, 220)
     return () => {
       if (locationTimer.current != null) window.clearTimeout(locationTimer.current)
     }
@@ -421,40 +441,43 @@ export function PabiliStorefront({
 
   async function chooseLocationPrediction(item: Prediction) {
     try {
-      const maps = await ensureMaps()
+      const maps = mapsRef.current ?? await ensureMaps()
       const place = await placeDetails(maps, item.place_id, locationMapRef.current)
-      await setMapPin({ lat: place.lat, lng: place.lng }, place.address)
       setLocationQuery('')
       setLocationHints([])
       setLocationHits([])
+      setLocationSearchNote('')
+      await setMapPin({ lat: place.lat, lng: place.lng }, place.address)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not set that location.')
     }
   }
 
   async function chooseLocationHit(item: { label: string; details: string; lat: number; lng: number }) {
-    await setMapPin({ lat: item.lat, lng: item.lng }, item.details || item.label)
     setLocationQuery('')
     setLocationHints([])
     setLocationHits([])
+    setLocationSearchNote('')
+    await setMapPin({ lat: item.lat, lng: item.lng }, item.details || item.label)
   }
 
   async function confirmTypedLocation() {
     const term = locationQuery.trim()
     if (!term) return
     try {
-      const maps = await ensureMaps()
-      const hits = await geocodeText(maps, term, gps)
+      const maps = mapsRef.current ?? await ensureMaps()
+      const hits = await geocodeText(maps, term, { lat: gps.lat, lng: gps.lng })
       if (hits[0]) {
-        await setMapPin({ lat: hits[0].lat, lng: hits[0].lng }, hits[0].details || hits[0].label)
         setLocationQuery('')
         setLocationHints([])
         setLocationHits([])
+        setLocationSearchNote('')
+        await setMapPin({ lat: hits[0].lat, lng: hits[0].lng }, hits[0].details || hits[0].label)
         return
       }
-      setError('No matching place. Try another address or tap the map.')
+      setLocationSearchNote('No matching place. Try another address or tap the map.')
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not find that place.')
+      setLocationSearchNote(e instanceof Error ? e.message : 'Could not find that place.')
     }
   }
 
@@ -1339,6 +1362,8 @@ export function PabiliStorefront({
               setLocationQuery('')
               setLocationHints([])
               setLocationHits([])
+              setLocationSearching(false)
+              setLocationSearchNote('')
               setPinDraft(null)
             }}
           >
@@ -1357,49 +1382,57 @@ export function PabiliStorefront({
               }
             }}
           />
+          {(locationSearching || locationSearchNote || locationHits.length > 0 || locationHints.length > 0) ? (
+            <div className="pb-loc-suggest" role="listbox" aria-label="Place suggestions">
+              {locationSearching ? <p className="muted pb-loc-suggest-status">Searching…</p> : null}
+              {!locationSearching && locationSearchNote ? (
+                <p className="muted pb-loc-suggest-status">{locationSearchNote}</p>
+              ) : null}
+              {locationHits.map((item) => (
+                <button
+                  key={`hit-${item.details}-${item.lat}-${item.lng}`}
+                  className="picker-item"
+                  type="button"
+                  onClick={() => void chooseLocationHit(item)}
+                >
+                  <b>{item.label}</b>
+                  <div className="muted">{item.details}</div>
+                </button>
+              ))}
+              {locationHints.map((item) => (
+                <button
+                  key={item.place_id}
+                  className="picker-item"
+                  type="button"
+                  onClick={() => void chooseLocationPrediction(item)}
+                >
+                  <b>{item.structured_formatting?.main_text ?? item.description}</b>
+                  <div className="muted">{item.structured_formatting?.secondary_text}</div>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <button type="button" className="picker-item pb-loc-gps" disabled={locating} onClick={() => void useCurrentLocation()}>
+            <b>{locating ? 'Getting your location…' : 'Use current location'}</b>
+            <div className="muted">{locating ? 'Keep this screen open while GPS locks' : 'GPS delivery pin'}</div>
+          </button>
           <div className="pb-loc-map" ref={locationMapEl} role="application" aria-label="Delivery map" />
           <p className="muted pb-loc-map-hint">Tap the map or drag the pin to set delivery</p>
           {pinDraft ? (
             <div className="pb-loc-pin-card">
-              <div>
-                <span className="muted">Pinned</span>
-                <b>{pinDraft.label}</b>
+              <div className="pb-loc-pin-copy">
+                <span className="muted">Pinned location</span>
+                <b title={pinDraft.label}>{pinDraft.label}</b>
               </div>
               <button
                 type="button"
-                className="primary"
+                className="primary pb-loc-pin-use"
                 onClick={() => void applyLocation({ lat: pinDraft.lat, lng: pinDraft.lng }, pinDraft.label)}
               >
                 Use this pin
               </button>
             </div>
           ) : null}
-          <button type="button" className="picker-item" disabled={locating} onClick={() => void useCurrentLocation()}>
-            <b>{locating ? 'Getting your location…' : 'Use current location'}</b>
-            <div className="muted">{locating ? 'Keep this screen open while GPS locks' : 'GPS delivery pin'}</div>
-          </button>
-          {locationHits.map((item) => (
-            <button
-              key={`${item.details}-${item.lat}`}
-              className="picker-item"
-              type="button"
-              onClick={() => void chooseLocationHit(item)}
-            >
-              <b>{item.label}</b>
-              <div className="muted">{item.details}</div>
-            </button>
-          ))}
-          {locationHints.map((item) => (
-            <button
-              key={item.place_id}
-              className="picker-item"
-              type="button"
-              onClick={() => void chooseLocationPrediction(item)}
-            >
-              <b>{item.structured_formatting?.main_text ?? item.description}</b>
-              <div className="muted">{item.structured_formatting?.secondary_text}</div>
-            </button>
-          ))}
         </div>
       ) : null}
     </div>

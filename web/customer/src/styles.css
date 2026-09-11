@@ -2843,11 +2843,31 @@ button.where-toggle .where { pointer-events: none; }
   to { transform: rotate(360deg); }
 }
 .pb-location-picker {
-  z-index: 50;
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+}
+.pb-loc-suggest {
+  display: grid;
+  gap: 0;
+  max-height: min(36vh, 260px);
+  overflow: auto;
+  margin: 8px 0 4px;
+  padding-right: 2px;
+}
+.pb-loc-suggest .picker-item {
+  margin-top: 6px;
+}
+.pb-loc-suggest-status {
+  margin: 8px 2px 2px;
+  font-size: 12px;
+}
+.pb-loc-gps {
+  margin-top: 8px;
 }
 .pb-loc-map {
   width: 100%;
-  height: min(42vh, 280px);
+  height: min(36vh, 240px);
   margin: 10px 0 6px;
   border-radius: 12px;
   overflow: hidden;
@@ -2859,36 +2879,35 @@ button.where-toggle .where { pointer-events: none; }
   font-size: 12px;
 }
 .pb-loc-pin-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  gap: 10px;
   margin: 0 0 12px;
-  padding: 10px 12px;
+  padding: 12px;
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
   background: color-mix(in srgb, var(--accent) 8%, #fff);
 }
-.pb-loc-pin-card > div {
+.pb-loc-pin-copy {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
-.pb-loc-pin-card span {
+.pb-loc-pin-copy span {
   font-size: 11px;
 }
-.pb-loc-pin-card b {
+.pb-loc-pin-copy b {
   font-size: 13px;
-  line-height: 1.3;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
 }
-.pb-loc-pin-card .primary {
+.pb-loc-pin-card .pb-loc-pin-use,
+.pb-loc-pin-card .primary.pb-loc-pin-use {
+  width: 100%;
   flex-shrink: 0;
   white-space: nowrap;
-  padding: 8px 12px;
+  padding: 11px 14px;
   font-size: 13px;
 }
 .pb-deliver-card .pb-deliver-head {
