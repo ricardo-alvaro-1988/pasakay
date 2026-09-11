@@ -490,6 +490,14 @@ export const api = {
     request<AuthResponse>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
   mapsConfig: () => request<{ googleMapsBrowserKey: string }>('/api/public/maps'),
   desk: () => request<Desk>('/api/customer/desk'),
+  customerServices: (opts?: { lat?: number; lng?: number; barangayId?: string }) => {
+    const params = new URLSearchParams()
+    if (opts?.lat != null) params.set('lat', String(opts.lat))
+    if (opts?.lng != null) params.set('lng', String(opts.lng))
+    if (opts?.barangayId) params.set('barangayId', opts.barangayId)
+    const q = params.toString()
+    return request<{ pabiliEnabled: boolean }>(`/api/customer/services${q ? `?${q}` : ''}`)
+  },
   quote: (body: BookBody) => request<Quote>('/api/customer/quote', { method: 'POST', body: JSON.stringify(body) }),
   availableRiders: (opts: {
     vehicleType: VehicleType

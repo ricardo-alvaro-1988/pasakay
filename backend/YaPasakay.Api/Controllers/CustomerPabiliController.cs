@@ -539,13 +539,13 @@ public class CustomerPabiliController(
             // Fall back: nearest covered operator by merchant proximity is fine for v1 —
             // resolve via any barangay match when GPS-only; prefer operators with merchants near the pin.
             return await db.Operators.AsNoTracking()
-                .Where(x => x.IsActive && x.Merchants.Any(m => m.IsActive))
+                .Where(x => x.IsActive && x.PabiliEnabled && x.Merchants.Any(m => m.IsActive))
                 .OrderBy(x => x.CompanyName)
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
         return await db.Operators
-            .Where(x => x.IsActive && (
+            .Where(x => x.IsActive && x.PabiliEnabled && (
                 x.Areas.Any(a => a.BarangayId == barangay.Id)
                 || x.Areas.Any(a => a.Barangay.MunicipalityId == barangay.MunicipalityId)))
             .OrderBy(x => x.CompanyName)

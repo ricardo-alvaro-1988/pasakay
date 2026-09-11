@@ -202,12 +202,39 @@ function RideApp({
   brandName: string
   brandLogo: string
 }) {
+  const [pabiliEnabled, setPabiliEnabled] = useState(false)
   const logout = () => {
     clearToken()
     onDesk(null)
   }
 
-  if (serviceMode === 'pabili') {
+  useEffect(() => {
+    let dead = false
+    void (async () => {
+      try {
+        const cached = lastKnownGps(300_000)
+        const lat = desk.mapLat ?? cached?.lat
+        const lng = desk.mapLng ?? cached?.lng
+        const res = await api.customerServices({ lat, lng })
+        if (dead) return
+        setPabiliEnabled(!!res.pabiliEnabled)
+        if (!res.pabiliEnabled && serviceMode === 'pabili') {
+          onServiceMode('pasakay')
+        }
+      } catch {
+        if (!dead) {
+          setPabiliEnabled(false)
+          if (serviceMode === 'pabili') onServiceMode('pasakay')
+        }
+      }
+    })()
+    return () => {
+      dead = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [desk.mapLat, desk.mapLng])
+
+  if (serviceMode === 'pabili' && pabiliEnabled) {
     return (
       <div className="app app-pabili">
         <PabiliStorefront
@@ -231,7 +258,10 @@ function RideApp({
         desk={desk}
         tab={tab}
         onTab={onTab}
-        onSwitchToPabili={() => onServiceMode('pabili')}
+        pabiliEnabled={pabiliEnabled}
+        onSwitchToPabili={() => {
+          if (pabiliEnabled) onServiceMode('pabili')
+        }}
         accountPage={accountPage}
         onAccountPage={onAccountPage}
         onDesk={onDesk}
@@ -247,6 +277,7 @@ function Home({
   desk,
   tab,
   onTab,
+  pabiliEnabled,
   onSwitchToPabili,
   accountPage,
   onAccountPage,
@@ -258,6 +289,7 @@ function Home({
   desk: Desk
   tab: Tab
   onTab: (tab: Tab) => void
+  pabiliEnabled: boolean
   onSwitchToPabili: () => void
   accountPage: AccountPage
   onAccountPage: (page: AccountPage) => void
@@ -919,14 +951,16 @@ function Home({
       <div className="hud">
         <div className="topbar">
           <div className="brand-col">
-            <div className="pb-mode pb-mode-sm pasakay-mode">
-              <button type="button" className="pb-mode-btn on" aria-current="page">
-                Pasakay
-              </button>
-              <button type="button" className="pb-mode-btn" onClick={onSwitchToPabili}>
-                Pabili
-              </button>
-            </div>
+            {pabiliEnabled ? (
+              <div className="pb-mode pb-mode-sm pasakay-mode">
+                <button type="button" className="pb-mode-btn on" aria-current="page">
+                  Pasakay
+                </button>
+                <button type="button" className="pb-mode-btn" onClick={onSwitchToPabili}>
+                  Pabili
+                </button>
+              </div>
+            ) : null}
             {installed ? (
               <div className="brand-pill brand-pill-logo" title={brandName}>
                 <img src={brandLogo} alt={brandName} />
@@ -1212,10 +1246,17 @@ function Home({
             <span className="ico"><SosIcon /></span>
             {sosBusy ? '…' : 'SOS'}
           </button>
-          <button type="button" onClick={onSwitchToPabili}>
-            <span className="ico"><PabiliIcon /></span>
-            Pabili
-          </button>
+          {pabiliEnabled ? (
+            <button type="button" onClick={onSwitchToPabili}>
+              <span className="ico"><PabiliIcon /></span>
+              Pabili
+            </button>
+          ) : (
+            <button type="button" onClick={() => setShowQr(true)}>
+              <span className="ico"><ScanIcon /></span>
+              Scan
+            </button>
+          )}
           <button className={tab === 'account' ? 'on' : ''} onClick={() => onTab('account')}>
             <span className="ico"><AccountIcon /></span>
             Account
@@ -1579,6 +1620,15 @@ function PabiliIcon() {
   )
 }
 
+function ScanIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" {...navStroke()} />
+      <path d="M7 12h10" {...navStroke()} />
+    </svg>
+  )
+}
+
 function SosIcon() {
   return (
     <svg width="18" height="16" viewBox="0 0 24 22" aria-hidden="true">
@@ -1592,8 +1642,9 @@ function SosIcon() {
 function AccountIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="8" r="3.2" {...navStroke()} />
-      <path d="M5 19c1.4-3.2 3.8-4.8 7-4.8S17.6 15.8 19 19" {...navStroke()} />
+      <circle cx="12" cy="12" r="9" {...navStroke()} />
+      <circle cx="12" cy="10" r="3" {...navStroke()} />
+      <path d="M7 18.2c1.15-2.1 2.85-3.1 5-3.1s3.85 1 5 3.1" {...navStroke()} />
     </svg>
   )
 }

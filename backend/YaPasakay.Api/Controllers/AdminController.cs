@@ -479,6 +479,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             GovernmentIdType = GovernmentIdCatalog.Normalize(form.GovernmentIdType),
             GovernmentId = form.GovernmentId.Trim(),
             IsActive = true,
+            PabiliEnabled = form.PabiliEnabled ?? false,
             MotorcycleCommissionPercent = motorcycleCommission,
             TricycleCommissionPercent = tricycleCommission,
             PabiliFareSystemCommissionPercent = pabiliFareSystem,
@@ -604,6 +605,10 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         op.TricycleCommissionPercent = tricycleCommission;
         op.PabiliFareSystemCommissionPercent = pabiliFareSystem;
         op.PabiliMarkupSystemCommissionPercent = pabiliMarkupSystem;
+        if (form.PabiliEnabled is bool pabiliEnabled)
+        {
+            op.PabiliEnabled = pabiliEnabled;
+        }
         op.UpdatedAtUtc = DateTime.UtcNow;
 
         var fares = await db.FareMatrices.Where(x => x.OperatorId == op.Id).ToListAsync(cancellationToken);
@@ -705,6 +710,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             UploadUrls.FromPath(op.ProfilePhotoPath),
             UploadUrls.FromPath(op.GovernmentIdPhotoPath),
             op.IsActive,
+            op.PabiliEnabled,
             op.MotorcycleCommissionPercent,
             op.TricycleCommissionPercent,
             op.PabiliFareSystemCommissionPercent,

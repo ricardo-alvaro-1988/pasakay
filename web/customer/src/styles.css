@@ -3227,7 +3227,7 @@ button.where-toggle .where { pointer-events: none; }
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
 }
 .pb-tile-body {
@@ -3613,6 +3613,14 @@ button.where-toggle .where { pointer-events: none; }
   color: #6b7280;
 }
 .pb-nav button span { font-size: 16px; line-height: 1; }
+.pb-nav button .pb-nav-ico {
+  display: grid;
+  place-items: center;
+  line-height: 0;
+}
+.pb-nav button .pb-nav-ico svg {
+  display: block;
+}
 .pb-nav button.on {
   background: var(--accent);
   color: #fff;

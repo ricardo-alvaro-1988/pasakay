@@ -36,6 +36,46 @@ public class CustomerBookingsController(
         return Ok(await CustomerDeskBuilder.BuildAsync(db, customer, cancellationToken));
     }
 
+    [HttpGet("services")]
+    public async Task<ActionResult<CustomerServicesResponse>> Services(
+        [FromQuery] double? lat,
+        [FromQuery] double? lng,
+        [FromQuery] Guid? barangayId,
+        CancellationToken cancellationToken)
+    {
+        var (customer, status, message) = await CustomerContext.RequireAsync(db, User, cancellationToken);
+        if (customer is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        Operator? op = null;
+        Barangay? barangay = null;
+        if (barangayId is Guid id)
+        {
+            barangay = await db.Barangays.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        }
+
+        if (barangay is not null)
+        {
+            op = await db.Operators.AsNoTracking()
+                .Where(x => x.IsActive && (
+                    x.Areas.Any(a => a.BarangayId == barangay.Id)
+                    || x.Areas.Any(a => a.Barangay.MunicipalityId == barangay.MunicipalityId)))
+                .OrderBy(x => x.CompanyName)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        else if (lat is double && lng is double)
+        {
+            op = await db.Operators.AsNoTracking()
+                .Where(x => x.IsActive && x.Merchants.Any(m => m.IsActive))
+                .OrderBy(x => x.CompanyName)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        return Ok(new CustomerServicesResponse(op?.PabiliEnabled == true));
+    }
+
     [HttpGet("places")]
     public async Task<ActionResult<IReadOnlyList<CustomerPlaceItem>>> Places(CancellationToken cancellationToken)
     {

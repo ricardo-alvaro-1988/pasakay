@@ -206,6 +206,7 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             UploadUrls.FromPath(loaded.ProfilePhotoPath),
             UploadUrls.FromPath(loaded.GovernmentIdPhotoPath),
             loaded.IsActive,
+            loaded.PabiliEnabled,
             loaded.MotorcycleCommissionPercent,
             loaded.TricycleCommissionPercent,
             loaded.PabiliFareSystemCommissionPercent,

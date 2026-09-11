@@ -1093,7 +1093,7 @@ export function PabiliStorefront({
             <span>☰</span>Orders
           </button>
           <button type="button" className={cartNavOn ? 'on' : ''} onClick={() => setView('cart')}>
-            <span>🛒</span>Cart{cartCount ? ` (${cartCount})` : ''}
+            <span className="pb-nav-ico"><CartNavIcon /></span>Cart{cartCount ? ` (${cartCount})` : ''}
           </button>
           <button
             type="button"
@@ -1103,7 +1103,7 @@ export function PabiliStorefront({
               setView('account')
             }}
           >
-            <span>☺</span>Account
+            <span className="pb-nav-ico"><AccountNavIcon /></span>Account
           </button>
         </nav>
       ) : null}
@@ -1217,6 +1217,36 @@ function LocatePinIcon({ spinning }: { spinning?: boolean }) {
       <circle cx="12" cy="12" r="3" fill="var(--accent)" />
       <path d="M12 3v3M12 18v3M3 12h3M18 12h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
       <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  )
+}
+
+function navIcoStroke() {
+  return {
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  }
+}
+
+function CartNavIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 5h1.7l1.1 1.1 1.7 9.3a1.5 1.5 0 0 0 1.5 1.2h8.5a1.5 1.5 0 0 0 1.45-1.15L21 9H8.3" {...navIcoStroke()} />
+      <circle cx="10.2" cy="19.4" r="1.35" fill="currentColor" />
+      <circle cx="17.3" cy="19.4" r="1.35" fill="currentColor" />
+    </svg>
+  )
+}
+
+function AccountNavIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" {...navIcoStroke()} />
+      <circle cx="12" cy="10" r="3" {...navIcoStroke()} />
+      <path d="M7 18.2c1.15-2.1 2.85-3.1 5-3.1s3.85 1 5 3.1" {...navIcoStroke()} />
     </svg>
   )
 }

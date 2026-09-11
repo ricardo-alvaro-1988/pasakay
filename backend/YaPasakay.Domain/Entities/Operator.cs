@@ -18,6 +18,8 @@ public class Operator : BaseEntity
     public string? ProfilePhotoPath { get; set; }
     public string? GovernmentIdPhotoPath { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>When false, customers in this operator area cannot use Pabili (toggle/nav hidden).</summary>
+    public bool PabiliEnabled { get; set; }
     public decimal MotorcycleCommissionPercent { get; set; } = 10;
     public decimal TricycleCommissionPercent { get; set; } = 5;
     /// <summary>Admin-set system share for Pabili fare commission (read-only for operators).</summary>

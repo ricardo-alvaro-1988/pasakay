@@ -670,6 +670,13 @@ export type OperatorDetail = OperatorListItem & {
   riders: RiderListItem[]
   areas: OperatorArea[]
   address: OperatorAddress
+  pabiliFareSystemCommissionPercent?: number
+  pabiliMarkupSystemCommissionPercent?: number
+  bookingDispatchMode?: BookingDispatchMode
+  broadcastRadiusKm?: number
+  liveBookingExpiryMinutes?: number
+  scheduledBookingGraceMinutes?: number
+  pabiliEnabled?: boolean
 }
 
 export type CustomerListItem = {

@@ -81,6 +81,7 @@ public record OperatorDetailResponse(
     string? ProfilePhotoUrl,
     string? GovernmentIdPhotoUrl,
     bool IsActive,
+    bool PabiliEnabled,
     decimal MotorcycleCommissionPercent,
     decimal TricycleCommissionPercent,
     decimal PabiliFareSystemCommissionPercent,
@@ -96,6 +97,8 @@ public record OperatorDetailResponse(
     OperatorAddressItem Address,
     IReadOnlyList<OperatorAreaItem> Areas,
     IReadOnlyList<RiderListItem> Riders);
+
+public record CustomerServicesResponse(bool PabiliEnabled);
 
 public record SaveBookingDispatchModeRequest(
     BookingDispatchMode BookingDispatchMode,

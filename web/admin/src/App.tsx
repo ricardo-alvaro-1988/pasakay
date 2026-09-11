@@ -3287,6 +3287,7 @@ function OperatorFormPage({
     tricycleCommissionPercent: '5',
     pabiliFareSystemCommissionPercent: '10',
     pabiliMarkupSystemCommissionPercent: '10',
+    pabiliEnabled: false,
   })
   const [address, setAddress] = useState<AddressValue>({
     province: null,
@@ -3319,6 +3320,7 @@ function OperatorFormPage({
         tricycleCommissionPercent: String(op.tricycleCommissionPercent ?? 5),
         pabiliFareSystemCommissionPercent: String(op.pabiliFareSystemCommissionPercent ?? 10),
         pabiliMarkupSystemCommissionPercent: String(op.pabiliMarkupSystemCommissionPercent ?? 10),
+        pabiliEnabled: !!op.pabiliEnabled,
       })
       setAddress({
         province: op.address?.provinceId ? { id: op.address.provinceId, name: op.address.province } : null,
@@ -3392,6 +3394,7 @@ function OperatorFormPage({
       data.append('tricycleCommissionPercent', String(tricycleCommission))
       data.append('pabiliFareSystemCommissionPercent', String(pabiliFareSystem))
       data.append('pabiliMarkupSystemCommissionPercent', String(pabiliMarkupSystem))
+      data.append('pabiliEnabled', form.pabiliEnabled ? 'true' : 'false')
       for (const area of areas) {
         data.append('barangayIds', area.barangayId)
       }
@@ -3536,6 +3539,16 @@ function OperatorFormPage({
           </div>
           <p className="form-hint" style={{ marginTop: 14 }}>Pabili system shares are read-only for operators in Pabili Matrix.</p>
           <div className="form-grid">
+            <label className="field">
+              <span>Activate Pabili</span>
+              <select
+                value={form.pabiliEnabled ? 'yes' : 'no'}
+                onChange={(e) => setForm({ ...form, pabiliEnabled: e.target.value === 'yes' })}
+              >
+                <option value="no">Off — customers see Scan instead</option>
+                <option value="yes">On — Pasakay / Pabili toggle available</option>
+              </select>
+            </label>
             <label className="field">
               <span>Pabili fare system (%)</span>
               <input
