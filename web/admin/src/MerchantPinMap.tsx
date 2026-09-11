@@ -163,10 +163,7 @@ export function MerchantPinMap({ value, onChange, height = 280 }: Props) {
         style={{ width: '100%', marginBottom: 8 }}
       />
       {error ? <p className="error">{error}</p> : null}
-      <div ref={host} style={{ height, width: '100%', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border, #d9dde5)' }} />
-      <p className="muted" style={{ margin: '8px 0 0', fontSize: 13 }}>
-        Click the map or drag the pin. Address updates from Google.
-      </p>
+      <div ref={host} style={{ height, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }} />
     </div>
   )
 }

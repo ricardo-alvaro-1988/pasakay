@@ -2192,6 +2192,93 @@ tr.clickable:hover { background: var(--bg-soft); }
   margin-top: 16px;
 }
 
+.merchant-modal {
+  width: min(760px, 100%);
+  max-height: min(92vh, 900px);
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+.merchant-modal .modal-head {
+  padding: 18px 22px 12px;
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--line);
+}
+.merchant-modal-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px 22px;
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.merchant-modal .form-section {
+  margin: 0;
+}
+.merchant-modal .form-grid {
+  margin-bottom: 0;
+}
+.merchant-modal .check-field {
+  display: flex;
+  align-items: end;
+  min-height: 62px;
+}
+.merchant-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+}
+.merchant-hours {
+  display: grid;
+  gap: 8px;
+}
+.merchant-hour-row {
+  display: grid;
+  grid-template-columns: 104px 88px minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-elev);
+}
+.merchant-hour-row.is-closed {
+  opacity: 0.72;
+}
+.merchant-hour-day {
+  font-size: 13px;
+  font-weight: 700;
+}
+.merchant-hour-closed {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+.merchant-hour-time {
+  width: 100%;
+}
+.merchant-hour-sep {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+@media (max-width: 720px) {
+  .merchant-hour-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .merchant-hour-day {
+    grid-column: 1 / -1;
+  }
+  .merchant-hour-sep {
+    display: none;
+  }
+}
+
 .brand-preview {
   border: 1px solid var(--line);
   border-radius: 16px;

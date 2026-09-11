@@ -265,33 +265,67 @@ function MerchantListView({
       {open ? (
         <div className="modal-backdrop" role="presentation" onClick={() => setOpen(false)}>
           <div
-            className="modal-panel"
+            className="modal-panel merchant-modal"
             role="dialog"
             aria-modal="true"
-            style={{ maxWidth: 720, maxHeight: '90vh', overflow: 'auto' }}
+            aria-labelledby="merchant-modal-title"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="modal-head">
               <div>
-                <h2>{editing ? 'Edit merchant' : 'Add merchant'}</h2>
-                <p className="muted" style={{ margin: '6px 0 0' }}>Pin the store location and set weekly hours.</p>
+                <h2 id="merchant-modal-title">{editing ? 'Edit merchant' : 'Add merchant'}</h2>
+                <p className="muted" style={{ margin: '6px 0 0' }}>
+                  Store profile, map pin, access, and weekly hours.
+                </p>
               </div>
               <button className="btn tiny" type="button" onClick={() => setOpen(false)}>Close</button>
             </div>
-            <div className="form-grid">
-              <label className="field">
-                <span>Business name</span>
-                <input value={form.businessName} onChange={(e) => setForm({ ...form, businessName: e.target.value })} />
-              </label>
-              <label className="field">
-                <span>Contact person</span>
-                <input value={form.contactPerson} onChange={(e) => setForm({ ...form, contactPerson: e.target.value })} />
-              </label>
-              <label className="field" style={{ gridColumn: '1 / -1' }}>
-                <span>Pinned address</span>
-                <input value={form.pinnedAddress} onChange={(e) => setForm({ ...form, pinnedAddress: e.target.value })} />
-              </label>
-              <div style={{ gridColumn: '1 / -1' }}>
+
+            <div className="merchant-modal-body">
+              <section className="form-section">
+                <h3>Store</h3>
+                <p className="form-hint">Basic identity shown on the storefront later.</p>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Business name</span>
+                    <input
+                      value={form.businessName}
+                      onChange={(e) => setForm({ ...form, businessName: e.target.value })}
+                      placeholder="e.g. Aling Nena’s Carinderia"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Contact person</span>
+                    <input
+                      value={form.contactPerson}
+                      onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
+                      placeholder="Owner or manager name"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Sort order</span>
+                    <input
+                      type="number"
+                      value={form.sortOrder}
+                      onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) || 0 })}
+                    />
+                  </label>
+                  <label className="field check-field">
+                    <span className="check">
+                      <input
+                        type="checkbox"
+                        checked={form.isActive}
+                        onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                      />
+                      <span>Active store</span>
+                    </span>
+                  </label>
+                </div>
+              </section>
+
+              <section className="form-section">
+                <h3>Location</h3>
+                <p className="form-hint">Search or click the map to drop the store pin. Address fills in from Google.</p>
                 <MerchantPinMap
                   value={{ lat: form.latitude, lng: form.longitude, address: form.pinnedAddress }}
                   onChange={(pin) =>
@@ -303,122 +337,129 @@ function MerchantListView({
                     })
                   }
                 />
-              </div>
-              <label className="field" style={{ gridColumn: '1 / -1' }}>
-                <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <label className="field" style={{ marginTop: 12 }}>
+                  <span>Pinned address</span>
+                  <input
+                    value={form.pinnedAddress}
+                    onChange={(e) => setForm({ ...form, pinnedAddress: e.target.value })}
+                    placeholder="Updates when you move the pin"
+                  />
+                </label>
+              </section>
+
+              <section className="form-section">
+                <h3>Access</h3>
+                <label className="check" style={{ marginBottom: 10 }}>
                   <input
                     type="checkbox"
                     checked={form.managedByMerchant}
                     onChange={(e) => setForm({ ...form, managedByMerchant: e.target.checked })}
                   />
-                  Manage by merchant
-                </span>
-                <span className="muted" style={{ fontSize: 12 }}>
-                  When checked, create a merchant login (mobile, email, password). When unchecked, Operator manages the store.
-                </span>
-              </label>
-              {form.managedByMerchant ? (
-                <>
-                  <label className="field">
-                    <span>Mobile</span>
-                    <input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
-                  </label>
-                  <label className="field">
-                    <span>Email</span>
-                    <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-                  </label>
-                  <label className="field" style={{ gridColumn: '1 / -1' }}>
-                    <span>Password {editing ? '(leave blank to keep)' : ''}</span>
-                    <input type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-                  </label>
-                </>
-              ) : null}
-              <label className="field">
-                <span>Sort order</span>
-                <input
-                  type="number"
-                  value={form.sortOrder}
-                  onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) || 0 })}
-                />
-              </label>
-              <label className="field">
-                <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
-                  Active
-                </span>
-              </label>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <h3 style={{ margin: '8px 0' }}>Operating hours</h3>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Day</th>
-                        <th>Closed</th>
-                        <th>Open</th>
-                        <th>Close</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {form.operatingHours.map((h) => (
-                        <tr key={h.dayOfWeek}>
-                          <td>{DAY_LABELS[h.dayOfWeek]}</td>
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={h.isClosed}
-                              onChange={(e) => {
-                                const next = form.operatingHours.map((x) =>
-                                  x.dayOfWeek === h.dayOfWeek
-                                    ? {
-                                        ...x,
-                                        isClosed: e.target.checked,
-                                        openTime: e.target.checked ? null : x.openTime || '08:00',
-                                        closeTime: e.target.checked ? null : x.closeTime || '20:00',
-                                      }
-                                    : x,
-                                )
-                                setForm({ ...form, operatingHours: next })
-                              }}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="time"
-                              disabled={h.isClosed}
-                              value={h.openTime ?? ''}
-                              onChange={(e) => {
-                                const next = form.operatingHours.map((x) =>
-                                  x.dayOfWeek === h.dayOfWeek ? { ...x, openTime: e.target.value || null } : x,
-                                )
-                                setForm({ ...form, operatingHours: next })
-                              }}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="time"
-                              disabled={h.isClosed}
-                              value={h.closeTime ?? ''}
-                              onChange={(e) => {
-                                const next = form.operatingHours.map((x) =>
-                                  x.dayOfWeek === h.dayOfWeek ? { ...x, closeTime: e.target.value || null } : x,
-                                )
-                                setForm({ ...form, operatingHours: next })
-                              }}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <span>
+                    Manage by merchant
+                    <span className="form-hint" style={{ display: 'block', margin: '4px 0 0', fontWeight: 500 }}>
+                      On: merchant gets a login. Off: Operator manages this store.
+                    </span>
+                  </span>
+                </label>
+                {form.managedByMerchant ? (
+                  <div className="form-grid">
+                    <label className="field">
+                      <span>Mobile</span>
+                      <input
+                        value={form.mobile}
+                        onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+                        placeholder="09xxxxxxxxx"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Email</span>
+                      <input
+                        type="email"
+                        value={form.email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                        placeholder="store@email.com"
+                      />
+                    </label>
+                    <label className="field" style={{ gridColumn: '1 / -1' }}>
+                      <span>Password {editing ? '(leave blank to keep current)' : ''}</span>
+                      <input
+                        type="password"
+                        value={form.password}
+                        onChange={(e) => setForm({ ...form, password: e.target.value })}
+                        placeholder={editing ? '••••••••' : 'At least 6 characters'}
+                        autoComplete="new-password"
+                      />
+                    </label>
+                  </div>
+                ) : (
+                  <p className="form-hint" style={{ margin: 0 }}>No merchant login will be created.</p>
+                )}
+              </section>
+
+              <section className="form-section">
+                <h3>Operating hours</h3>
+                <p className="form-hint">Philippine local time. Closed days skip open/close.</p>
+                <div className="merchant-hours">
+                  {form.operatingHours.map((h) => (
+                    <div key={h.dayOfWeek} className={`merchant-hour-row${h.isClosed ? ' is-closed' : ''}`}>
+                      <div className="merchant-hour-day">{DAY_LABELS[h.dayOfWeek]}</div>
+                      <label className="check merchant-hour-closed">
+                        <input
+                          type="checkbox"
+                          checked={h.isClosed}
+                          onChange={(e) => {
+                            const next = form.operatingHours.map((x) =>
+                              x.dayOfWeek === h.dayOfWeek
+                                ? {
+                                    ...x,
+                                    isClosed: e.target.checked,
+                                    openTime: e.target.checked ? null : x.openTime || '08:00',
+                                    closeTime: e.target.checked ? null : x.closeTime || '20:00',
+                                  }
+                                : x,
+                            )
+                            setForm({ ...form, operatingHours: next })
+                          }}
+                        />
+                        <span>Closed</span>
+                      </label>
+                      <input
+                        type="time"
+                        className="merchant-hour-time"
+                        disabled={h.isClosed}
+                        value={h.openTime ?? ''}
+                        onChange={(e) => {
+                          const next = form.operatingHours.map((x) =>
+                            x.dayOfWeek === h.dayOfWeek ? { ...x, openTime: e.target.value || null } : x,
+                          )
+                          setForm({ ...form, operatingHours: next })
+                        }}
+                      />
+                      <span className="merchant-hour-sep">to</span>
+                      <input
+                        type="time"
+                        className="merchant-hour-time"
+                        disabled={h.isClosed}
+                        value={h.closeTime ?? ''}
+                        onChange={(e) => {
+                          const next = form.operatingHours.map((x) =>
+                            x.dayOfWeek === h.dayOfWeek ? { ...x, closeTime: e.target.value || null } : x,
+                          )
+                          setForm({ ...form, operatingHours: next })
+                        }}
+                      />
+                    </div>
+                  ))}
                 </div>
-              </div>
+              </section>
             </div>
+
             {formError ? <p className="error">{formError}</p> : null}
-            <div className="modal-actions" style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <div className="merchant-modal-footer">
+              <button className="btn tiny" type="button" onClick={() => setOpen(false)}>Cancel</button>
               <button className="btn" type="button" disabled={busy} onClick={() => void save()}>
-                {busy ? 'Saving…' : 'Save'}
+                {busy ? 'Saving…' : editing ? 'Save changes' : 'Create merchant'}
               </button>
             </div>
           </div>
