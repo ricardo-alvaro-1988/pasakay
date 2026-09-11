@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, mediaUrl, Place, PaymentMethod, Desk, PabiliOrderDetail } from './api'
+import { api, mediaUrl, PaymentMethod, Desk, PabiliOrderDetail } from './api'
 import { AccountHub, AccountPage } from './account-screens'
-import { drawDrivingRoute, loadGoogleMaps, MapHandle, DirectionsRendererHandle, MarkerHandle } from './maps'
+import { drawDrivingRoute, loadGoogleMaps, MapHandle, DirectionsRendererHandle, MarkerHandle, reverseGeocode } from './maps'
+import { lastKnownGps, readGps } from './gps'
 
 type View = 'home' | 'store' | 'cart' | 'checkout' | 'track' | 'orders' | 'account'
 
@@ -75,22 +76,21 @@ function lineTotal(line: CartLine) {
 }
 
 const CATEGORY_ICONS = ['🍳', '🦐', '🍔', '🍰', '🧁', '🍜', '🥗', '🥤']
+const FALLBACK_LAT = 14.5995
+const FALLBACK_LNG = 120.9842
 
 export function PabiliStorefront({
-  brandName,
-  brandLogo,
   desk,
-  places,
   mapLat,
   mapLng,
   onSwitchToPasakay,
   onDesk,
   onLogout,
 }: {
-  brandName: string
-  brandLogo: string
+  brandName?: string
+  brandLogo?: string
   desk: Desk
-  places: Place[]
+  places?: unknown
   mapLat: number | null
   mapLng: number | null
   onSwitchToPasakay: () => void
@@ -103,7 +103,13 @@ export function PabiliStorefront({
   const [merchants, setMerchants] = useState<MerchantCard[]>([])
   const [store, setStore] = useState<Store | null>(null)
   const [cart, setCart] = useState<CartLine[]>([])
-  const [dropoff, setDropoff] = useState<Place | null>(places[0] ?? null)
+  const [gps, setGps] = useState<{ lat: number; lng: number }>(() => {
+    const cached = lastKnownGps()
+    if (cached) return { lat: cached.lat, lng: cached.lng }
+    if (mapLat != null && mapLng != null) return { lat: mapLat, lng: mapLng }
+    return { lat: FALLBACK_LAT, lng: FALLBACK_LNG }
+  })
+  const [dropoffLabel, setDropoffLabel] = useState('Current location')
   const [quote, setQuote] = useState<Quote | null>(null)
   const [order, setOrder] = useState<OrderDetail | null>(null)
   const [orders, setOrders] = useState<OrderDetail[]>([])
@@ -115,27 +121,41 @@ export function PabiliStorefront({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const lat = dropoff?.lat ?? mapLat ?? 14.5995
-  const lng = dropoff?.lng ?? mapLng ?? 120.9842
-  const barangayId = dropoff?.barangayId
+  const lat = gps.lat
+  const lng = gps.lng
   const cartCount = cart.reduce((s, x) => s + x.quantity, 0)
   const cartGoods = useMemo(() => cart.reduce((s, x) => s + lineTotal(x), 0), [cart])
-
-  const categoryChips = useMemo(() => {
-    const names = new Map<string, string>()
-    for (const m of merchants) {
-      // placeholder chips until store open; filled from store when browsing
-      names.set(m.id, m.name)
-    }
-    return Array.from(names.entries()).slice(0, 0)
-  }, [merchants])
-
   const storeCategories = store?.categories ?? []
+
+  useEffect(() => {
+    let dead = false
+    void (async () => {
+      try {
+        const pos = await readGps({ waitMs: 12_000, minSamples: 1 })
+        if (dead) return
+        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        setGps(next)
+        try {
+          const { googleMapsBrowserKey } = await api.mapsConfig()
+          const maps = await loadGoogleMaps(googleMapsBrowserKey)
+          const label = await reverseGeocode(maps, next.lat, next.lng)
+          if (!dead) setDropoffLabel(label)
+        } catch {
+          if (!dead) setDropoffLabel('Current location')
+        }
+      } catch {
+        /* keep last known / fallback */
+      }
+    })()
+    return () => {
+      dead = true
+    }
+  }, [])
 
   async function loadMerchants(term = search) {
     setError('')
     try {
-      const rows = await api.pabiliMerchants({ lat, lng, barangayId, q: term })
+      const rows = await api.pabiliMerchants({ lat, lng, q: term })
       setMerchants(rows)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load stores.')
@@ -145,12 +165,7 @@ export function PabiliStorefront({
   useEffect(() => {
     void loadMerchants('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dropoff?.barangayId, lat, lng])
-
-  useEffect(() => {
-    if (!places.length || dropoff) return
-    setDropoff(places[0])
-  }, [places, dropoff])
+  }, [lat, lng])
 
   async function openStore(id: string) {
     setBusy(true)
@@ -228,7 +243,7 @@ export function PabiliStorefront({
   }
 
   async function refreshQuote() {
-    if (!store || !cart.length || !dropoff) {
+    if (!store || !cart.length) {
       setQuote(null)
       return
     }
@@ -237,9 +252,8 @@ export function PabiliStorefront({
     try {
       const row = await api.pabiliQuote({
         merchantId: store.id,
-        dropoffLat: dropoff.lat,
-        dropoffLng: dropoff.lng,
-        dropoffBarangayId: dropoff.barangayId,
+        dropoffLat: lat,
+        dropoffLng: lng,
         items: cart.map((c) => ({
           productId: c.productId,
           quantity: c.quantity,
@@ -258,19 +272,18 @@ export function PabiliStorefront({
   useEffect(() => {
     if (view === 'checkout') void refreshQuote()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, dropoff?.barangayId, cart])
+  }, [view, lat, lng, cart])
 
   async function placeOrder() {
-    if (!store || !dropoff || !cart.length) return
+    if (!store || !cart.length) return
     setBusy(true)
     setError('')
     try {
       const row = await api.pabiliPlace({
         merchantId: store.id,
-        dropoffAddress: dropoff.details || dropoff.label,
-        dropoffLat: dropoff.lat,
-        dropoffLng: dropoff.lng,
-        dropoffBarangayId: dropoff.barangayId,
+        dropoffAddress: dropoffLabel || 'Current location',
+        dropoffLat: lat,
+        dropoffLng: lng,
         paymentMethod: payment,
         items: cart.map((c) => ({
           productId: c.productId,
@@ -349,7 +362,7 @@ export function PabiliStorefront({
 
   return (
     <div className="pb-shell">
-      <div className="pb-mode">
+      <div className="pb-mode pb-mode-sm">
         <button type="button" className="pb-mode-btn" onClick={onSwitchToPasakay}>
           Pasakay
         </button>
@@ -357,59 +370,22 @@ export function PabiliStorefront({
           Pabili
         </button>
       </div>
-      <p className="pb-brand-hint">{brandName}</p>
 
-      {(view === 'home' || view === 'store' || view === 'cart' || view === 'checkout') && (
-        <header className="pb-hero">
-          <div className="pb-hero-row">
-            <label className="pb-loc">
-              <span className="pb-loc-ico" aria-hidden>📍</span>
-              <select
-                value={dropoff?.barangayId ?? ''}
-                onChange={(e) => {
-                  const next = places.find((p) => p.barangayId === e.target.value) ?? null
-                  setDropoff(next)
-                }}
-              >
-                {places.length === 0 ? <option value="">Set a saved place</option> : null}
-                {places.map((p) => (
-                  <option key={p.barangayId} value={p.barangayId}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="button" className="pb-bag" onClick={() => setView('cart')} aria-label="Cart">
-              🛒
-              {cartCount > 0 ? <span className="pb-bag-dot">{cartCount}</span> : null}
-            </button>
-            <button
-              type="button"
-              className="pb-avatar"
-              onClick={() => {
-                setAccountPage('menu')
-                setView('account')
+      {view === 'home' ? (
+        <header className="pb-hero pb-hero-slim">
+          <div className="pb-search-wrap">
+            <input
+              className="pb-search"
+              placeholder="Search food, groceries, drinks…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void loadMerchants(search)
               }}
-              aria-label="Account"
-            >
-              <img src={brandLogo} alt="" />
-            </button>
+            />
           </div>
-          {view === 'home' ? (
-            <div className="pb-search-wrap">
-              <input
-                className="pb-search"
-                placeholder="Search food, groceries, drinks…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void loadMerchants(search)
-                }}
-              />
-            </div>
-          ) : null}
         </header>
-      )}
+      ) : null}
 
       {error ? <p className="error pb-error">{error}</p> : null}
 
@@ -430,7 +406,6 @@ export function PabiliStorefront({
                 <small>{label}</small>
               </button>
             ))}
-            {categoryChips.length ? null : null}
           </div>
 
           <section className="pb-section">
@@ -569,6 +544,7 @@ export function PabiliStorefront({
 
           {view === 'checkout' ? (
             <>
+              <p className="pb-deliver-to muted">Deliver to · {dropoffLabel}</p>
               <label className="pb-field">
                 Payment
                 <select value={payment} onChange={(e) => setPayment(e.target.value as PaymentMethod)}>
@@ -590,9 +566,9 @@ export function PabiliStorefront({
                   <div className="total"><span>Total</span><b>{peso(quote.customerTotal)}</b></div>
                 </div>
               ) : (
-                <p className="muted">{busy ? 'Quoting…' : 'Add a delivery place to see fees.'}</p>
+                <p className="muted">{busy ? 'Quoting…' : 'Getting delivery quote…'}</p>
               )}
-              <button type="button" className="primary pb-primary" disabled={busy || !quote || !dropoff} onClick={() => void placeOrder()}>
+              <button type="button" className="primary pb-primary" disabled={busy || !quote} onClick={() => void placeOrder()}>
                 Place order
               </button>
             </>
