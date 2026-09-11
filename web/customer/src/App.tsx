@@ -55,7 +55,8 @@ import { ShareTripButton } from './share-trip-button'
 import { lastKnownGps, readBootGps, readPickupGps, readGps, watchTripGps } from './gps'
 import { applyBrand, DEFAULT_BRAND_NAME, type BrandingConfig } from './brand-themes'
 
-type Tab = 'home' | 'booking' | 'pabili' | 'account'
+type Tab = 'home' | 'booking' | 'account'
+type ServiceMode = 'pasakay' | 'pabili'
 type SearchTarget = 'pickup' | 'dropoff' | null
 
 function addressLabel(details: string) {
@@ -66,6 +67,13 @@ export default function App() {
   const [desk, setDesk] = useState<Desk | null>(null)
   const [boot, setBoot] = useState(true)
   const [tab, setTab] = useState<Tab>('home')
+  const [serviceMode, setServiceMode] = useState<ServiceMode>(() => {
+    try {
+      return sessionStorage.getItem('yapasakay-service-mode') === 'pabili' ? 'pabili' : 'pasakay'
+    } catch {
+      return 'pasakay'
+    }
+  })
   const [accountPage, setAccountPage] = useState<AccountPage>('menu')
   const [branding, setBranding] = useState<BrandingConfig | null>(null)
 
@@ -152,6 +160,16 @@ export default function App() {
         setTab(next)
         if (next === 'account') setAccountPage('menu')
       }}
+      serviceMode={serviceMode}
+      onServiceMode={(mode) => {
+        setServiceMode(mode)
+        try {
+          sessionStorage.setItem('yapasakay-service-mode', mode)
+        } catch {
+          /* ignore */
+        }
+        if (mode === 'pasakay') setTab('home')
+      }}
       accountPage={accountPage}
       onAccountPage={setAccountPage}
       onDesk={setDesk}
@@ -165,6 +183,8 @@ function RideApp({
   desk,
   tab,
   onTab,
+  serviceMode,
+  onServiceMode,
   accountPage,
   onAccountPage,
   onDesk,
@@ -174,27 +194,50 @@ function RideApp({
   desk: Desk
   tab: Tab
   onTab: (tab: Tab) => void
+  serviceMode: ServiceMode
+  onServiceMode: (mode: ServiceMode) => void
   accountPage: AccountPage
   onAccountPage: (page: AccountPage) => void
   onDesk: (desk: Desk | null) => void
   brandName: string
   brandLogo: string
 }) {
+  const logout = () => {
+    clearToken()
+    onDesk(null)
+  }
+
+  if (serviceMode === 'pabili') {
+    return (
+      <div className="app app-pabili">
+        <PabiliStorefront
+          brandName={brandName}
+          brandLogo={brandLogo}
+          desk={desk}
+          places={desk.places}
+          mapLat={desk.mapLat}
+          mapLng={desk.mapLng}
+          onSwitchToPasakay={() => onServiceMode('pasakay')}
+          onDesk={(next) => onDesk(next)}
+          onLogout={logout}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="app">
       <Home
         desk={desk}
         tab={tab}
         onTab={onTab}
+        onSwitchToPabili={() => onServiceMode('pabili')}
         accountPage={accountPage}
         onAccountPage={onAccountPage}
         onDesk={onDesk}
         brandName={brandName}
         brandLogo={brandLogo}
-        onLogout={() => {
-          clearToken()
-          onDesk(null)
-        }}
+        onLogout={logout}
       />
     </div>
   )
@@ -204,6 +247,7 @@ function Home({
   desk,
   tab,
   onTab,
+  onSwitchToPabili,
   accountPage,
   onAccountPage,
   onDesk,
@@ -214,6 +258,7 @@ function Home({
   desk: Desk
   tab: Tab
   onTab: (tab: Tab) => void
+  onSwitchToPabili: () => void
   accountPage: AccountPage
   onAccountPage: (page: AccountPage) => void
   onDesk: (desk: Desk) => void
@@ -873,6 +918,14 @@ function Home({
       <div className="hud">
         <div className="topbar">
           <div className="brand-col">
+            <div className="pb-mode pasakay-mode">
+              <button type="button" className="pb-mode-btn on" aria-current="page">
+                Pasakay
+              </button>
+              <button type="button" className="pb-mode-btn" onClick={onSwitchToPabili}>
+                Pabili
+              </button>
+            </div>
             {installed ? (
               <div className="brand-pill">
                 <img src={brandLogo} alt="" />
@@ -1115,16 +1168,6 @@ function Home({
             <BookingScreen desk={desk} onDesk={onDesk} />
           </section>
         )}
-        {tab === 'pabili' && (
-          <section className="panel page-panel pabili-panel">
-            <PabiliStorefront
-              brandName={brandName}
-              places={desk.places}
-              mapLat={desk.mapLat}
-              mapLng={desk.mapLng}
-            />
-          </section>
-        )}
         {tab === 'account' && (
           <section className="panel page-panel">
             <AccountHub desk={desk} page={accountPage} onPage={onAccountPage} onDesk={onDesk} onLogout={onLogout} />
@@ -1149,7 +1192,7 @@ function Home({
             <span className="ico"><SosIcon /></span>
             {sosBusy ? '…' : 'SOS'}
           </button>
-          <button className={tab === 'pabili' ? 'on' : ''} onClick={() => onTab('pabili')}>
+          <button type="button" onClick={onSwitchToPabili}>
             <span className="ico"><PabiliIcon /></span>
             Pabili
           </button>

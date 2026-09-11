@@ -107,6 +107,36 @@ export type Quote = {
 
 export type BookingDispatchMode = 'Broadcast' | 'Selection' | 'Both'
 
+export type PabiliOrderDetail = {
+  id: string
+  reference: string
+  status: string
+  merchantName: string
+  pickupAddress: string
+  dropoffAddress: string
+  pickupLat: number
+  pickupLng: number
+  dropoffLat: number
+  dropoffLng: number
+  goodsSubtotal: number
+  deliveryFee: number
+  surchargeTotal: number
+  adjustmentAmount: number
+  adjustmentLabel: string
+  customerTotal: number
+  paymentMethod: string
+  riderName: string | null
+  riderPhone: string | null
+  canCancel: boolean
+  items: Array<{
+    id: string
+    name: string
+    quantity: number
+    lineSellingTotal: number
+    addons: Array<{ name: string }>
+  }>
+}
+
 export type Stop = {
   label: string
   details: string
@@ -591,109 +621,13 @@ export const api = {
     notes?: string
     items: Array<{ productId: string; quantity: number; addons?: Array<{ optionId: string; quantity: number }> }>
   }) =>
-    request<{
-      id: string
-      reference: string
-      status: string
-      merchantName: string
-      pickupAddress: string
-      dropoffAddress: string
-      goodsSubtotal: number
-      deliveryFee: number
-      surchargeTotal: number
-      adjustmentAmount: number
-      adjustmentLabel: string
-      customerTotal: number
-      paymentMethod: string
-      riderName: string | null
-      riderPhone: string | null
-      canCancel: boolean
-      items: Array<{
-        id: string
-        name: string
-        quantity: number
-        lineSellingTotal: number
-        addons: Array<{ name: string }>
-      }>
-    }>('/api/customer/pabili/orders', { method: 'POST', body: JSON.stringify(body) }),
+    request<PabiliOrderDetail>('/api/customer/pabili/orders', { method: 'POST', body: JSON.stringify(body) }),
   pabiliOrders: () =>
-    request<Array<{
-      id: string
-      reference: string
-      status: string
-      merchantName: string
-      pickupAddress: string
-      dropoffAddress: string
-      goodsSubtotal: number
-      deliveryFee: number
-      surchargeTotal: number
-      adjustmentAmount: number
-      adjustmentLabel: string
-      customerTotal: number
-      paymentMethod: string
-      riderName: string | null
-      riderPhone: string | null
-      canCancel: boolean
-      items: Array<{
-        id: string
-        name: string
-        quantity: number
-        lineSellingTotal: number
-        addons: Array<{ name: string }>
-      }>
-    }>>('/api/customer/pabili/orders'),
+    request<PabiliOrderDetail[]>('/api/customer/pabili/orders'),
   pabiliOrder: (id: string) =>
-    request<{
-      id: string
-      reference: string
-      status: string
-      merchantName: string
-      pickupAddress: string
-      dropoffAddress: string
-      goodsSubtotal: number
-      deliveryFee: number
-      surchargeTotal: number
-      adjustmentAmount: number
-      adjustmentLabel: string
-      customerTotal: number
-      paymentMethod: string
-      riderName: string | null
-      riderPhone: string | null
-      canCancel: boolean
-      items: Array<{
-        id: string
-        name: string
-        quantity: number
-        lineSellingTotal: number
-        addons: Array<{ name: string }>
-      }>
-    }>(`/api/customer/pabili/orders/${id}`),
+    request<PabiliOrderDetail>(`/api/customer/pabili/orders/${id}`),
   pabiliCancelOrder: (id: string, reason?: string) =>
-    request<{
-      id: string
-      reference: string
-      status: string
-      merchantName: string
-      pickupAddress: string
-      dropoffAddress: string
-      goodsSubtotal: number
-      deliveryFee: number
-      surchargeTotal: number
-      adjustmentAmount: number
-      adjustmentLabel: string
-      customerTotal: number
-      paymentMethod: string
-      riderName: string | null
-      riderPhone: string | null
-      canCancel: boolean
-      items: Array<{
-        id: string
-        name: string
-        quantity: number
-        lineSellingTotal: number
-        addons: Array<{ name: string }>
-      }>
-    }>(`/api/customer/pabili/orders/${id}/cancel`, {
+    request<PabiliOrderDetail>(`/api/customer/pabili/orders/${id}/cancel`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
     }),
