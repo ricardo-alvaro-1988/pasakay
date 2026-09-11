@@ -23,4 +23,5 @@ public class Merchant : BaseEntity
     public ICollection<MerchantOperatingHour> OperatingHours { get; set; } = new List<MerchantOperatingHour>();
     public ICollection<MerchantProductCategory> Categories { get; set; } = new List<MerchantProductCategory>();
     public ICollection<MerchantProduct> Products { get; set; } = new List<MerchantProduct>();
+    public ICollection<MerchantAddonGroup> AddonGroups { get; set; } = new List<MerchantAddonGroup>();
 }

@@ -397,6 +397,147 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         return NoContent();
     }
 
+    [HttpGet("{merchantId:guid}/addon-groups")]
+    public async Task<ActionResult<MerchantAddonGroupListResponse>> ListAddonLibrary(
+        Guid merchantId,
+        CancellationToken cancellationToken)
+    {
+        var (op, merchant, fail) = await RequireMerchantAsync(merchantId, cancellationToken);
+        if (fail is not null)
+        {
+            return fail;
+        }
+
+        var rows = await db.MerchantAddonGroups
+            .AsNoTracking()
+            .Include(x => x.Options)
+            .Where(x => x.MerchantId == merchant!.Id)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+        return Ok(new MerchantAddonGroupListResponse(rows.Select(MapLibraryGroup).ToList()));
+    }
+
+    [HttpPost("{merchantId:guid}/addon-groups")]
+    public async Task<ActionResult<ProductAddonGroupItem>> CreateAddonLibraryGroup(
+        Guid merchantId,
+        [FromBody] ProductAddonGroupItem request,
+        CancellationToken cancellationToken)
+    {
+        var (op, merchant, fail) = await RequireMerchantAsync(merchantId, cancellationToken);
+        if (fail is not null)
+        {
+            return fail;
+        }
+
+        var error = ValidateAddons([request]);
+        if (error is not null)
+        {
+            return BadRequest(new { message = error });
+        }
+
+        var group = new MerchantAddonGroup
+        {
+            MerchantId = merchant!.Id,
+            Name = request.Name.Trim(),
+            MinSelect = request.MinSelect,
+            MaxSelect = request.MaxSelect,
+            SortOrder = request.SortOrder,
+            IsActive = request.IsActive,
+        };
+        foreach (var option in request.Options ?? [])
+        {
+            group.Options.Add(new MerchantAddonOption
+            {
+                Name = option.Name.Trim(),
+                PriceDelta = option.PriceDelta,
+                SortOrder = option.SortOrder,
+                IsActive = option.IsActive,
+            });
+        }
+
+        db.MerchantAddonGroups.Add(group);
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(MapLibraryGroup(group));
+    }
+
+    [HttpPut("{merchantId:guid}/addon-groups/{id:guid}")]
+    public async Task<ActionResult<ProductAddonGroupItem>> UpdateAddonLibraryGroup(
+        Guid merchantId,
+        Guid id,
+        [FromBody] ProductAddonGroupItem request,
+        CancellationToken cancellationToken)
+    {
+        var (op, merchant, fail) = await RequireMerchantAsync(merchantId, cancellationToken);
+        if (fail is not null)
+        {
+            return fail;
+        }
+
+        var error = ValidateAddons([request]);
+        if (error is not null)
+        {
+            return BadRequest(new { message = error });
+        }
+
+        var group = await db.MerchantAddonGroups
+            .Include(x => x.Options)
+            .FirstOrDefaultAsync(x => x.Id == id && x.MerchantId == merchant!.Id, cancellationToken);
+        if (group is null)
+        {
+            return NotFound(new { message = "Add-on group not found." });
+        }
+
+        group.Name = request.Name.Trim();
+        group.MinSelect = request.MinSelect;
+        group.MaxSelect = request.MaxSelect;
+        group.SortOrder = request.SortOrder;
+        group.IsActive = request.IsActive;
+        group.UpdatedAtUtc = DateTime.UtcNow;
+        db.MerchantAddonOptions.RemoveRange(group.Options);
+        group.Options.Clear();
+        foreach (var option in request.Options ?? [])
+        {
+            group.Options.Add(new MerchantAddonOption
+            {
+                Name = option.Name.Trim(),
+                PriceDelta = option.PriceDelta,
+                SortOrder = option.SortOrder,
+                IsActive = option.IsActive,
+            });
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(MapLibraryGroup(group));
+    }
+
+    [HttpDelete("{merchantId:guid}/addon-groups/{id:guid}")]
+    public async Task<IActionResult> DeleteAddonLibraryGroup(
+        Guid merchantId,
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var (op, merchant, fail) = await RequireMerchantAsync(merchantId, cancellationToken);
+        if (fail is not null)
+        {
+            return fail;
+        }
+
+        var group = await db.MerchantAddonGroups
+            .Include(x => x.Options)
+            .Include(x => x.ProductLinks)
+            .FirstOrDefaultAsync(x => x.Id == id && x.MerchantId == merchant!.Id, cancellationToken);
+        if (group is null)
+        {
+            return NotFound(new { message = "Add-on group not found." });
+        }
+
+        db.MerchantProductAddons.RemoveRange(group.ProductLinks);
+        db.MerchantAddonGroups.Remove(group);
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
     [HttpGet("{merchantId:guid}/products")]
     public async Task<ActionResult<MerchantProductListResponse>> ListProducts(
         Guid merchantId,
@@ -411,8 +552,9 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         var rows = await db.MerchantProducts
             .AsNoTracking()
             .Include(x => x.Category)
-            .Include(x => x.AddonGroups)
-                .ThenInclude(x => x.Options)
+            .Include(x => x.AdoptedAddons)
+                .ThenInclude(x => x.AddonGroup)
+                    .ThenInclude(x => x.Options)
             .Where(x => x.MerchantId == merchant!.Id)
             .OrderBy(x => x.SortOrder)
             .ThenBy(x => x.Name)
@@ -460,8 +602,10 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             CategoryId = request.CategoryId,
             Name = request.Name.Trim(),
             Description = (request.Description ?? string.Empty).Trim(),
-            BasePrice = request.BasePrice,
+            BasePrice = request.SellingPrice,
             AvailableOnStorefront = request.AvailableOnStorefront,
+            AvailableFromTime = request.AvailableAllDay ? null : ParseTime(request.AvailableFromTime),
+            AvailableToTime = request.AvailableAllDay ? null : ParseTime(request.AvailableToTime),
             SortOrder = request.SortOrder,
         };
         db.MerchantProducts.Add(row);
@@ -499,13 +643,60 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         row.CategoryId = request.CategoryId;
         row.Name = request.Name.Trim();
         row.Description = (request.Description ?? string.Empty).Trim();
-        row.BasePrice = request.BasePrice;
+        row.BasePrice = request.SellingPrice;
         row.AvailableOnStorefront = request.AvailableOnStorefront;
+        row.AvailableFromTime = request.AvailableAllDay ? null : ParseTime(request.AvailableFromTime);
+        row.AvailableToTime = request.AvailableAllDay ? null : ParseTime(request.AvailableToTime);
         row.SortOrder = request.SortOrder;
         row.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         var loaded = await LoadProductAsync(merchant.Id, row.Id, cancellationToken);
         return Ok(MapProduct(loaded!));
+    }
+
+    [HttpPost("{merchantId:guid}/products/{id:guid}/image")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<MerchantProductItem>> UploadProductImage(
+        Guid merchantId,
+        Guid id,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        var (op, merchant, fail) = await RequireMerchantAsync(merchantId, cancellationToken);
+        if (fail is not null)
+        {
+            return fail;
+        }
+
+        var row = await db.MerchantProducts
+            .FirstOrDefaultAsync(x => x.Id == id && x.MerchantId == merchant!.Id, cancellationToken);
+        if (row is null)
+        {
+            return NotFound(new { message = "Product not found." });
+        }
+
+        try
+        {
+            var path = await uploads.SaveAsync(
+                file,
+                $"merchants/{merchant!.Id}/products",
+                $"{row.Id:N}",
+                cancellationToken);
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return BadRequest(new { message = "Image file is required." });
+            }
+
+            row.ImagePath = path;
+            row.UpdatedAtUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+            var loaded = await LoadProductAsync(merchant.Id, row.Id, cancellationToken);
+            return Ok(MapProduct(loaded!));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
     }
 
     [HttpPost("{merchantId:guid}/products/{id:guid}/storefront")]
@@ -547,6 +738,7 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         }
 
         var row = await db.MerchantProducts
+            .Include(x => x.AdoptedAddons)
             .Include(x => x.AddonGroups)
                 .ThenInclude(x => x.Options)
             .FirstOrDefaultAsync(x => x.Id == id && x.MerchantId == merchant!.Id, cancellationToken);
@@ -561,10 +753,10 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
     }
 
     [HttpPut("{merchantId:guid}/products/{id:guid}/addons")]
-    public async Task<ActionResult<MerchantProductItem>> SaveAddons(
+    public async Task<ActionResult<MerchantProductItem>> AdoptAddonGroups(
         Guid merchantId,
         Guid id,
-        [FromBody] SaveProductAddonsRequest request,
+        [FromBody] AdoptProductAddonGroupsRequest request,
         CancellationToken cancellationToken)
     {
         var (op, merchant, fail) = await RequireMerchantAsync(merchantId, cancellationToken);
@@ -573,48 +765,36 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             return fail;
         }
 
-        var addonError = ValidateAddons(request.Groups);
-        if (addonError is not null)
-        {
-            return BadRequest(new { message = addonError });
-        }
-
         var row = await db.MerchantProducts
-            .Include(x => x.AddonGroups)
-                .ThenInclude(x => x.Options)
+            .Include(x => x.AdoptedAddons)
             .FirstOrDefaultAsync(x => x.Id == id && x.MerchantId == merchant!.Id, cancellationToken);
         if (row is null)
         {
             return NotFound(new { message = "Product not found." });
         }
 
-        db.ProductAddonOptions.RemoveRange(row.AddonGroups.SelectMany(x => x.Options));
-        db.ProductAddonGroups.RemoveRange(row.AddonGroups);
-        row.AddonGroups.Clear();
-
-        foreach (var group in request.Groups ?? [])
+        var ids = (request.AddonGroupIds ?? []).Distinct().ToList();
+        if (ids.Count > 0)
         {
-            var entity = new ProductAddonGroup
+            var validCount = await db.MerchantAddonGroups.CountAsync(
+                x => x.MerchantId == merchant!.Id && ids.Contains(x.Id),
+                cancellationToken);
+            if (validCount != ids.Count)
+            {
+                return BadRequest(new { message = "One or more add-on groups are not in this merchant library." });
+            }
+        }
+
+        db.MerchantProductAddons.RemoveRange(row.AdoptedAddons);
+        row.AdoptedAddons.Clear();
+        for (var i = 0; i < ids.Count; i++)
+        {
+            row.AdoptedAddons.Add(new MerchantProductAddon
             {
                 ProductId = row.Id,
-                Name = group.Name.Trim(),
-                MinSelect = group.MinSelect,
-                MaxSelect = group.MaxSelect,
-                SortOrder = group.SortOrder,
-                IsActive = group.IsActive,
-            };
-            foreach (var option in group.Options ?? [])
-            {
-                entity.Options.Add(new ProductAddonOption
-                {
-                    Name = option.Name.Trim(),
-                    PriceDelta = option.PriceDelta,
-                    SortOrder = option.SortOrder,
-                    IsActive = option.IsActive,
-                });
-            }
-
-            row.AddonGroups.Add(entity);
+                AddonGroupId = ids[i],
+                SortOrder = i,
+            });
         }
 
         row.UpdatedAtUtc = DateTime.UtcNow;
@@ -705,8 +885,9 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
         await db.MerchantProducts
             .AsNoTracking()
             .Include(x => x.Category)
-            .Include(x => x.AddonGroups)
-                .ThenInclude(x => x.Options)
+            .Include(x => x.AdoptedAddons)
+                .ThenInclude(x => x.AddonGroup)
+                    .ThenInclude(x => x.Options)
             .FirstOrDefaultAsync(x => x.Id == id && x.MerchantId == merchantId, cancellationToken);
 
     async Task<string?> EnsureMerchantAccountAsync(
@@ -952,9 +1133,24 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             return "Product name is required.";
         }
 
-        if (request.BasePrice < 0)
+        if (request.SellingPrice < 0)
         {
-            return "Base price cannot be negative.";
+            return "Selling price cannot be negative.";
+        }
+
+        if (!request.AvailableAllDay)
+        {
+            var from = ParseTime(request.AvailableFromTime);
+            var to = ParseTime(request.AvailableToTime);
+            if (from is null || to is null)
+            {
+                return "Available hours require both from and to times.";
+            }
+
+            if (from >= to)
+            {
+                return "Available-from time must be before available-to time.";
+            }
         }
 
         if (request.CategoryId is Guid categoryId)
@@ -1075,8 +1271,32 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
     static MerchantProductCategoryItem MapCategory(MerchantProductCategory row) =>
         new(row.Id, row.Name, row.SortOrder, row.IsActive);
 
-    static MerchantProductItem MapProduct(MerchantProduct row) =>
+    static ProductAddonGroupItem MapLibraryGroup(MerchantAddonGroup g) =>
         new(
+            g.Id,
+            g.Name,
+            g.MinSelect,
+            g.MaxSelect,
+            g.SortOrder,
+            g.IsActive,
+            g.Options
+                .OrderBy(o => o.SortOrder)
+                .ThenBy(o => o.Name)
+                .Select(o => new ProductAddonOptionItem(
+                    o.Id,
+                    o.Name,
+                    o.PriceDelta,
+                    o.SortOrder,
+                    o.IsActive))
+                .ToList());
+
+    static MerchantProductItem MapProduct(MerchantProduct row)
+    {
+        var adopted = row.AdoptedAddons
+            .OrderBy(x => x.SortOrder)
+            .Where(x => x.AddonGroup is not null)
+            .ToList();
+        return new(
             row.Id,
             row.MerchantId,
             row.CategoryId,
@@ -1085,27 +1305,12 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
             row.Description,
             row.BasePrice,
             row.AvailableOnStorefront,
+            row.AvailableFromTime is null && row.AvailableToTime is null,
+            FormatTime(row.AvailableFromTime),
+            FormatTime(row.AvailableToTime),
             row.SortOrder,
             UploadUrls.FromPath(row.ImagePath),
-            row.AddonGroups
-                .OrderBy(x => x.SortOrder)
-                .ThenBy(x => x.Name)
-                .Select(g => new ProductAddonGroupItem(
-                    g.Id,
-                    g.Name,
-                    g.MinSelect,
-                    g.MaxSelect,
-                    g.SortOrder,
-                    g.IsActive,
-                    g.Options
-                        .OrderBy(o => o.SortOrder)
-                        .ThenBy(o => o.Name)
-                        .Select(o => new ProductAddonOptionItem(
-                            o.Id,
-                            o.Name,
-                            o.PriceDelta,
-                            o.SortOrder,
-                            o.IsActive))
-                        .ToList()))
-                .ToList());
+            adopted.Select(x => x.AddonGroupId).ToList(),
+            adopted.Select(x => MapLibraryGroup(x.AddonGroup)).ToList());
+    }
 }

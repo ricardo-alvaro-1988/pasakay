@@ -441,10 +441,14 @@ export type MerchantProductItem = {
   categoryName: string | null
   name: string
   description: string
-  basePrice: number
+  sellingPrice: number
   availableOnStorefront: boolean
+  availableAllDay: boolean
+  availableFromTime: string | null
+  availableToTime: string | null
   sortOrder: number
   imageUrl: string | null
+  adoptedAddonGroupIds: string[]
   addonGroups: ProductAddonGroupItem[]
 }
 
@@ -452,8 +456,11 @@ export type SaveMerchantProductBody = {
   categoryId?: string | null
   name: string
   description: string
-  basePrice: number
+  sellingPrice: number
   availableOnStorefront: boolean
+  availableAllDay: boolean
+  availableFromTime?: string | null
+  availableToTime?: string | null
   sortOrder: number
 }
 
@@ -2059,10 +2066,32 @@ export const api = {
     }),
   deleteOperatorMerchantProduct: (merchantId: string, id: string) =>
     request<void>(`/api/operator/merchants/${merchantId}/products/${id}`, { method: 'DELETE' }),
-  saveOperatorMerchantProductAddons: (merchantId: string, id: string, groups: ProductAddonGroupItem[]) =>
+  uploadOperatorMerchantProductImage: (merchantId: string, id: string, file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request<MerchantProductItem>(`/api/operator/merchants/${merchantId}/products/${id}/image`, {
+      method: 'POST',
+      body: data,
+    })
+  },
+  operatorMerchantAddonGroups: (merchantId: string) =>
+    request<{ items: ProductAddonGroupItem[] }>(`/api/operator/merchants/${merchantId}/addon-groups`),
+  createOperatorMerchantAddonGroup: (merchantId: string, body: ProductAddonGroupItem) =>
+    request<ProductAddonGroupItem>(`/api/operator/merchants/${merchantId}/addon-groups`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateOperatorMerchantAddonGroup: (merchantId: string, id: string, body: ProductAddonGroupItem) =>
+    request<ProductAddonGroupItem>(`/api/operator/merchants/${merchantId}/addon-groups/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  deleteOperatorMerchantAddonGroup: (merchantId: string, id: string) =>
+    request<void>(`/api/operator/merchants/${merchantId}/addon-groups/${id}`, { method: 'DELETE' }),
+  saveOperatorMerchantProductAddons: (merchantId: string, id: string, addonGroupIds: string[]) =>
     request<MerchantProductItem>(`/api/operator/merchants/${merchantId}/products/${id}/addons`, {
       method: 'PUT',
-      body: JSON.stringify({ groups }),
+      body: JSON.stringify({ addonGroupIds }),
     }),
   operatorRiderWallet: (riderId: string) => request<RiderWalletDetail>(`/api/operator/wallet/riders/${riderId}`),
   approveWalletRequest: (id: string) =>

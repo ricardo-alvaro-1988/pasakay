@@ -1037,21 +1037,32 @@ public record MerchantProductItem(
     string? CategoryName,
     string Name,
     string Description,
-    decimal BasePrice,
+    decimal SellingPrice,
     bool AvailableOnStorefront,
+    bool AvailableAllDay,
+    string? AvailableFromTime,
+    string? AvailableToTime,
     int SortOrder,
     string? ImageUrl,
+    IReadOnlyList<Guid> AdoptedAddonGroupIds,
     IReadOnlyList<ProductAddonGroupItem> AddonGroups);
 
 public record SaveMerchantProductRequest(
     Guid? CategoryId,
     string Name,
     string Description,
-    decimal BasePrice,
+    decimal SellingPrice,
     bool AvailableOnStorefront,
+    bool AvailableAllDay,
+    string? AvailableFromTime,
+    string? AvailableToTime,
     int SortOrder);
 
 public record SaveProductAddonsRequest(IReadOnlyList<ProductAddonGroupItem> Groups);
+
+public record AdoptProductAddonGroupsRequest(IReadOnlyList<Guid> AddonGroupIds);
+
+public record MerchantAddonGroupListResponse(IReadOnlyList<ProductAddonGroupItem> Items);
 
 public record MerchantProductListResponse(IReadOnlyList<MerchantProductItem> Items);
 

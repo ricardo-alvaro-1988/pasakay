@@ -224,6 +224,74 @@ public static class MerchantCatalogBootstrap
             """, cancellationToken);
     }
 
+    public static async Task EnsureAddonLibraryAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            IF OBJECT_ID(N'[MerchantAddonGroups]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [MerchantAddonGroups] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [MerchantId] uniqueidentifier NOT NULL,
+                    [Name] nvarchar(120) NOT NULL,
+                    [MinSelect] int NOT NULL,
+                    [MaxSelect] int NOT NULL,
+                    [SortOrder] int NOT NULL,
+                    [IsActive] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_MerchantAddonGroups] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_MerchantAddonGroups_Merchants_MerchantId] FOREIGN KEY ([MerchantId]) REFERENCES [Merchants] ([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_MerchantAddonGroups_MerchantId] ON [MerchantAddonGroups] ([MerchantId]);
+            END
+
+            IF OBJECT_ID(N'[MerchantAddonOptions]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [MerchantAddonOptions] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [AddonGroupId] uniqueidentifier NOT NULL,
+                    [Name] nvarchar(120) NOT NULL,
+                    [PriceDelta] decimal(18,2) NOT NULL,
+                    [SortOrder] int NOT NULL,
+                    [IsActive] bit NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_MerchantAddonOptions] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_MerchantAddonOptions_MerchantAddonGroups_AddonGroupId] FOREIGN KEY ([AddonGroupId]) REFERENCES [MerchantAddonGroups] ([Id]) ON DELETE CASCADE
+                );
+                CREATE INDEX [IX_MerchantAddonOptions_AddonGroupId] ON [MerchantAddonOptions] ([AddonGroupId]);
+            END
+
+            IF OBJECT_ID(N'[MerchantProductAddons]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [MerchantProductAddons] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [ProductId] uniqueidentifier NOT NULL,
+                    [AddonGroupId] uniqueidentifier NOT NULL,
+                    [SortOrder] int NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_MerchantProductAddons] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_MerchantProductAddons_MerchantProducts_ProductId] FOREIGN KEY ([ProductId]) REFERENCES [MerchantProducts] ([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [FK_MerchantProductAddons_MerchantAddonGroups_AddonGroupId] FOREIGN KEY ([AddonGroupId]) REFERENCES [MerchantAddonGroups] ([Id]) ON DELETE NO ACTION
+                );
+                CREATE UNIQUE INDEX [IX_MerchantProductAddons_ProductId_AddonGroupId] ON [MerchantProductAddons] ([ProductId], [AddonGroupId]);
+            END
+
+            IF COL_LENGTH(N'MerchantProducts', N'AvailableFromTime') IS NULL
+                ALTER TABLE [MerchantProducts] ADD [AvailableFromTime] time NULL;
+            IF COL_LENGTH(N'MerchantProducts', N'AvailableToTime') IS NULL
+                ALTER TABLE [MerchantProducts] ADD [AvailableToTime] time NULL;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM [__EFMigrationsHistory]
+                WHERE [MigrationId] = N'20260911030157_MerchantAddonLibrary'
+            )
+                INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+                VALUES (N'20260911030157_MerchantAddonLibrary', N'9.0.8');
+            """, cancellationToken);
+    }
+
     public static async Task<bool> HasMerchantsTableAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
         var conn = db.Database.GetDbConnection();

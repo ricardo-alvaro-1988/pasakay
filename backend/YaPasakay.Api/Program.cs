@@ -139,6 +139,8 @@ using (var scope = app.Services.CreateScope())
             migrateLogger.LogWarning("Merchants table missing; applying merchant catalog bootstrap.");
             await MerchantCatalogBootstrap.EnsureAsync(db);
         }
+
+        await MerchantCatalogBootstrap.EnsureAddonLibraryAsync(db);
     }
     catch (Exception schemaEx)
     {

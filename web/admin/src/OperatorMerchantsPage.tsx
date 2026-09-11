@@ -473,6 +473,7 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
   const [merchant, setMerchant] = useState<MerchantDetailItem | null>(null)
   const [categories, setCategories] = useState<MerchantProductCategoryItem[]>([])
   const [products, setProducts] = useState<MerchantProductItem[]>([])
+  const [library, setLibrary] = useState<ProductAddonGroupItem[]>([])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -483,30 +484,48 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
   const [productForm, setProductForm] = useState({
     name: '',
     description: '',
-    basePrice: '0',
+    sellingPrice: '0',
     categoryId: '',
     availableOnStorefront: true,
+    availableAllDay: true,
+    availableFromTime: '08:00',
+    availableToTime: '20:00',
     sortOrder: 0,
   })
-  const [addonGroups, setAddonGroups] = useState<ProductAddonGroupItem[]>([])
+  const [adoptedGroupIds, setAdoptedGroupIds] = useState<string[]>([])
+  const [productImageFile, setProductImageFile] = useState<File | null>(null)
   const [productError, setProductError] = useState('')
 
+  const [libOpen, setLibOpen] = useState(false)
+  const [editingLib, setEditingLib] = useState<ProductAddonGroupItem | null>(null)
+  const [libForm, setLibForm] = useState<ProductAddonGroupItem>({
+    name: 'Extras',
+    minSelect: 0,
+    maxSelect: 3,
+    sortOrder: 0,
+    isActive: true,
+    options: [{ name: '', priceDelta: 0, sortOrder: 0, isActive: true }],
+  })
+  const [libError, setLibError] = useState('')
+
   async function loadAll() {
-    const [m, c, p] = await Promise.all([
+    const [m, c, p, g] = await Promise.all([
       api.operatorMerchant(merchantId),
       api.operatorMerchantCategories(merchantId),
       api.operatorMerchantProducts(merchantId),
+      api.operatorMerchantAddonGroups(merchantId),
     ])
     setMerchant(m)
     setCategories(c.items)
     setProducts(p.items)
+    setLibrary(g.items)
   }
 
   useEffect(() => {
     loadAll().catch((err: Error) => setError(err.message))
   }, [merchantId])
 
-  async function uploadImage(kind: 'logo' | 'background', file: File | null) {
+  async function uploadMerchantImage(kind: 'logo' | 'background', file: File | null) {
     if (!file || !merchant) return
     setBusy(true)
     setError('')
@@ -542,51 +561,117 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
     }
   }
 
+  function openLibrary(group?: ProductAddonGroupItem) {
+    if (group) {
+      setEditingLib(group)
+      setLibForm({
+        ...group,
+        options: group.options?.length
+          ? group.options
+          : [{ name: '', priceDelta: 0, sortOrder: 0, isActive: true }],
+      })
+    } else {
+      setEditingLib(null)
+      setLibForm({
+        name: 'Extras',
+        minSelect: 0,
+        maxSelect: 3,
+        sortOrder: library.length,
+        isActive: true,
+        options: [{ name: 'Extra rice', priceDelta: 15, sortOrder: 0, isActive: true }],
+      })
+    }
+    setLibError('')
+    setLibOpen(true)
+  }
+
+  async function saveLibrary() {
+    if (!libForm.name.trim() || !libForm.options?.length || libForm.options.some((o) => !o.name.trim())) {
+      setLibError('Group name and every option name are required.')
+      return
+    }
+    if (libForm.minSelect < 0 || libForm.maxSelect < 1 || libForm.minSelect > libForm.maxSelect) {
+      setLibError('Min/max select is invalid.')
+      return
+    }
+    setBusy(true)
+    setLibError('')
+    try {
+      if (editingLib?.id) {
+        await api.updateOperatorMerchantAddonGroup(merchantId, editingLib.id, libForm)
+      } else {
+        await api.createOperatorMerchantAddonGroup(merchantId, libForm)
+      }
+      const g = await api.operatorMerchantAddonGroups(merchantId)
+      setLibrary(g.items)
+      setLibOpen(false)
+      setNotice('Add-on group saved to library.')
+    } catch (err) {
+      setLibError(err instanceof Error ? err.message : 'Could not save add-on group.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeLibrary(group: ProductAddonGroupItem) {
+    if (!group.id || !confirm(`Remove "${group.name}" from the library? Products using it will lose this group.`)) return
+    try {
+      await api.deleteOperatorMerchantAddonGroup(merchantId, group.id)
+      setLibrary(library.filter((x) => x.id !== group.id))
+      setNotice('Add-on group removed.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete add-on group.')
+    }
+  }
+
   function openProduct(product?: MerchantProductItem) {
+    setProductImageFile(null)
     if (product) {
       setEditingProduct(product)
       setProductForm({
         name: product.name,
         description: product.description,
-        basePrice: String(product.basePrice),
+        sellingPrice: String(product.sellingPrice),
         categoryId: product.categoryId ?? '',
         availableOnStorefront: product.availableOnStorefront,
+        availableAllDay: product.availableAllDay,
+        availableFromTime: product.availableFromTime ?? '08:00',
+        availableToTime: product.availableToTime ?? '20:00',
         sortOrder: product.sortOrder,
       })
-      setAddonGroups(product.addonGroups?.length ? product.addonGroups : [])
+      setAdoptedGroupIds(product.adoptedAddonGroupIds ?? [])
     } else {
       setEditingProduct(null)
       setProductForm({
         name: '',
         description: '',
-        basePrice: '0',
+        sellingPrice: '0',
         categoryId: '',
         availableOnStorefront: true,
+        availableAllDay: true,
+        availableFromTime: '08:00',
+        availableToTime: '20:00',
         sortOrder: products.length,
       })
-      setAddonGroups([])
+      setAdoptedGroupIds([])
     }
     setProductError('')
     setProductOpen(true)
   }
 
   async function saveProduct() {
-    const price = Number(productForm.basePrice)
+    const price = Number(productForm.sellingPrice)
     if (!productForm.name.trim() || !Number.isFinite(price) || price < 0) {
-      setProductError('Name and a valid base price are required.')
+      setProductError('Name and a valid selling price are required.')
       return
     }
-    for (const g of addonGroups) {
-      if (!g.name.trim()) {
-        setProductError('Each add-on group needs a name.')
+    if (!productForm.availableAllDay) {
+      if (!productForm.availableFromTime || !productForm.availableToTime) {
+        setProductError('Set available from/to hours, or mark all day.')
         return
       }
-      if (g.minSelect < 0 || g.maxSelect < 1 || g.minSelect > g.maxSelect) {
-        setProductError(`Add-on group "${g.name}" has invalid min/max.`)
-        return
-      }
-      if (!g.options.length) {
-        setProductError(`Add-on group "${g.name}" needs at least one option.`)
+      if (productForm.availableFromTime >= productForm.availableToTime) {
+        setProductError('Available-from must be before available-to.')
         return
       }
     }
@@ -596,15 +681,22 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
       const body: SaveMerchantProductBody = {
         name: productForm.name.trim(),
         description: productForm.description.trim(),
-        basePrice: price,
+        sellingPrice: price,
         categoryId: productForm.categoryId || null,
         availableOnStorefront: productForm.availableOnStorefront,
+        availableAllDay: productForm.availableAllDay,
+        availableFromTime: productForm.availableAllDay ? null : productForm.availableFromTime,
+        availableToTime: productForm.availableAllDay ? null : productForm.availableToTime,
         sortOrder: productForm.sortOrder,
       }
       let row = editingProduct
         ? await api.updateOperatorMerchantProduct(merchantId, editingProduct.id, body)
         : await api.createOperatorMerchantProduct(merchantId, body)
-      row = await api.saveOperatorMerchantProductAddons(merchantId, row.id, addonGroups)
+      row = await api.saveOperatorMerchantProductAddons(merchantId, row.id, adoptedGroupIds)
+      if (productImageFile) {
+        const compressed = await compressImageFile(productImageFile)
+        row = await api.uploadOperatorMerchantProductImage(merchantId, row.id, compressed)
+      }
       const list = await api.operatorMerchantProducts(merchantId)
       setProducts(list.items)
       setProductOpen(false)
@@ -636,6 +728,11 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
     }
   }
 
+  function hoursLabel(p: MerchantProductItem) {
+    if (p.availableAllDay) return 'All day'
+    return `${p.availableFromTime ?? '—'} – ${p.availableToTime ?? '—'}`
+  }
+
   if (!merchant) return error ? <p className="error">{error}</p> : <p>Loading merchant…</p>
 
   return (
@@ -654,15 +751,54 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
           <label className="field">
             <span>Store logo</span>
             {merchant.logoUrl ? <img src={merchant.logoUrl} alt="" style={{ maxHeight: 64, display: 'block', marginBottom: 8 }} /> : null}
-            <input type="file" accept="image/*" disabled={busy} onChange={(e) => void uploadImage('logo', e.target.files?.[0] ?? null)} />
+            <input type="file" accept="image/*" disabled={busy} onChange={(e) => void uploadMerchantImage('logo', e.target.files?.[0] ?? null)} />
           </label>
           <label className="field">
             <span>Store background</span>
             {merchant.backgroundUrl ? (
               <img src={merchant.backgroundUrl} alt="" style={{ maxHeight: 64, display: 'block', marginBottom: 8, maxWidth: '100%' }} />
             ) : null}
-            <input type="file" accept="image/*" disabled={busy} onChange={(e) => void uploadImage('background', e.target.files?.[0] ?? null)} />
+            <input type="file" accept="image/*" disabled={busy} onChange={(e) => void uploadMerchantImage('background', e.target.files?.[0] ?? null)} />
           </label>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="toolbar">
+          <div>
+            <h3 style={{ margin: 0 }}>Add-on library</h3>
+            <p className="muted" style={{ margin: '6px 0 0' }}>Build groups once, then adopt them on each product.</p>
+          </div>
+          <button className="btn" type="button" style={{ width: 'auto' }} onClick={() => openLibrary()}>
+            Add group
+          </button>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Group</th>
+                <th>Select</th>
+                <th>Options</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {library.length === 0 ? (
+                <tr><td colSpan={4}>No library groups yet. Add “Extras”, “Size”, etc.</td></tr>
+              ) : library.map((g) => (
+                <tr key={g.id}>
+                  <td><strong>{g.name}</strong></td>
+                  <td>{g.minSelect}–{g.maxSelect}</td>
+                  <td>{(g.options ?? []).map((o) => `${o.name} (+₱${o.priceDelta})`).join(', ') || '—'}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button className="btn tiny" type="button" onClick={() => openLibrary(g)}>Edit</button>{' '}
+                    <button className="btn tiny danger" type="button" onClick={() => void removeLibrary(g)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -671,12 +807,7 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
           <h3 style={{ margin: 0 }}>Categories</h3>
         </div>
         <form onSubmit={(e) => void addCategory(e)} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-          <input
-            placeholder="e.g. Meals, Drinks"
-            value={catName}
-            onChange={(e) => setCatName(e.target.value)}
-            style={{ flex: 1 }}
-          />
+          <input placeholder="e.g. Meals, Drinks" value={catName} onChange={(e) => setCatName(e.target.value)} style={{ flex: 1 }} />
           <button className="btn" type="submit" style={{ width: 'auto' }}>Add</button>
         </form>
         <div className="table-wrap">
@@ -712,9 +843,9 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
           <table>
             <thead>
               <tr>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Price</th>
+                <th>Product</th>
+                <th>Selling price</th>
+                <th>Hours</th>
                 <th>Storefront</th>
                 <th>Add-ons</th>
                 <th />
@@ -725,15 +856,27 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
                 <tr><td colSpan={6}>No products yet.</td></tr>
               ) : products.map((p) => (
                 <tr key={p.id}>
-                  <td><strong>{p.name}</strong></td>
-                  <td>{p.categoryName || '—'}</td>
-                  <td>₱{p.basePrice.toFixed(2)}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                      {p.imageUrl ? (
+                        <img src={p.imageUrl} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 8 }} />
+                      ) : (
+                        <div style={{ width: 40, height: 40, borderRadius: 8, background: 'var(--chip)' }} />
+                      )}
+                      <div>
+                        <strong>{p.name}</strong>
+                        <div className="muted" style={{ fontSize: 12 }}>{p.categoryName || 'No category'}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>₱{Number(p.sellingPrice).toFixed(2)}</td>
+                  <td>{hoursLabel(p)}</td>
                   <td>
                     <button className="btn tiny" type="button" onClick={() => void toggleStorefront(p)}>
                       {p.availableOnStorefront ? 'On' : 'Off'}
                     </button>
                   </td>
-                  <td>{p.addonGroups?.length ?? 0} groups</td>
+                  <td>{p.adoptedAddonGroupIds?.length ?? 0} groups</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button className="btn tiny" type="button" onClick={() => openProduct(p)}>Edit</button>{' '}
                     <button className="btn tiny danger" type="button" onClick={() => void removeProduct(p)}>Delete</button>
@@ -745,204 +888,221 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
         </div>
       </div>
 
+      {libOpen ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setLibOpen(false)}>
+          <div className="modal-panel merchant-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>{editingLib ? 'Edit add-on group' : 'New add-on group'}</h2>
+              <button className="btn tiny" type="button" onClick={() => setLibOpen(false)}>Close</button>
+            </div>
+            <div className="merchant-modal-body">
+              <section className="form-section">
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Group name</span>
+                    <input value={libForm.name} onChange={(e) => setLibForm({ ...libForm, name: e.target.value })} placeholder="Extras" />
+                  </label>
+                  <label className="field">
+                    <span>Min select</span>
+                    <input type="number" min={0} value={libForm.minSelect} onChange={(e) => setLibForm({ ...libForm, minSelect: Number(e.target.value) || 0 })} />
+                  </label>
+                  <label className="field">
+                    <span>Max select</span>
+                    <input type="number" min={1} value={libForm.maxSelect} onChange={(e) => setLibForm({ ...libForm, maxSelect: Number(e.target.value) || 1 })} />
+                  </label>
+                </div>
+                {(libForm.options ?? []).map((opt, oi) => (
+                  <div key={oi} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <input
+                      placeholder="Option name"
+                      value={opt.name}
+                      style={{ flex: 1 }}
+                      onChange={(e) => {
+                        const options = [...(libForm.options ?? [])]
+                        options[oi] = { ...opt, name: e.target.value }
+                        setLibForm({ ...libForm, options })
+                      }}
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={opt.priceDelta}
+                      style={{ width: 110 }}
+                      onChange={(e) => {
+                        const options = [...(libForm.options ?? [])]
+                        options[oi] = { ...opt, priceDelta: Number(e.target.value) || 0 }
+                        setLibForm({ ...libForm, options })
+                      }}
+                    />
+                    <button
+                      className="btn tiny danger"
+                      type="button"
+                      onClick={() => setLibForm({ ...libForm, options: (libForm.options ?? []).filter((_, i) => i !== oi) })}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button
+                  className="btn tiny"
+                  type="button"
+                  style={{ marginTop: 10 }}
+                  onClick={() =>
+                    setLibForm({
+                      ...libForm,
+                      options: [
+                        ...(libForm.options ?? []),
+                        { name: '', priceDelta: 0, sortOrder: (libForm.options ?? []).length, isActive: true },
+                      ],
+                    })
+                  }
+                >
+                  Add option
+                </button>
+              </section>
+            </div>
+            {libError ? <p className="error" style={{ padding: '0 22px' }}>{libError}</p> : null}
+            <div className="merchant-modal-footer">
+              <button className="btn tiny" type="button" onClick={() => setLibOpen(false)}>Cancel</button>
+              <button className="btn" type="button" disabled={busy} onClick={() => void saveLibrary()}>
+                {busy ? 'Saving…' : 'Save group'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {productOpen ? (
         <div className="modal-backdrop" role="presentation" onClick={() => setProductOpen(false)}>
-          <div
-            className="modal-panel"
-            role="dialog"
-            aria-modal="true"
-            style={{ maxWidth: 720, maxHeight: '90vh', overflow: 'auto' }}
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="modal-panel merchant-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h2>{editingProduct ? 'Edit product' : 'Add product'}</h2>
               <button className="btn tiny" type="button" onClick={() => setProductOpen(false)}>Close</button>
             </div>
-            <div className="form-grid">
-              <label className="field">
-                <span>Name</span>
-                <input value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} />
-              </label>
-              <label className="field">
-                <span>Base price</span>
-                <input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={productForm.basePrice}
-                  onChange={(e) => setProductForm({ ...productForm, basePrice: e.target.value })}
-                />
-              </label>
-              <label className="field" style={{ gridColumn: '1 / -1' }}>
-                <span>Description</span>
-                <textarea
-                  rows={2}
-                  value={productForm.description}
-                  onChange={(e) => setProductForm({ ...productForm, description: e.target.value })}
-                />
-              </label>
-              <label className="field">
-                <span>Category</span>
-                <select
-                  value={productForm.categoryId}
-                  onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}
-                >
-                  <option value="">None</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <div className="merchant-modal-body">
+              <section className="form-section">
+                <h3>Details</h3>
+                <div className="form-grid">
+                  <label className="field">
+                    <span>Name</span>
+                    <input value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} />
+                  </label>
+                  <label className="field">
+                    <span>Selling price (₱)</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={productForm.sellingPrice}
+                      onChange={(e) => setProductForm({ ...productForm, sellingPrice: e.target.value })}
+                    />
+                  </label>
+                  <label className="field" style={{ gridColumn: '1 / -1' }}>
+                    <span>Description</span>
+                    <textarea rows={2} value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} />
+                  </label>
+                  <label className="field">
+                    <span>Category</span>
+                    <select value={productForm.categoryId} onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}>
+                      <option value="">None</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field check-field">
+                    <span className="check">
+                      <input
+                        type="checkbox"
+                        checked={productForm.availableOnStorefront}
+                        onChange={(e) => setProductForm({ ...productForm, availableOnStorefront: e.target.checked })}
+                      />
+                      <span>Available on storefront</span>
+                    </span>
+                  </label>
+                  <label className="field" style={{ gridColumn: '1 / -1' }}>
+                    <span>Product image</span>
+                    {editingProduct?.imageUrl ? (
+                      <img src={editingProduct.imageUrl} alt="" style={{ maxHeight: 72, display: 'block', marginBottom: 8, borderRadius: 8 }} />
+                    ) : null}
+                    <input type="file" accept="image/*" onChange={(e) => setProductImageFile(e.target.files?.[0] ?? null)} />
+                  </label>
+                </div>
+              </section>
+
+              <section className="form-section">
+                <h3>Available hours</h3>
+                <p className="form-hint">Within the store’s open days. All day means no product-level time limit.</p>
+                <label className="check" style={{ marginBottom: 12 }}>
                   <input
                     type="checkbox"
-                    checked={productForm.availableOnStorefront}
-                    onChange={(e) => setProductForm({ ...productForm, availableOnStorefront: e.target.checked })}
+                    checked={productForm.availableAllDay}
+                    onChange={(e) => setProductForm({ ...productForm, availableAllDay: e.target.checked })}
                   />
-                  Available on storefront
-                </span>
-              </label>
-            </div>
-
-            <div style={{ marginTop: 16 }}>
-              <div className="toolbar">
-                <h3 style={{ margin: 0 }}>Add-on groups</h3>
-                <button
-                  className="btn tiny"
-                  type="button"
-                  onClick={() =>
-                    setAddonGroups([
-                      ...addonGroups,
-                      {
-                        name: 'Extras',
-                        minSelect: 0,
-                        maxSelect: 3,
-                        sortOrder: addonGroups.length,
-                        isActive: true,
-                        options: [{ name: '', priceDelta: 0, sortOrder: 0, isActive: true }],
-                      },
-                    ])
-                  }
-                >
-                  Add group
-                </button>
-              </div>
-              {addonGroups.map((group, gi) => (
-                <div key={gi} className="card" style={{ marginTop: 10, padding: 12 }}>
+                  <span>Available all day</span>
+                </label>
+                {!productForm.availableAllDay ? (
                   <div className="form-grid">
                     <label className="field">
-                      <span>Group name</span>
+                      <span>From</span>
                       <input
-                        value={group.name}
-                        onChange={(e) => {
-                          const next = [...addonGroups]
-                          next[gi] = { ...group, name: e.target.value }
-                          setAddonGroups(next)
-                        }}
+                        type="time"
+                        value={productForm.availableFromTime}
+                        onChange={(e) => setProductForm({ ...productForm, availableFromTime: e.target.value })}
                       />
                     </label>
                     <label className="field">
-                      <span>Min select</span>
+                      <span>To</span>
                       <input
-                        type="number"
-                        min={0}
-                        value={group.minSelect}
-                        onChange={(e) => {
-                          const next = [...addonGroups]
-                          next[gi] = { ...group, minSelect: Number(e.target.value) || 0 }
-                          setAddonGroups(next)
-                        }}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Max select</span>
-                      <input
-                        type="number"
-                        min={1}
-                        value={group.maxSelect}
-                        onChange={(e) => {
-                          const next = [...addonGroups]
-                          next[gi] = { ...group, maxSelect: Number(e.target.value) || 1 }
-                          setAddonGroups(next)
-                        }}
+                        type="time"
+                        value={productForm.availableToTime}
+                        onChange={(e) => setProductForm({ ...productForm, availableToTime: e.target.value })}
                       />
                     </label>
                   </div>
-                  {group.options.map((opt, oi) => (
-                    <div key={oi} style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <input
-                        placeholder="Option name (e.g. Extra rice)"
-                        value={opt.name}
-                        style={{ flex: 1 }}
-                        onChange={(e) => {
-                          const next = [...addonGroups]
-                          const options = [...group.options]
-                          options[oi] = { ...opt, name: e.target.value }
-                          next[gi] = { ...group, options }
-                          setAddonGroups(next)
-                        }}
-                      />
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        placeholder="+₱"
-                        value={opt.priceDelta}
-                        style={{ width: 100 }}
-                        onChange={(e) => {
-                          const next = [...addonGroups]
-                          const options = [...group.options]
-                          options[oi] = { ...opt, priceDelta: Number(e.target.value) || 0 }
-                          next[gi] = { ...group, options }
-                          setAddonGroups(next)
-                        }}
-                      />
-                      <button
-                        className="btn tiny danger"
-                        type="button"
-                        onClick={() => {
-                          const next = [...addonGroups]
-                          next[gi] = { ...group, options: group.options.filter((_, i) => i !== oi) }
-                          setAddonGroups(next)
-                        }}
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
-                    <button
-                      className="btn tiny"
-                      type="button"
-                      onClick={() => {
-                        const next = [...addonGroups]
-                        next[gi] = {
-                          ...group,
-                          options: [
-                            ...group.options,
-                            { name: '', priceDelta: 0, sortOrder: group.options.length, isActive: true },
-                          ],
-                        }
-                        setAddonGroups(next)
-                      }}
-                    >
-                      Add option
-                    </button>
-                    <button
-                      className="btn tiny danger"
-                      type="button"
-                      onClick={() => setAddonGroups(addonGroups.filter((_, i) => i !== gi))}
-                    >
-                      Remove group
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ) : null}
+              </section>
 
-            {productError ? <p className="error">{productError}</p> : null}
-            <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+              <section className="form-section">
+                <h3>Adopt add-on groups</h3>
+                <p className="form-hint">Pick from the merchant library. Build groups above first.</p>
+                {library.length === 0 ? (
+                  <p className="muted" style={{ margin: 0 }}>No library groups yet.</p>
+                ) : (
+                  <div className="merchant-hours">
+                    {library.map((g) => {
+                      const id = g.id ?? ''
+                      const checked = adoptedGroupIds.includes(id)
+                      return (
+                        <label key={id} className="check" style={{ padding: '10px 12px', border: '1px solid var(--line)', borderRadius: 12 }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              setAdoptedGroupIds(
+                                e.target.checked
+                                  ? [...adoptedGroupIds, id]
+                                  : adoptedGroupIds.filter((x) => x !== id),
+                              )
+                            }}
+                          />
+                          <span>
+                            <strong>{g.name}</strong>
+                            <span className="form-hint" style={{ display: 'block', margin: '2px 0 0', fontWeight: 500 }}>
+                              {(g.options ?? []).map((o) => o.name).join(', ') || 'No options'}
+                            </span>
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </section>
+            </div>
+            {productError ? <p className="error" style={{ padding: '0 22px' }}>{productError}</p> : null}
+            <div className="merchant-modal-footer">
+              <button className="btn tiny" type="button" onClick={() => setProductOpen(false)}>Cancel</button>
               <button className="btn" type="button" disabled={busy} onClick={() => void saveProduct()}>
                 {busy ? 'Saving…' : 'Save product'}
               </button>
@@ -953,3 +1113,4 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
     </div>
   )
 }
+

@@ -47,6 +47,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<MerchantProduct> MerchantProducts => Set<MerchantProduct>();
     public DbSet<ProductAddonGroup> ProductAddonGroups => Set<ProductAddonGroup>();
     public DbSet<ProductAddonOption> ProductAddonOptions => Set<ProductAddonOption>();
+    public DbSet<MerchantAddonGroup> MerchantAddonGroups => Set<MerchantAddonGroup>();
+    public DbSet<MerchantAddonOption> MerchantAddonOptions => Set<MerchantAddonOption>();
+    public DbSet<MerchantProductAddon> MerchantProductAddons => Set<MerchantProductAddon>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -702,6 +705,40 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(x => x.Options)
                 .HasForeignKey(x => x.AddonGroupId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MerchantAddonGroup>(entity =>
+        {
+            entity.HasIndex(x => x.MerchantId);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.HasOne(x => x.Merchant)
+                .WithMany(x => x.AddonGroups)
+                .HasForeignKey(x => x.MerchantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MerchantAddonOption>(entity =>
+        {
+            entity.HasIndex(x => x.AddonGroupId);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.PriceDelta).HasColumnType("decimal(18,2)");
+            entity.HasOne(x => x.AddonGroup)
+                .WithMany(x => x.Options)
+                .HasForeignKey(x => x.AddonGroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MerchantProductAddon>(entity =>
+        {
+            entity.HasIndex(x => new { x.ProductId, x.AddonGroupId }).IsUnique();
+            entity.HasOne(x => x.Product)
+                .WithMany(x => x.AdoptedAddons)
+                .HasForeignKey(x => x.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.AddonGroup)
+                .WithMany(x => x.ProductLinks)
+                .HasForeignKey(x => x.AddonGroupId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
