@@ -2279,6 +2279,64 @@ tr.clickable:hover { background: var(--bg-soft); }
   }
 }
 
+.merchant-pin-map {
+  display: grid;
+  gap: 10px;
+}
+.merchant-pin-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--input);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 6%, transparent);
+}
+.merchant-pin-search:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.merchant-pin-search-icon {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+.merchant-pin-search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none;
+  padding: 12px 0 !important;
+  margin: 0;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.3;
+  color: inherit;
+  border-radius: 0 !important;
+}
+.merchant-pin-search-input::placeholder {
+  color: var(--muted);
+}
+.merchant-pin-map-host {
+  width: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+}
+
 .brand-preview {
   border: 1px solid var(--line);
   border-radius: 16px;

@@ -155,15 +155,23 @@ export function MerchantPinMap({ value, onChange, height = 280 }: Props) {
   }, [value.lat, value.lng])
 
   return (
-    <div>
-      <input
-        ref={searchRef}
-        className="input"
-        placeholder="Search place or address"
-        style={{ width: '100%', marginBottom: 8 }}
-      />
+    <div className="merchant-pin-map">
+      <div className="merchant-pin-search">
+        <span className="merchant-pin-search-icon" aria-hidden="true">⌕</span>
+        <input
+          ref={searchRef}
+          type="search"
+          className="merchant-pin-search-input"
+          placeholder="Search place or address"
+          autoComplete="off"
+        />
+      </div>
       {error ? <p className="error">{error}</p> : null}
-      <div ref={host} style={{ height, width: '100%', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }} />
+      <div
+        ref={host}
+        className="merchant-pin-map-host"
+        style={{ height }}
+      />
     </div>
   )
 }
