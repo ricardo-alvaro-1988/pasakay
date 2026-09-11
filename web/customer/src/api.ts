@@ -583,6 +583,38 @@ export const api = {
       merchantOpen: boolean
     }>>(`/api/customer/pabili/products/popular?${params}`)
   },
+  pabiliAds: (opts: { lat: number; lng: number; barangayId?: string }) => {
+    const params = new URLSearchParams({
+      lat: String(opts.lat),
+      lng: String(opts.lng),
+    })
+    if (opts.barangayId) params.set('barangayId', opts.barangayId)
+    return request<Array<{
+      id: string
+      title: string
+      imageUrl: string | null
+      redirectUrl: string
+    }>>(`/api/customer/pabili/ads?${params}`)
+  },
+  pabiliSuggest: (opts: { lat: number; lng: number; barangayId?: string; q: string }) => {
+    const params = new URLSearchParams({
+      lat: String(opts.lat),
+      lng: String(opts.lng),
+      q: opts.q.trim(),
+    })
+    if (opts.barangayId) params.set('barangayId', opts.barangayId)
+    return request<{
+      merchants: Array<{ id: string; name: string; address: string; logoUrl: string | null }>
+      products: Array<{
+        id: string
+        merchantId: string
+        merchantName: string
+        name: string
+        sellingPrice: number
+        imageUrl: string | null
+      }>
+    }>(`/api/customer/pabili/search/suggest?${params}`)
+  },
   pabiliStore: (id: string) =>
     request<{
       id: string

@@ -126,6 +126,7 @@ import FleetMap from './FleetMap'
 import TripLiveMap from './TripLiveMap'
 import { DeriveZoneMap } from './DeriveZoneMap'
 import { OperatorMerchantsPage } from './OperatorMerchantsPage'
+import { OperatorAdsPage } from './OperatorAdsPage'
 import { OperatorPabiliMatrixPage } from './OperatorPabiliMatrixPage'
 import { OperatorPabiliOrdersPage } from './OperatorPabiliOrdersPage'
 import { OperatorPabiliRidersPage } from './OperatorPabiliRidersPage'
@@ -7285,6 +7286,7 @@ function OperatorShell({
         {page === 'wallet' && <OperatorWalletPage />}
         {page === 'promos' && <OperatorPromosPage />}
         {page === 'merchants' && <OperatorMerchantsPage />}
+        {page === 'pabili-ads' && <OperatorAdsPage />}
         {page === 'product-categories' && <OperatorProductCategoriesPage />}
         {page === 'pabili-orders' && <OperatorPabiliOrdersPage />}
         {page === 'pabili-matrix' && <OperatorPabiliMatrixPage />}

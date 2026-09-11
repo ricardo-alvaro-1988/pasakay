@@ -75,9 +75,19 @@ function lineTotal(line: CartLine) {
   return (line.unitSellingPrice + addons) * line.quantity
 }
 
-const CATEGORY_ICONS = ['🍳', '🦐', '🍔', '🍰', '🧁', '🍜', '🥗', '🥤']
 const FALLBACK_LAT = 14.5995
 const FALLBACK_LNG = 120.9842
+
+type AdCard = { id: string; title: string; imageUrl: string | null; redirectUrl: string }
+type SuggestMerchant = { id: string; name: string; address: string; logoUrl: string | null }
+type SuggestProduct = {
+  id: string
+  merchantId: string
+  merchantName: string
+  name: string
+  sellingPrice: number
+  imageUrl: string | null
+}
 
 export function PabiliStorefront({
   desk,
@@ -111,6 +121,11 @@ export function PabiliStorefront({
     imageUrl: string | null
     merchantOpen: boolean
   }>>([])
+  const [ads, setAds] = useState<AdCard[]>([])
+  const [suggestMerchants, setSuggestMerchants] = useState<SuggestMerchant[]>([])
+  const [suggestProducts, setSuggestProducts] = useState<SuggestProduct[]>([])
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const suggestTimer = useRef<number | null>(null)
   const [store, setStore] = useState<Store | null>(null)
   const [cart, setCart] = useState<CartLine[]>([])
   const [gps, setGps] = useState<{ lat: number; lng: number }>(() => {
@@ -166,15 +181,51 @@ export function PabiliStorefront({
   async function loadMerchants(term = search) {
     setError('')
     try {
-      const [rows, popular] = await Promise.all([
+      const [rows, popular, exclusive] = await Promise.all([
         api.pabiliMerchants({ lat, lng, q: term }),
         api.pabiliPopularProducts({ lat, lng, q: term }),
+        api.pabiliAds({ lat, lng }),
       ])
       setMerchants(rows)
       setPopularProducts(popular)
+      setAds(exclusive)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not load stores.')
     }
+  }
+
+  function clearSuggest() {
+    setSuggestMerchants([])
+    setSuggestProducts([])
+    setSuggestOpen(false)
+  }
+
+  function onSearchChange(value: string) {
+    setSearch(value)
+    if (suggestTimer.current != null) window.clearTimeout(suggestTimer.current)
+    const term = value.trim()
+    if (term.length < 1) {
+      clearSuggest()
+      return
+    }
+    suggestTimer.current = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await api.pabiliSuggest({ lat, lng, q: term })
+          setSuggestMerchants(res.merchants)
+          setSuggestProducts(res.products)
+          setSuggestOpen(res.merchants.length > 0 || res.products.length > 0)
+        } catch {
+          clearSuggest()
+        }
+      })()
+    }, 220)
+  }
+
+  function applySearch(term: string) {
+    setSearch(term)
+    clearSuggest()
+    void loadMerchants(term)
   }
 
   useEffect(() => {
@@ -401,17 +452,74 @@ export function PabiliStorefront({
       </div>
 
       {view === 'home' ? (
-        <header className="pb-hero pb-hero-slim">
+        <header className="pb-search-bar">
           <div className="pb-search-wrap">
             <input
               className="pb-search"
               placeholder="Search food, groceries, drinks…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void loadMerchants(search)
+              onChange={(e) => onSearchChange(e.target.value)}
+              onFocus={() => {
+                if (suggestMerchants.length || suggestProducts.length) setSuggestOpen(true)
               }}
+              onBlur={() => {
+                window.setTimeout(() => setSuggestOpen(false), 160)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  applySearch(search)
+                }
+              }}
+              aria-autocomplete="list"
+              aria-expanded={suggestOpen}
             />
+            {suggestOpen ? (
+              <div className="pb-suggest" role="listbox">
+                {suggestProducts.map((p) => (
+                  <button
+                    key={`p-${p.merchantId}-${p.id}`}
+                    type="button"
+                    className="pb-suggest-row"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      clearSuggest()
+                      void openStore(p.merchantId, p.id)
+                    }}
+                  >
+                    <div
+                      className="pb-suggest-img"
+                      style={p.imageUrl ? { backgroundImage: `url(${mediaUrl(p.imageUrl)})` } : undefined}
+                    />
+                    <span>
+                      <b>{p.name}</b>
+                      <small className="muted">{p.merchantName} · {peso(p.sellingPrice)}</small>
+                    </span>
+                  </button>
+                ))}
+                {suggestMerchants.map((m) => (
+                  <button
+                    key={`m-${m.id}`}
+                    type="button"
+                    className="pb-suggest-row"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      clearSuggest()
+                      void openStore(m.id)
+                    }}
+                  >
+                    <div
+                      className="pb-suggest-img"
+                      style={m.logoUrl ? { backgroundImage: `url(${mediaUrl(m.logoUrl)})` } : undefined}
+                    />
+                    <span>
+                      <b>{m.name}</b>
+                      <small className="muted">{m.address || 'Store'}</small>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         </header>
       ) : null}
@@ -420,22 +528,34 @@ export function PabiliStorefront({
 
       {view === 'home' && (
         <main className="pb-main">
-          <div className="pb-cats" role="list">
-            {['Breakfast', 'Seafood', 'Fast Food', 'Cake', 'Desserts'].map((label, i) => (
-              <button
-                key={label}
-                type="button"
-                className="pb-cat"
-                onClick={() => {
-                  setSearch(label)
-                  void loadMerchants(label)
-                }}
-              >
-                <span className="pb-cat-ico">{CATEGORY_ICONS[i % CATEGORY_ICONS.length]}</span>
-                <small>{label}</small>
-              </button>
-            ))}
-          </div>
+          <section className="pb-section">
+            <div className="pb-section-head">
+              <h2>Exclusive Offer</h2>
+            </div>
+            {ads.length ? (
+              <div className="pb-offers" role="list">
+                {ads.map((ad) => (
+                  <a
+                    key={ad.id}
+                    className="pb-offer-card"
+                    href={ad.redirectUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    role="listitem"
+                    aria-label={ad.title}
+                  >
+                    <span
+                      className="pb-offer-media"
+                      style={ad.imageUrl ? { backgroundImage: `url(${mediaUrl(ad.imageUrl)})` } : undefined}
+                    />
+                    <span className="pb-offer-title">{ad.title}</span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">No exclusive offers right now.</p>
+            )}
+          </section>
 
           <section className="pb-section">
             <div className="pb-section-head">

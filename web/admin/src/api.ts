@@ -35,6 +35,7 @@ export type PageId =
   | 'promos'
   | 'merchants'
   | 'product-categories'
+  | 'pabili-ads'
   | 'pabili-orders'
   | 'pabili-matrix'
   | 'pabili-riders'
@@ -375,6 +376,23 @@ export type SaveOperatorPromoBody = {
   startsAtUtc: string | null
   endsAtUtc: string | null
   maxRedemptions: number | null
+}
+
+export type OperatorAdItem = {
+  id: string
+  title: string
+  imageUrl: string | null
+  redirectUrl: string
+  isActive: boolean
+  sortOrder: number
+  createdAtUtc: string
+}
+
+export type SaveOperatorAdBody = {
+  title: string
+  redirectUrl: string
+  isActive: boolean
+  sortOrder: number
 }
 
 export type MerchantOperatingHourItem = {
@@ -2052,6 +2070,26 @@ export const api = {
     }),
   toggleOperatorPromo: (id: string) =>
     request<OperatorPromoItem>(`/api/operator/promos/${id}/toggle`, { method: 'POST' }),
+  operatorAds: () => request<{ items: OperatorAdItem[] }>('/api/operator/ads'),
+  createOperatorAd: (body: SaveOperatorAdBody) =>
+    request<OperatorAdItem>('/api/operator/ads', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateOperatorAd: (id: string, body: SaveOperatorAdBody) =>
+    request<OperatorAdItem>(`/api/operator/ads/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  toggleOperatorAd: (id: string) =>
+    request<OperatorAdItem>(`/api/operator/ads/${id}/toggle`, { method: 'POST' }),
+  deleteOperatorAd: (id: string) =>
+    request<void>(`/api/operator/ads/${id}`, { method: 'DELETE' }),
+  uploadOperatorAdImage: (id: string, file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return request<OperatorAdItem>(`/api/operator/ads/${id}/image`, { method: 'POST', body: data })
+  },
   operatorMerchants: () => request<{ items: MerchantListItem[] }>('/api/operator/merchants'),
   operatorMerchant: (id: string) => request<MerchantDetailItem>(`/api/operator/merchants/${id}`),
   createOperatorMerchant: (body: SaveMerchantBody) =>
