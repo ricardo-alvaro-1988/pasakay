@@ -214,6 +214,38 @@ public static class MerchantCatalogBootstrap
         await db.Database.ExecuteSqlRawAsync("""
             IF COL_LENGTH(N'Users', N'MerchantId') IS NULL
                 ALTER TABLE [Users] ADD [MerchantId] uniqueidentifier NULL;
+
+            IF COL_LENGTH(N'Users', N'MerchantId') IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1 FROM sys.indexes
+                    WHERE name = N'IX_Users_MerchantId' AND object_id = OBJECT_ID(N'[Users]')
+               )
+                CREATE INDEX [IX_Users_MerchantId] ON [Users] ([MerchantId]);
             """, cancellationToken);
+    }
+
+    public static async Task<bool> HasMerchantsTableAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        var conn = db.Database.GetDbConnection();
+        var shouldClose = conn.State != System.Data.ConnectionState.Open;
+        if (shouldClose)
+        {
+            await db.Database.OpenConnectionAsync(cancellationToken);
+        }
+
+        try
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT CASE WHEN OBJECT_ID(N'[Merchants]', N'U') IS NULL THEN 0 ELSE 1 END";
+            var result = await cmd.ExecuteScalarAsync(cancellationToken);
+            return Convert.ToInt32(result) == 1;
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await db.Database.CloseConnectionAsync();
+            }
+        }
     }
 }

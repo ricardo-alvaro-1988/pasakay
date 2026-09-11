@@ -105,19 +105,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     var migrateLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbMigrate");
-    if (app.Configuration.GetValue("Database:SkipMigrate", false))
-    {
-        migrateLogger.LogWarning("Database:SkipMigrate is enabled; starting without MigrateAsync.");
-        try
-        {
-            await MerchantCatalogBootstrap.EnsureUsersMerchantIdAsync(db);
-        }
-        catch (Exception ex)
-        {
-            migrateLogger.LogCritical(ex, "Failed to ensure Users.MerchantId.");
-        }
-    }
-    else
+    if (!app.Configuration.GetValue("Database:SkipMigrate", false))
     {
         try
         {
@@ -133,17 +121,28 @@ using (var scope = app.Services.CreateScope())
             }
             catch (Exception second)
             {
-                migrateLogger.LogCritical(second, "Merchant catalog bootstrap failed; ensuring Users.MerchantId so login can work.");
-                try
-                {
-                    await MerchantCatalogBootstrap.EnsureUsersMerchantIdAsync(db);
-                }
-                catch (Exception third)
-                {
-                    migrateLogger.LogCritical(third, "Failed to ensure Users.MerchantId.");
-                }
+                migrateLogger.LogCritical(second, "Merchant catalog bootstrap failed.");
             }
         }
+    }
+    else
+    {
+        migrateLogger.LogWarning("Database:SkipMigrate is enabled; starting without MigrateAsync.");
+    }
+
+    // Always keep Users.MerchantId in sync with the EF model so login/auth queries never 500.
+    try
+    {
+        await MerchantCatalogBootstrap.EnsureUsersMerchantIdAsync(db);
+        if (!await MerchantCatalogBootstrap.HasMerchantsTableAsync(db))
+        {
+            migrateLogger.LogWarning("Merchants table missing; applying merchant catalog bootstrap.");
+            await MerchantCatalogBootstrap.EnsureAsync(db);
+        }
+    }
+    catch (Exception schemaEx)
+    {
+        migrateLogger.LogCritical(schemaEx, "Failed to ensure merchant-related schema required for AppUser queries.");
     }
 
     var seederLogger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DbSeeder");
