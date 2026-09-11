@@ -577,9 +577,9 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
   const [libOpen, setLibOpen] = useState(false)
   const [editingLib, setEditingLib] = useState<ProductAddonGroupItem | null>(null)
   const [libForm, setLibForm] = useState<ProductAddonGroupItem>({
-    name: 'Extras',
+    name: '',
     minSelect: 0,
-    maxSelect: 3,
+    maxSelect: 1,
     sortOrder: 0,
     isActive: true,
     options: [{ name: '', basePrice: 0, sellingPrice: 0, sortOrder: 0, isActive: true }],
@@ -691,12 +691,12 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
     } else {
       setEditingLib(null)
       setLibForm({
-        name: 'Extras',
+        name: '',
         minSelect: 0,
-        maxSelect: 3,
+        maxSelect: 1,
         sortOrder: library.length,
         isActive: true,
-        options: [{ name: 'Extra rice', basePrice: 10, sellingPrice: 15, sortOrder: 0, isActive: true }],
+        options: [{ name: '', basePrice: 0, sellingPrice: 0, sortOrder: 0, isActive: true }],
       })
     }
     setLibError('')
