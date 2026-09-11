@@ -359,6 +359,27 @@ input:-webkit-autofill:focus {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.nav-pending {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 6px;
+  line-height: 1.4;
+}
+.nav button.pending {
+  opacity: 0.78;
+}
+.nav button.pending.active {
+  opacity: 1;
 }
 .collapsed .nav span.label { display: none; }
 .collapsed .nav button { justify-content: center; padding: 10px 8px; }

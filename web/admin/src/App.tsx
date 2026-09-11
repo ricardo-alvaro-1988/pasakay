@@ -7241,6 +7241,24 @@ function OperatorShell({
         {page === 'promos' && <OperatorPromosPage />}
         {page === 'merchants' && <OperatorMerchantsPage />}
         {page === 'product-categories' && <OperatorProductCategoriesPage />}
+        {page === 'pabili-orders' && (
+          <ComingSoon title="Pabili orders" body="Order intake and status tracking for Pabili will live here." />
+        )}
+        {page === 'pabili-matrix' && (
+          <ComingSoon title="Pabili Matrix" body="Delivery pricing matrix for Pabili will live here." />
+        )}
+        {page === 'pabili-riders' && (
+          <ComingSoon title="Pabili riders" body="Rider assignment and availability for Pabili will live here." />
+        )}
+        {page === 'pabili-customers' && (
+          <ComingSoon title="Pabili customers" body="Customer tools for Pabili will live here." />
+        )}
+        {page === 'pabili-surcharges' && (
+          <ComingSoon title="Pabili surcharges" body="Surcharge rules for Pabili will live here." />
+        )}
+        {page === 'pabili-commission' && (
+          <ComingSoon title="Pabili commission report" body="Commission reporting for Pabili will live here." />
+        )}
         {page === 'commission' && <CommissionReportPage mode="operator" />}
         {page === 'booking-report' && <OperatorBookingReportPage />}
         {page === 'rider-report' && <OperatorRiderReportPage />}

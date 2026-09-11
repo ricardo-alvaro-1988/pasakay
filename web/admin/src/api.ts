@@ -35,6 +35,12 @@ export type PageId =
   | 'promos'
   | 'merchants'
   | 'product-categories'
+  | 'pabili-orders'
+  | 'pabili-matrix'
+  | 'pabili-riders'
+  | 'pabili-customers'
+  | 'pabili-surcharges'
+  | 'pabili-commission'
 
 export type Me = {
   id: string

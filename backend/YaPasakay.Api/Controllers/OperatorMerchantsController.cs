@@ -822,23 +822,35 @@ public class OperatorMerchantsController(AppDbContext db, UploadStore uploads) :
 
         try
         {
-            // Delete + commit first, then insert. Avoids unique-index conflicts on
-            // (ProductId, AddonGroupId) when the same groups are kept across a save.
-            if (row.AdoptedAddons.Count > 0)
+            // Sync in place — avoid Clear()/wipe+reinsert, which trips EF concurrency
+            // and unique-index issues on (ProductId, AddonGroupId).
+            var wanted = ids.ToHashSet();
+            foreach (var link in row.AdoptedAddons.Where(x => !wanted.Contains(x.AddonGroupId)).ToList())
             {
-                db.MerchantProductAddons.RemoveRange(row.AdoptedAddons);
-                row.AdoptedAddons.Clear();
-                await db.SaveChangesAsync(cancellationToken);
+                db.MerchantProductAddons.Remove(link);
             }
+
+            var existing = row.AdoptedAddons
+                .Where(x => wanted.Contains(x.AddonGroupId))
+                .ToDictionary(x => x.AddonGroupId);
 
             for (var i = 0; i < ids.Count; i++)
             {
-                row.AdoptedAddons.Add(new MerchantProductAddon
+                var groupId = ids[i];
+                if (existing.TryGetValue(groupId, out var link))
                 {
-                    ProductId = row.Id,
-                    AddonGroupId = ids[i],
-                    SortOrder = i,
-                });
+                    link.SortOrder = i;
+                    link.UpdatedAtUtc = DateTime.UtcNow;
+                }
+                else
+                {
+                    row.AdoptedAddons.Add(new MerchantProductAddon
+                    {
+                        ProductId = row.Id,
+                        AddonGroupId = groupId,
+                        SortOrder = i,
+                    });
+                }
             }
 
             row.UpdatedAtUtc = DateTime.UtcNow;

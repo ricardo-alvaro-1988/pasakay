@@ -6,6 +6,7 @@ export type SideNavItem = {
   label: string
   icon: string
   live?: boolean
+  pending?: boolean
 }
 
 export type SideNavGroup = {
@@ -101,8 +102,8 @@ export function SideNav({
           <button
             key={item.id}
             type="button"
-            className={page === item.id ? 'active' : ''}
-            title={item.label}
+            className={`${page === item.id ? 'active' : ''}${item.pending ? ' pending' : ''}`}
+            title={item.pending ? `${item.label} (pending)` : item.label}
             onClick={() => onNavigate(item.id)}
           >
             <span className="ico">{item.icon}</span>
@@ -136,12 +137,15 @@ export function SideNav({
                   <button
                     key={item.id}
                     type="button"
-                    className={page === item.id ? 'active' : ''}
-                    title={item.label}
+                    className={`${page === item.id ? 'active' : ''}${item.pending ? ' pending' : ''}`}
+                    title={item.pending ? `${item.label} (pending)` : item.label}
                     onClick={() => onNavigate(item.id)}
                   >
                     <span className="ico">{item.icon}</span>
-                    <span className="label">{item.label}</span>
+                    <span className="label">
+                      {item.label}
+                      {item.pending ? <span className="nav-pending">pending</span> : null}
+                    </span>
                     {badge?.(item.id)}
                   </button>
                 ))}
@@ -254,14 +258,26 @@ export const OPERATOR_MENU_GROUPS: SideNavGroup[] = [
     ],
   },
   {
+    id: 'pabili',
+    label: 'Pabili',
+    items: [
+      { id: 'pabili-orders', label: 'Order', icon: '▢', pending: true },
+      { id: 'merchants', label: 'Merchant', icon: '◇' },
+      { id: 'product-categories', label: 'Product Categories', icon: '☰' },
+      { id: 'pabili-matrix', label: 'Pabili Matrix', icon: '₱', pending: true },
+      { id: 'pabili-riders', label: 'Rider', icon: '▣', pending: true },
+      { id: 'pabili-customers', label: 'Customer', icon: '☺', pending: true },
+      { id: 'pabili-surcharges', label: 'Surcharge', icon: '+', pending: true },
+      { id: 'pabili-commission', label: 'Commission Report', icon: '％', pending: true },
+    ],
+  },
+  {
     id: 'money',
     label: 'Money',
     items: [
       { id: 'billing', label: 'Billing', icon: '▤' },
       { id: 'wallet', label: 'Wallet', icon: '◈' },
       { id: 'promos', label: 'Promos', icon: '%' },
-      { id: 'merchants', label: 'Merchants', icon: '◇' },
-      { id: 'product-categories', label: 'Product categories', icon: '☰' },
     ],
   },
   {
