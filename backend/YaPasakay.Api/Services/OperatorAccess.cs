@@ -103,6 +103,11 @@ public static class OperatorAccess
             return "promos";
         }
 
+        if (value.Contains("/categories", StringComparison.Ordinal))
+        {
+            return "product-categories";
+        }
+
         if (value.StartsWith("/api/operator/merchants"))
         {
             return "merchants";

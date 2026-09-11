@@ -126,6 +126,7 @@ import FleetMap from './FleetMap'
 import TripLiveMap from './TripLiveMap'
 import { DeriveZoneMap } from './DeriveZoneMap'
 import { OperatorMerchantsPage } from './OperatorMerchantsPage'
+import { OperatorProductCategoriesPage } from './OperatorProductCategoriesPage'
 import {
   ADMIN_MENU_GROUPS,
   OPERATOR_MENU_GROUPS,
@@ -7239,6 +7240,7 @@ function OperatorShell({
         {page === 'wallet' && <OperatorWalletPage />}
         {page === 'promos' && <OperatorPromosPage />}
         {page === 'merchants' && <OperatorMerchantsPage />}
+        {page === 'product-categories' && <OperatorProductCategoriesPage />}
         {page === 'commission' && <CommissionReportPage mode="operator" />}
         {page === 'booking-report' && <OperatorBookingReportPage />}
         {page === 'rider-report' && <OperatorRiderReportPage />}

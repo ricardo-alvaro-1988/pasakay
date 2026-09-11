@@ -261,6 +261,7 @@ export const OPERATOR_MENU_GROUPS: SideNavGroup[] = [
       { id: 'wallet', label: 'Wallet', icon: '◈' },
       { id: 'promos', label: 'Promos', icon: '%' },
       { id: 'merchants', label: 'Merchants', icon: '◇' },
+      { id: 'product-categories', label: 'Product categories', icon: '☰' },
     ],
   },
   {

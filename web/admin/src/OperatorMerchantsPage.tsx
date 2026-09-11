@@ -551,10 +551,6 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
 
-  const [catOpen, setCatOpen] = useState(false)
-  const [editingCat, setEditingCat] = useState<MerchantProductCategoryItem | null>(null)
-  const [catForm, setCatForm] = useState({ name: '', sortOrder: 0, isActive: true })
-  const [catError, setCatError] = useState('')
   const [productQuery, setProductQuery] = useState('')
   const [productOpen, setProductOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<MerchantProductItem | null>(null)
@@ -619,63 +615,6 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
       setError(err instanceof Error ? err.message : 'Upload failed.')
     } finally {
       setBusy(false)
-    }
-  }
-
-  function openCategory(cat?: MerchantProductCategoryItem) {
-    if (cat) {
-      setEditingCat(cat)
-      setCatForm({ name: cat.name, sortOrder: cat.sortOrder, isActive: cat.isActive })
-    } else {
-      setEditingCat(null)
-      setCatForm({ name: '', sortOrder: categories.length, isActive: true })
-    }
-    setCatError('')
-    setCatOpen(true)
-  }
-
-  async function saveCategory() {
-    if (!catForm.name.trim()) {
-      setCatError('Category name is required.')
-      return
-    }
-    setBusy(true)
-    setCatError('')
-    try {
-      if (editingCat?.id) {
-        await api.updateOperatorMerchantCategory(merchantId, editingCat.id, {
-          name: catForm.name.trim(),
-          sortOrder: catForm.sortOrder,
-          isActive: catForm.isActive,
-        })
-      } else {
-        await api.createOperatorMerchantCategory(merchantId, {
-          name: catForm.name.trim(),
-          sortOrder: catForm.sortOrder,
-          isActive: catForm.isActive,
-        })
-      }
-      const c = await api.operatorMerchantCategories(merchantId)
-      setCategories(c.items)
-      setCatOpen(false)
-      setNotice(editingCat ? 'Category updated.' : 'Category added.')
-    } catch (err) {
-      setCatError(err instanceof Error ? err.message : 'Could not save category.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function removeCategory(cat: MerchantProductCategoryItem) {
-    if (!confirm(`Delete category "${cat.name}"? Products in it will become uncategorized.`)) return
-    try {
-      await api.deleteOperatorMerchantCategory(merchantId, cat.id)
-      setCategories(categories.filter((x) => x.id !== cat.id))
-      const list = await api.operatorMerchantProducts(merchantId)
-      setProducts(list.items)
-      setNotice('Category deleted.')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not delete category.')
     }
   }
 
@@ -927,45 +866,6 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
       <div className="card">
         <div className="toolbar">
           <div>
-            <h3 style={{ margin: 0 }}>Categories</h3>
-            <p className="muted" style={{ margin: '6px 0 0' }}>Managed separately. Assign a category when editing a product.</p>
-          </div>
-          <button className="btn" type="button" style={{ width: 'auto' }} onClick={() => openCategory()}>
-            Add category
-          </button>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Sort</th>
-                <th>Status</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {categories.length === 0 ? (
-                <tr><td colSpan={4}>No categories yet.</td></tr>
-              ) : categories.map((c) => (
-                <tr key={c.id}>
-                  <td><strong>{c.name}</strong></td>
-                  <td>{c.sortOrder}</td>
-                  <td>{c.isActive ? 'Active' : 'Inactive'}</td>
-                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button className="btn tiny" type="button" onClick={() => openCategory(c)}>Edit</button>{' '}
-                    <button className="btn tiny danger" type="button" onClick={() => void removeCategory(c)}>Delete</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="toolbar">
-          <div>
             <h3 style={{ margin: 0 }}>Products</h3>
             <p className="muted" style={{ margin: '6px 0 0' }}>Search by name or category.</p>
           </div>
@@ -1054,48 +954,6 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
           </table>
         </div>
       </div>
-
-      {catOpen ? (
-        <div className="modal-backdrop" role="presentation" onClick={() => setCatOpen(false)}>
-          <div className="modal-panel merchant-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h2>{editingCat ? 'Edit category' : 'New category'}</h2>
-              <button className="btn tiny" type="button" onClick={() => setCatOpen(false)}>Close</button>
-            </div>
-            <div className="merchant-modal-body">
-              <section className="form-section">
-                <div className="form-grid">
-                  <label className="field">
-                    <span>Name</span>
-                    <input value={catForm.name} onChange={(e) => setCatForm({ ...catForm, name: e.target.value })} placeholder="Meals, Drinks…" />
-                  </label>
-                  <label className="field">
-                    <span>Sort order</span>
-                    <input type="number" value={catForm.sortOrder} onChange={(e) => setCatForm({ ...catForm, sortOrder: Number(e.target.value) || 0 })} />
-                  </label>
-                  <label className="field check-field">
-                    <span className="check">
-                      <input
-                        type="checkbox"
-                        checked={catForm.isActive}
-                        onChange={(e) => setCatForm({ ...catForm, isActive: e.target.checked })}
-                      />
-                      <span>Active</span>
-                    </span>
-                  </label>
-                </div>
-              </section>
-            </div>
-            {catError ? <p className="error" style={{ padding: '0 22px' }}>{catError}</p> : null}
-            <div className="merchant-modal-footer">
-              <button className="btn tiny" type="button" onClick={() => setCatOpen(false)}>Cancel</button>
-              <button className="btn" type="button" disabled={busy} onClick={() => void saveCategory()}>
-                {busy ? 'Saving…' : 'Save category'}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {libOpen ? (
         <div className="modal-backdrop" role="presentation" onClick={() => setLibOpen(false)}>
@@ -1265,10 +1123,11 @@ function OperatorMerchantDetail({ merchantId, onBack }: { merchantId: string; on
                     <span>Category</span>
                     <select value={productForm.categoryId} onChange={(e) => setProductForm({ ...productForm, categoryId: e.target.value })}>
                       <option value="">None</option>
-                      {categories.map((c) => (
+                      {categories.filter((c) => c.isActive || c.id === productForm.categoryId).map((c) => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </select>
+                    <span className="form-hint">Manage categories under Money → Product categories.</span>
                   </label>
                   <label className="field check-field">
                     <span className="check">

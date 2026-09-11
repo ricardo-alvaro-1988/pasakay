@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using YaPasakay.Domain.Enums;
@@ -42,11 +43,31 @@ public class OperatorAccessFilter(AppDbContext db) : IAsyncActionFilter
 
         if (!pages.Contains(required))
         {
-            context.Result = new ObjectResult(new { message = "You do not have access to this module. Ask the main operator to update your role." })
+            var method = context.HttpContext.Request.Method;
+            var normalized = path.ToLowerInvariant().TrimEnd('/');
+            var merchantDirectoryGet =
+                HttpMethods.IsGet(method)
+                && (normalized == "/api/operator/merchants"
+                    || System.Text.RegularExpressions.Regex.IsMatch(
+                        normalized,
+                        @"^/api/operator/merchants/[0-9a-f-]{36}$"));
+            var categoryReadForMerchants =
+                required == "product-categories"
+                && HttpMethods.IsGet(method)
+                && pages.Contains("merchants");
+            var merchantPickForCategories =
+                required == "merchants"
+                && merchantDirectoryGet
+                && pages.Contains("product-categories");
+
+            if (!categoryReadForMerchants && !merchantPickForCategories)
             {
-                StatusCode = 403
-            };
-            return;
+                context.Result = new ObjectResult(new { message = "You do not have access to this module. Ask the main operator to update your role." })
+                {
+                    StatusCode = 403
+                };
+                return;
+            }
         }
 
         await next();

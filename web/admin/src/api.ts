@@ -34,6 +34,7 @@ export type PageId =
   | 'wallet'
   | 'promos'
   | 'merchants'
+  | 'product-categories'
 
 export type Me = {
   id: string
