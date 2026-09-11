@@ -13,6 +13,7 @@ public class AppUser : BaseEntity
     public UserRole Role { get; set; }
     public Guid? OperatorId { get; set; }
     public Operator? Operator { get; set; }
+    public Guid? MerchantId { get; set; }
     public bool IsMainAdmin { get; set; }
     public bool IsMainOperator { get; set; }
     public Guid? AccessGroupId { get; set; }

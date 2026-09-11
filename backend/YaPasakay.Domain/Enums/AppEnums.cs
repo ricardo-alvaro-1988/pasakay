@@ -5,7 +5,8 @@ public enum UserRole
     Admin = 1,
     Operator = 2,
     Rider = 3,
-    Customer = 4
+    Customer = 4,
+    Merchant = 5
 }
 
 public enum VehicleType

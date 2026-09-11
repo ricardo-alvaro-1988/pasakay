@@ -42,4 +42,5 @@ public class Operator : BaseEntity
     public ICollection<OperatorCashInBankAccount> CashInBankAccounts { get; set; } = new List<OperatorCashInBankAccount>();
     public ICollection<OperatorPromo> Promos { get; set; } = new List<OperatorPromo>();
     public ICollection<DeriveFareZone> DeriveFareZones { get; set; } = new List<DeriveFareZone>();
+    public ICollection<Merchant> Merchants { get; set; } = new List<Merchant>();
 }

@@ -41,6 +41,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DeriveFareZone> DeriveFareZones => Set<DeriveFareZone>();
     public DbSet<DeriveFareMatrix> DeriveFareMatrices => Set<DeriveFareMatrix>();
     public DbSet<DeriveFarePassengerTier> DeriveFarePassengerTiers => Set<DeriveFarePassengerTier>();
+    public DbSet<Merchant> Merchants => Set<Merchant>();
+    public DbSet<MerchantOperatingHour> MerchantOperatingHours => Set<MerchantOperatingHour>();
+    public DbSet<MerchantProductCategory> MerchantProductCategories => Set<MerchantProductCategory>();
+    public DbSet<MerchantProduct> MerchantProducts => Set<MerchantProduct>();
+    public DbSet<ProductAddonGroup> ProductAddonGroups => Set<ProductAddonGroup>();
+    public DbSet<ProductAddonOption> ProductAddonOptions => Set<ProductAddonOption>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -48,6 +54,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             entity.HasIndex(x => x.PhoneNumber).IsUnique();
             entity.HasIndex(x => x.Email);
+            entity.HasIndex(x => x.MerchantId);
             entity.HasIndex(x => x.GoogleSubject).IsUnique().HasFilter("[GoogleSubject] IS NOT NULL");
             entity.Property(x => x.PhoneNumber).HasMaxLength(20).IsRequired();
             entity.Property(x => x.FullName).HasMaxLength(120).IsRequired();
@@ -615,6 +622,85 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.Matrix)
                 .WithMany(x => x.PassengerTiers)
                 .HasForeignKey(x => x.DeriveFareMatrixId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Merchant>(entity =>
+        {
+            entity.HasIndex(x => x.OperatorId);
+            entity.HasIndex(x => new { x.OperatorId, x.BusinessName });
+            entity.Property(x => x.BusinessName).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.ContactPerson).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.PinnedAddress).HasMaxLength(400).IsRequired();
+            entity.Property(x => x.Mobile).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Email).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.LogoPath).HasMaxLength(260);
+            entity.Property(x => x.BackgroundPath).HasMaxLength(260);
+            entity.HasOne(x => x.Operator)
+                .WithMany(x => x.Merchants)
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.AppUser)
+                .WithMany()
+                .HasForeignKey(x => x.AppUserId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<MerchantOperatingHour>(entity =>
+        {
+            entity.HasIndex(x => new { x.MerchantId, x.DayOfWeek }).IsUnique();
+            entity.HasOne(x => x.Merchant)
+                .WithMany(x => x.OperatingHours)
+                .HasForeignKey(x => x.MerchantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MerchantProductCategory>(entity =>
+        {
+            entity.HasIndex(x => new { x.MerchantId, x.Name });
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.HasOne(x => x.Merchant)
+                .WithMany(x => x.Categories)
+                .HasForeignKey(x => x.MerchantId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MerchantProduct>(entity =>
+        {
+            entity.HasIndex(x => x.MerchantId);
+            entity.Property(x => x.Name).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.BasePrice).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.ImagePath).HasMaxLength(260);
+            entity.Property(x => x.AvailableOnStorefront).HasDefaultValue(true);
+            entity.HasOne(x => x.Merchant)
+                .WithMany(x => x.Products)
+                .HasForeignKey(x => x.MerchantId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Category)
+                .WithMany(x => x.Products)
+                .HasForeignKey(x => x.CategoryId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ProductAddonGroup>(entity =>
+        {
+            entity.HasIndex(x => x.ProductId);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.HasOne(x => x.Product)
+                .WithMany(x => x.AddonGroups)
+                .HasForeignKey(x => x.ProductId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProductAddonOption>(entity =>
+        {
+            entity.HasIndex(x => x.AddonGroupId);
+            entity.Property(x => x.Name).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.PriceDelta).HasColumnType("decimal(18,2)");
+            entity.HasOne(x => x.AddonGroup)
+                .WithMany(x => x.Options)
+                .HasForeignKey(x => x.AddonGroupId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

@@ -950,6 +950,113 @@ public record SaveOperatorPromoRequest(
 
 public record OperatorPromoListResponse(IReadOnlyList<OperatorPromoItem> Items);
 
+public record MerchantOperatingHourItem(
+    int DayOfWeek,
+    bool IsClosed,
+    string? OpenTime,
+    string? CloseTime);
+
+public record MerchantListItem(
+    Guid Id,
+    string BusinessName,
+    string ContactPerson,
+    string PinnedAddress,
+    bool ManagedByMerchant,
+    string Mobile,
+    string Email,
+    string? LogoUrl,
+    string? BackgroundUrl,
+    bool IsActive,
+    int SortOrder,
+    DateTime CreatedAtUtc);
+
+public record MerchantDetailItem(
+    Guid Id,
+    string BusinessName,
+    string ContactPerson,
+    double Latitude,
+    double Longitude,
+    string PinnedAddress,
+    bool ManagedByMerchant,
+    string Mobile,
+    string Email,
+    string? LogoUrl,
+    string? BackgroundUrl,
+    bool IsActive,
+    int SortOrder,
+    IReadOnlyList<MerchantOperatingHourItem> OperatingHours,
+    DateTime CreatedAtUtc);
+
+public record SaveMerchantRequest(
+    string BusinessName,
+    string ContactPerson,
+    double Latitude,
+    double Longitude,
+    string PinnedAddress,
+    bool ManagedByMerchant,
+    string? Mobile,
+    string? Email,
+    string? Password,
+    bool IsActive,
+    int SortOrder,
+    IReadOnlyList<MerchantOperatingHourItem>? OperatingHours);
+
+public record MerchantListResponse(IReadOnlyList<MerchantListItem> Items);
+
+public record MerchantProductCategoryItem(
+    Guid Id,
+    string Name,
+    int SortOrder,
+    bool IsActive);
+
+public record SaveMerchantProductCategoryRequest(
+    string Name,
+    int SortOrder,
+    bool IsActive);
+
+public record ProductAddonOptionItem(
+    Guid? Id,
+    string Name,
+    decimal PriceDelta,
+    int SortOrder,
+    bool IsActive);
+
+public record ProductAddonGroupItem(
+    Guid? Id,
+    string Name,
+    int MinSelect,
+    int MaxSelect,
+    int SortOrder,
+    bool IsActive,
+    IReadOnlyList<ProductAddonOptionItem> Options);
+
+public record MerchantProductItem(
+    Guid Id,
+    Guid MerchantId,
+    Guid? CategoryId,
+    string? CategoryName,
+    string Name,
+    string Description,
+    decimal BasePrice,
+    bool AvailableOnStorefront,
+    int SortOrder,
+    string? ImageUrl,
+    IReadOnlyList<ProductAddonGroupItem> AddonGroups);
+
+public record SaveMerchantProductRequest(
+    Guid? CategoryId,
+    string Name,
+    string Description,
+    decimal BasePrice,
+    bool AvailableOnStorefront,
+    int SortOrder);
+
+public record SaveProductAddonsRequest(IReadOnlyList<ProductAddonGroupItem> Groups);
+
+public record MerchantProductListResponse(IReadOnlyList<MerchantProductItem> Items);
+
+public record MerchantCategoryListResponse(IReadOnlyList<MerchantProductCategoryItem> Items);
+
 public record DeriveFareLatLng(double Lat, double Lng);
 
 public record DeriveFareZoneListItem(
