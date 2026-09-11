@@ -265,7 +265,7 @@ export const OPERATOR_MENU_GROUPS: SideNavGroup[] = [
       { id: 'merchants', label: 'Merchant', icon: '◇' },
       { id: 'product-categories', label: 'Product Categories', icon: '☰' },
       { id: 'pabili-matrix', label: 'Pabili Matrix', icon: '₱' },
-      { id: 'pabili-riders', label: 'Rider', icon: '▣', pending: true },
+      { id: 'pabili-riders', label: 'Rider', icon: '▣' },
       { id: 'pabili-customers', label: 'Customer', icon: '☺', pending: true },
       { id: 'pabili-surcharges', label: 'Surcharge', icon: '+' },
       { id: 'pabili-commission', label: 'Commission Report', icon: '％', pending: true },

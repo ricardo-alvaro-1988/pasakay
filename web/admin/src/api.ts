@@ -122,6 +122,8 @@ export type RiderListItem = {
   vehicleFranchiseNumber: string
   vehicleModel: string | null
   isActive: boolean
+  acceptsPasakay?: boolean
+  acceptsPabili?: boolean
   licenseType: string
   licenseNumber: string
   profilePhotoUrl: string | null
@@ -2166,6 +2168,18 @@ export const api = {
     }),
   deleteOperatorPabiliSurcharge: (id: string) =>
     request<PabiliSurchargeList>(`/api/operator/pabili-surcharges/${id}/delete`, { method: 'POST' }),
+  operatorPabiliRiders: (q = '', page = 1, pageSize = 10) =>
+    request<Paged<RiderListItem>>(
+      `/api/operator/pabili-riders?q=${encodeURIComponent(q)}&page=${page}&pageSize=${pageSize}`,
+    ),
+  operatorPabiliRiderCandidates: (q = '', page = 1, pageSize = 10) =>
+    request<Paged<RiderListItem>>(
+      `/api/operator/pabili-riders/candidates?q=${encodeURIComponent(q)}&page=${page}&pageSize=${pageSize}`,
+    ),
+  linkOperatorPabiliRider: (id: string) =>
+    request<RiderListItem>(`/api/operator/pabili-riders/${id}/link`, { method: 'POST' }),
+  unlinkOperatorPabiliRider: (id: string) =>
+    request<RiderListItem>(`/api/operator/pabili-riders/${id}/unlink`, { method: 'POST' }),
   createOperatorMerchantAddonGroup: (merchantId: string, body: ProductAddonGroupItem) =>
     request<ProductAddonGroupItem>(`/api/operator/merchants/${merchantId}/addon-groups`, {
       method: 'POST',

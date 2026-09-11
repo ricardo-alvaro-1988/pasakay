@@ -207,6 +207,7 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             .Include(x => x.Operator)
             .Where(x => x.OperatorId == operatorId
                 && x.IsActive
+                && x.AcceptsPasakay
                 && x.IsOnline
                 && x.AppUser.IsActive)
             .ToListAsync(cancellationToken);

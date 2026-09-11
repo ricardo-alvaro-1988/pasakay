@@ -393,6 +393,24 @@ public static class MerchantCatalogBootstrap
             """, cancellationToken);
     }
 
+    public static async Task EnsurePabiliRiderFlagsAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        await db.Database.ExecuteSqlRawAsync("""
+            IF COL_LENGTH(N'RiderProfiles', N'AcceptsPasakay') IS NULL
+                ALTER TABLE [RiderProfiles] ADD [AcceptsPasakay] bit NOT NULL CONSTRAINT [DF_RiderProfiles_AcceptsPasakay] DEFAULT (1);
+
+            IF COL_LENGTH(N'RiderProfiles', N'AcceptsPabili') IS NULL
+                ALTER TABLE [RiderProfiles] ADD [AcceptsPabili] bit NOT NULL CONSTRAINT [DF_RiderProfiles_AcceptsPabili] DEFAULT (0);
+
+            IF NOT EXISTS (
+                SELECT 1 FROM [__EFMigrationsHistory]
+                WHERE [MigrationId] = N'20260911073842_PabiliRiderFlags'
+            )
+                INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+                VALUES (N'20260911073842_PabiliRiderFlags', N'9.0.8');
+            """, cancellationToken);
+    }
+
     public static async Task<bool> HasMerchantsTableAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
         var conn = db.Database.GetDbConnection();

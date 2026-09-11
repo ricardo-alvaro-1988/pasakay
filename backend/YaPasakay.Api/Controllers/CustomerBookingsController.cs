@@ -824,7 +824,7 @@ public class CustomerBookingsController(
             .Include(x => x.AppUser)
             .Include(x => x.Wallet)
             .Include(x => x.PaymentMethods)
-            .Where(x => x.OperatorId == operatorId && x.IsActive && x.AppUser.IsActive && x.VehicleType == vehicleType)
+            .Where(x => x.OperatorId == operatorId && x.IsActive && x.AcceptsPasakay && x.AppUser.IsActive && x.VehicleType == vehicleType)
             .ToListAsync(cancellationToken);
         riders = riders.Where(x => x.PaymentMethods.Any(m => m.Method == payment)).ToList();
         if (excludeHailed)
@@ -883,7 +883,7 @@ public class CustomerBookingsController(
             .Include(x => x.PaymentMethods)
             .Include(x => x.Wallet)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-        if (rider is null || !rider.IsActive || !rider.AppUser.IsActive || rider.Operator is null || !rider.Operator.IsActive)
+        if (rider is null || !rider.IsActive || !rider.AcceptsPasakay || !rider.AppUser.IsActive || rider.Operator is null || !rider.Operator.IsActive)
         {
             return (null, "This QR is not a Ya! Pasakay rider.");
         }

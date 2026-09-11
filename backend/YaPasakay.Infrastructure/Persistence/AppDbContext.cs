@@ -111,6 +111,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.PlateNumber).HasMaxLength(20).IsRequired();
             entity.Property(x => x.VehicleFranchiseNumber).HasMaxLength(40).IsRequired();
             entity.Property(x => x.CredibilityScore).HasDefaultValue(100);
+            entity.Property(x => x.AcceptsPasakay).HasDefaultValue(true);
+            entity.Property(x => x.AcceptsPabili).HasDefaultValue(false);
             entity.Property(x => x.VehicleModel).HasMaxLength(80);
             entity.Property(x => x.LicenseType).HasMaxLength(60);
             entity.Property(x => x.LicenseNumber).HasMaxLength(80);

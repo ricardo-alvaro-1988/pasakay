@@ -127,6 +127,7 @@ import TripLiveMap from './TripLiveMap'
 import { DeriveZoneMap } from './DeriveZoneMap'
 import { OperatorMerchantsPage } from './OperatorMerchantsPage'
 import { OperatorPabiliMatrixPage } from './OperatorPabiliMatrixPage'
+import { OperatorPabiliRidersPage } from './OperatorPabiliRidersPage'
 import { OperatorPabiliSurchargesPage } from './OperatorPabiliSurchargesPage'
 import { OperatorProductCategoriesPage } from './OperatorProductCategoriesPage'
 import {
@@ -7289,7 +7290,12 @@ function OperatorShell({
         )}
         {page === 'pabili-matrix' && <OperatorPabiliMatrixPage />}
         {page === 'pabili-riders' && (
-          <ComingSoon title="Pabili riders" body="Rider assignment and availability for Pabili will live here." />
+          <OperatorPabiliRidersPage
+            onOpenRider={(id) => {
+              sessionStorage.setItem('op-focus-rider', id)
+              setPage('riders')
+            }}
+          />
         )}
         {page === 'pabili-customers' && (
           <ComingSoon title="Pabili customers" body="Customer tools for Pabili will live here." />
@@ -9293,6 +9299,15 @@ function OperatorRidersPage() {
   const [view, setView] = useState<'list' | 'create' | 'detail' | 'edit' | 'invite' | 'applications' | 'application'>('list')
   const [riderId, setRiderId] = useState<string | null>(null)
   const [applicationId, setApplicationId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const focusId = sessionStorage.getItem('op-focus-rider')
+    if (!focusId) return
+    sessionStorage.removeItem('op-focus-rider')
+    setRiderId(focusId)
+    setView('detail')
+  }, [])
+
   if (view === 'create') {
     return <OperatorRiderForm onDone={(id) => { setRiderId(id); setView('detail') }} onCancel={() => setView('list')} />
   }
@@ -9426,7 +9441,14 @@ function OperatorRiderList({
                 <td>
                   <div className="person-cell">
                     <ClickableAvatar name={row.fullName} photoUrl={row.profilePhotoUrl} />
-                    <strong>{row.fullName}</strong>
+                    <div>
+                      <strong>{row.fullName}</strong>
+                      {row.acceptsPabili ? (
+                        <div className="tag-row" style={{ marginTop: 4 }}>
+                          <span className="tag kind">Pabili</span>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </td>
                 <td>{row.phoneNumber}</td>
@@ -10273,6 +10295,7 @@ function OperatorRiderDetail({ riderId, onBack, onEdit }: { riderId: string; onB
             <div className="tag-row" style={{ marginTop: 10 }}>
               <VehicleTag type={rider.vehicleType} />
               <StatusTag active={rider.isActive} />
+              {rider.acceptsPabili ? <span className="tag kind">Pabili</span> : null}
               {rider.acceptedPaymentMethods.map((method) => {
                 const normalized = normalizePaymentMethod(method)
                 return normalized ? <PaymentMethodTag key={normalized} method={normalized} /> : null

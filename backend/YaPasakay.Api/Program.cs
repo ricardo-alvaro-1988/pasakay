@@ -143,6 +143,7 @@ using (var scope = app.Services.CreateScope())
         await MerchantCatalogBootstrap.EnsureAddonLibraryAsync(db);
         await MerchantCatalogBootstrap.EnsureDualPricingAsync(db);
         await MerchantCatalogBootstrap.EnsurePabiliMatrixAsync(db);
+        await MerchantCatalogBootstrap.EnsurePabiliRiderFlagsAsync(db);
     }
     catch (Exception schemaEx)
     {

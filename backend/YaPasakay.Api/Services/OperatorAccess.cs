@@ -153,6 +153,11 @@ public static class OperatorAccess
             return "pabili-surcharges";
         }
 
+        if (value.StartsWith("/api/operator/pabili-riders"))
+        {
+            return "pabili-riders";
+        }
+
         if (value.StartsWith("/api/operator/support"))
         {
             return "support";

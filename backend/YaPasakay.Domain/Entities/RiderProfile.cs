@@ -27,6 +27,10 @@ public class RiderProfile : BaseEntity
     public bool IsOnline { get; set; }
     public DateTime? OnlineAtUtc { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>Eligible for Pasakay trip dispatch (default true).</summary>
+    public bool AcceptsPasakay { get; set; } = true;
+    /// <summary>Linked into the operator Pabili rider pool (default false).</summary>
+    public bool AcceptsPabili { get; set; }
     public int RiderCancelCount { get; set; }
     public int CredibilityScore { get; set; } = 100;
     public ICollection<Trip> Trips { get; set; } = new List<Trip>();
