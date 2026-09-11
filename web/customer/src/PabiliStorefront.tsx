@@ -89,6 +89,34 @@ function lineTotal(line: CartLine) {
 const FALLBACK_LAT = 14.5995
 const FALLBACK_LNG = 120.9842
 const HOME_CATEGORIES = ['Food', 'Groceries', 'Gadgets', 'Drinks', 'Pharmacy', 'Pets'] as const
+const PABILI_CART_KEY = 'yapasakay-pabili-cart'
+
+function readPersistedCart(): { storeId: string | null; lines: CartLine[] } {
+  try {
+    const raw = sessionStorage.getItem(PABILI_CART_KEY)
+    if (!raw) return { storeId: null, lines: [] }
+    const parsed = JSON.parse(raw) as { storeId?: unknown; lines?: unknown }
+    if (!Array.isArray(parsed.lines)) return { storeId: null, lines: [] }
+    return {
+      storeId: typeof parsed.storeId === 'string' ? parsed.storeId : null,
+      lines: parsed.lines as CartLine[],
+    }
+  } catch {
+    return { storeId: null, lines: [] }
+  }
+}
+
+function writePersistedCart(storeId: string | null, lines: CartLine[]) {
+  try {
+    if (!lines.length) {
+      sessionStorage.removeItem(PABILI_CART_KEY)
+      return
+    }
+    sessionStorage.setItem(PABILI_CART_KEY, JSON.stringify({ storeId, lines }))
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
 
 function shuffleAds<T>(items: T[]) {
   const next = [...items]
@@ -148,7 +176,7 @@ export function PabiliStorefront({
   const [suggestOpen, setSuggestOpen] = useState(false)
   const suggestTimer = useRef<number | null>(null)
   const [store, setStore] = useState<Store | null>(null)
-  const [cart, setCart] = useState<CartLine[]>([])
+  const [cart, setCart] = useState<CartLine[]>(() => readPersistedCart().lines)
   const [gps, setGps] = useState<{ lat: number; lng: number }>(() => {
     const cached = lastKnownGps()
     if (cached) return { lat: cached.lat, lng: cached.lng }
@@ -181,6 +209,27 @@ export function PabiliStorefront({
   const cartCount = cart.reduce((s, x) => s + x.quantity, 0)
   const cartGoods = useMemo(() => cart.reduce((s, x) => s + lineTotal(x), 0), [cart])
   const storeCategories = store?.categories ?? []
+
+  useEffect(() => {
+    writePersistedCart(store?.id ?? readPersistedCart().storeId, cart)
+  }, [cart, store?.id])
+
+  useEffect(() => {
+    const persisted = readPersistedCart()
+    if (!persisted.storeId || !persisted.lines.length) return
+    let dead = false
+    void (async () => {
+      try {
+        const row = await api.pabiliStore(persisted.storeId!)
+        if (!dead) setStore(row)
+      } catch {
+        /* keep cart lines; store can be reopened */
+      }
+    })()
+    return () => {
+      dead = true
+    }
+  }, [])
 
   useEffect(() => {
     let dead = false
@@ -511,6 +560,7 @@ export function PabiliStorefront({
       })
       setOrder(row)
       setCart([])
+      writePersistedCart(null, [])
       setView('track')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not place order.')

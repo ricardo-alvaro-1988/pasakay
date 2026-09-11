@@ -78,6 +78,9 @@ public class CustomerPabiliController(
             return Ok(Array.Empty<CustomerPabiliPopularProduct>());
         }
 
+        const int topPurchased = 6;
+        const int maxPopular = 8;
+
         var merchants = await db.Merchants
             .AsNoTracking()
             .Include(x => x.OperatingHours)
@@ -88,24 +91,63 @@ public class CustomerPabiliController(
             .Take(40)
             .ToListAsync(cancellationToken);
 
-        IEnumerable<(Merchant Merchant, MerchantProduct Product)> pairs = merchants
+        var available = merchants
             .SelectMany(m => m.Products
                 .Where(p => PabiliPricingService.IsProductAvailableNow(p))
-                .OrderBy(p => p.SortOrder)
-                .ThenBy(p => p.Name)
-                .Select(p => (m, p)));
+                .Select(p => (Merchant: m, Product: p)))
+            .ToList();
 
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = q.Trim();
-            pairs = pairs.Where(x =>
+            available = available.Where(x =>
                 x.Product.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
                 || x.Product.Description.Contains(term, StringComparison.OrdinalIgnoreCase)
-                || x.Merchant.BusinessName.Contains(term, StringComparison.OrdinalIgnoreCase));
+                || x.Merchant.BusinessName.Contains(term, StringComparison.OrdinalIgnoreCase)).ToList();
         }
 
-        var items = pairs
-            .Take(24)
+        var byProductId = available.ToDictionary(x => x.Product.Id);
+
+        var topIds = await db.PabiliOrderItems
+            .AsNoTracking()
+            .Where(x =>
+                x.ProductId != null
+                && x.Order.OperatorId == op.Id
+                && x.Order.Status != PabiliOrderStatus.Cancelled)
+            .GroupBy(x => x.ProductId!.Value)
+            .Select(g => new { ProductId = g.Key, Qty = g.Sum(i => i.Quantity) })
+            .OrderByDescending(x => x.Qty)
+            .ThenByDescending(x => x.ProductId)
+            .Take(topPurchased * 4)
+            .ToListAsync(cancellationToken);
+
+        var picked = new List<(Merchant Merchant, MerchantProduct Product)>(maxPopular);
+        var seen = new HashSet<Guid>();
+        foreach (var row in topIds)
+        {
+            if (picked.Count >= topPurchased) break;
+            if (!byProductId.TryGetValue(row.ProductId, out var pair)) continue;
+            if (!seen.Add(pair.Product.Id)) continue;
+            picked.Add(pair);
+        }
+
+        var fillNeeded = maxPopular - picked.Count;
+        if (fillNeeded > 0)
+        {
+            var filler = available
+                .Where(x => !seen.Contains(x.Product.Id))
+                .OrderBy(_ => Random.Shared.Next())
+                .Take(fillNeeded)
+                .ToList();
+            foreach (var pair in filler)
+            {
+                seen.Add(pair.Product.Id);
+                picked.Add(pair);
+            }
+        }
+
+        var items = picked
+            .Take(maxPopular)
             .Select(x => new CustomerPabiliPopularProduct(
                 x.Product.Id,
                 x.Merchant.Id,

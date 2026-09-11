@@ -3325,22 +3325,22 @@ button.where-toggle .where { pointer-events: none; }
 }
 .pb-cart-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 .pb-line {
   display: grid;
-  grid-template-columns: 68px minmax(0, 1fr) auto;
-  gap: 12px;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 8px;
   align-items: start;
   background: #fff;
-  border-radius: 16px;
-  padding: 12px;
+  border-radius: 14px;
+  padding: 8px 10px;
   box-shadow: 0 6px 16px color-mix(in srgb, #000 5%, transparent);
 }
 .pb-line-img {
-  width: 68px;
-  height: 68px;
-  border-radius: 12px;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
   overflow: hidden;
   background: #e8ebef;
 }
@@ -3353,17 +3353,22 @@ button.where-toggle .where { pointer-events: none; }
 }
 .pb-line-copy {
   display: grid;
-  gap: 2px;
+  gap: 0;
   align-content: start;
   min-width: 0;
 }
 .pb-line-copy b {
   font-size: 13px;
   font-weight: 800;
-  line-height: 1.3;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.pb-line-copy > small {
+  display: block;
+  margin: 0;
+  line-height: 1.25;
 }
 .pb-line-addons {
   overflow: hidden;
@@ -3373,13 +3378,14 @@ button.where-toggle .where { pointer-events: none; }
 .pb-line-total {
   text-align: right;
   display: grid;
-  gap: 8px;
+  gap: 4px;
   justify-items: end;
   align-content: start;
 }
 .pb-line-total b {
   font-size: 13px;
   font-weight: 800;
+  line-height: 1.2;
 }
 .pb-line-remove {
   border: 0;
@@ -3396,7 +3402,7 @@ button.where-toggle .where { pointer-events: none; }
   display: inline-flex;
   align-items: center;
   gap: 0;
-  margin-top: 8px;
+  margin-top: 4px;
   border-radius: 999px;
   background: #f1f4f7;
   overflow: hidden;
@@ -3636,9 +3642,9 @@ button.where-toggle .where { pointer-events: none; }
   overflow: auto;
   background: #fff;
   border-radius: 18px;
-  padding: 14px;
+  padding: 12px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 .pb-sheet-close {
   justify-self: start;
@@ -3657,13 +3663,33 @@ button.where-toggle .where { pointer-events: none; }
   object-fit: cover;
   object-position: center;
 }
-.pb-addon-group { display: grid; gap: 6px; }
+.pb-sheet-card > h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+.pb-sheet-card > .muted {
+  margin: 0;
+  line-height: 1.3;
+}
+.pb-sheet-card > .pb-price {
+  margin: 0;
+  line-height: 1.2;
+}
+.pb-addon-group {
+  display: grid;
+  gap: 4px;
+}
+.pb-addon-group > b {
+  font-size: 13px;
+  line-height: 1.25;
+}
 .pb-addon {
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 8px;
   align-items: center;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border-radius: 10px;
   background: #f4f6f8;
 }
