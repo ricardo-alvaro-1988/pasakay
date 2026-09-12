@@ -7,10 +7,13 @@ import {
   MapHandle,
   DirectionsRendererHandle,
   MarkerHandle,
+  OverlayHandle,
   reverseGeocode,
   searchPlaces,
   placeDetails,
   geocodeText,
+  pulseStopPin,
+  stopDragIcon,
   Prediction,
 } from './maps'
 import { lastKnownGps, readGps, readPickupGps } from './gps'
@@ -90,6 +93,26 @@ const FALLBACK_LAT = 14.5995
 const FALLBACK_LNG = 120.9842
 const HOME_CATEGORIES = ['Food', 'Groceries', 'Gadgets', 'Drinks', 'Pharmacy', 'Pets'] as const
 const PABILI_CART_KEY = 'yapasakay-pabili-cart'
+
+const ORDER_STATUS_GROUPS: Array<{ key: string; title: string; statuses: string[] }> = [
+  { key: 'active', title: 'Active', statuses: ['Pending', 'Waiting', 'PickedUp', 'Delivering'] },
+  { key: 'completed', title: 'Completed', statuses: ['Completed'] },
+  { key: 'cancelled', title: 'Cancelled', statuses: ['Cancelled'] },
+]
+
+function orderStatusClass(status: string) {
+  const s = status.toLowerCase()
+  if (s === 'completed') return 'done'
+  if (s === 'cancelled') return 'cancelled'
+  if (s === 'delivering' || s === 'pickedup') return 'live'
+  if (s === 'waiting') return 'waiting'
+  return 'pending'
+}
+
+function orderStatusLabel(status: string) {
+  if (status === 'PickedUp') return 'Picked up'
+  return status
+}
 
 function readPersistedCart(): { storeId: string | null; lines: CartLine[] } {
   try {
@@ -209,6 +232,7 @@ export function PabiliStorefront({
   const [sheetPicks, setSheetPicks] = useState<Record<string, string[]>>({})
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
   const [paymentRef, setPaymentRef] = useState('')
+  const [paymentRefInvalid, setPaymentRefInvalid] = useState(false)
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
   const [storeSearch, setStoreSearch] = useState('')
   const [error, setError] = useState('')
@@ -660,11 +684,13 @@ export function PabiliStorefront({
   async function placeOrder() {
     if (!store || !cart.length) return
     if (payment !== 'Cash' && !paymentRef.trim()) {
+      setPaymentRefInvalid(true)
       setError('Enter the payment reference number.')
       return
     }
     setBusy(true)
     setError('')
+    setPaymentRefInvalid(false)
     try {
       const row = await api.pabiliPlace({
         merchantId: store.id,
@@ -680,14 +706,25 @@ export function PabiliStorefront({
         })),
       })
       setOrder(row)
+      setOrders((prev) => [row, ...prev.filter((x) => x.id !== row.id)])
       setCart([])
       writePersistedCart(null, [])
       setPaymentRef('')
-      setView('track')
+      setPaymentRefInvalid(false)
+      setView('orders')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not place order.')
     } finally {
       setBusy(false)
+    }
+  }
+
+  async function refreshOrdersSilent() {
+    try {
+      const rows = await api.pabiliOrders()
+      setOrders(rows)
+    } catch {
+      /* keep current list */
     }
   }
 
@@ -710,6 +747,7 @@ export function PabiliStorefront({
     try {
       const row = await api.pabiliOrder(id)
       setOrder(row)
+      setOrders((prev) => prev.map((x) => (x.id === row.id ? row : x)))
       setView('track')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Order not found.')
@@ -724,6 +762,7 @@ export function PabiliStorefront({
     try {
       const row = await api.pabiliCancelOrder(order.id)
       setOrder(row)
+      setOrders((prev) => prev.map((x) => (x.id === row.id ? row : x)))
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not cancel.')
     } finally {
@@ -735,10 +774,35 @@ export function PabiliStorefront({
     if (view !== 'track' || !order) return
     if (order.status === 'Completed' || order.status === 'Cancelled') return
     const timer = window.setInterval(() => {
-      void api.pabiliOrder(order.id).then(setOrder).catch(() => undefined)
-    }, 8000)
+      void api.pabiliOrder(order.id).then((row) => {
+        setOrder(row)
+        setOrders((prev) => prev.map((x) => (x.id === row.id ? row : x)))
+      }).catch(() => undefined)
+    }, 5000)
     return () => window.clearInterval(timer)
   }, [view, order?.id, order?.status])
+
+  useEffect(() => {
+    if (view !== 'orders') return
+    void refreshOrdersSilent()
+    const timer = window.setInterval(() => {
+      void refreshOrdersSilent()
+    }, 5000)
+    return () => window.clearInterval(timer)
+  }, [view])
+
+  const ordersByStatus = useMemo(() => {
+    const known = new Set(ORDER_STATUS_GROUPS.flatMap((g) => g.statuses))
+    const groups = ORDER_STATUS_GROUPS.map((g) => ({
+      ...g,
+      items: orders.filter((o) => g.statuses.includes(o.status)),
+    }))
+    const other = orders.filter((o) => !known.has(o.status))
+    if (other.length) {
+      groups.push({ key: 'other', title: 'Other', statuses: [], items: other })
+    }
+    return groups.filter((g) => g.items.length > 0)
+  }, [orders])
 
   const filteredProducts = useMemo(() => {
     if (!store) return []
@@ -760,11 +824,16 @@ export function PabiliStorefront({
   const cartNavOn = view === 'cart' || view === 'checkout'
 
   return (
-    <div className="pb-shell">
-      <div className={`pb-topbar${view === 'store' ? ' has-back' : ''}`}>
+    <div className={`pb-shell${view === 'track' ? ' is-track' : ''}`}>
+      <div className={`pb-topbar${view === 'store' || view === 'track' ? ' has-back' : ''}`}>
         {view === 'store' ? (
           <button type="button" className="pb-back-link" onClick={() => setView('home')}>
             ← Back
+          </button>
+        ) : null}
+        {view === 'track' ? (
+          <button type="button" className="pb-back-link pb-track-title" onClick={() => void loadOrders()}>
+            ← Order track
           </button>
         ) : null}
         <div className="pb-mode pb-mode-sm">
@@ -1154,7 +1223,10 @@ export function PabiliStorefront({
                       className={payment === item.method ? 'on' : ''}
                       onClick={() => {
                         setPayment(item.method)
-                        if (item.method === 'Cash') setPaymentRef('')
+                        if (item.method === 'Cash') {
+                          setPaymentRef('')
+                          setPaymentRefInvalid(false)
+                        }
                       }}
                     >
                       {item.label || item.method}
@@ -1172,15 +1244,22 @@ export function PabiliStorefront({
                   )
                 })()}
                 {payment !== 'Cash' ? (
-                  <label className="pb-pay-ref">
+                  <label className={`pb-pay-ref${paymentRefInvalid ? ' invalid' : ''}`}>
                     <span>Reference number</span>
                     <input
                       value={paymentRef}
-                      onChange={(e) => setPaymentRef(e.target.value)}
+                      onChange={(e) => {
+                        setPaymentRef(e.target.value)
+                        if (paymentRefInvalid) setPaymentRefInvalid(false)
+                      }}
                       placeholder="Enter wallet / transfer reference"
                       autoComplete="off"
                       inputMode="text"
+                      aria-invalid={paymentRefInvalid}
                     />
+                    {paymentRefInvalid ? (
+                      <small className="pb-pay-ref-error">Enter the payment reference number.</small>
+                    ) : null}
                   </label>
                 ) : null}
               </section>
@@ -1224,14 +1303,24 @@ export function PabiliStorefront({
           <div className="pb-page-head">
             <h2>Orders</h2>
           </div>
-          {orders.map((o) => (
-            <button key={o.id} type="button" className="pb-order-row" onClick={() => void openOrder(o.id)}>
-              <div>
-                <b>{o.reference}</b>
-                <div className="muted">{o.status} · {o.merchantName}</div>
-              </div>
-              <b>{peso(o.customerTotal)}</b>
-            </button>
+          {ordersByStatus.map((group) => (
+            <section key={group.key} className="pb-order-group">
+              <h3 className="pb-order-group-title">{group.title}</h3>
+              {group.items.map((o) => (
+                <button key={o.id} type="button" className="pb-order-row" onClick={() => void openOrder(o.id)}>
+                  <div className="pb-order-main">
+                    <div className="pb-order-top">
+                      <b>{o.reference}</b>
+                      <span className={`pb-status-tag ${orderStatusClass(o.status)}`}>
+                        {orderStatusLabel(o.status)}
+                      </span>
+                    </div>
+                    <div className="muted">{o.merchantName}</div>
+                  </div>
+                  <b className="pb-order-total">{peso(o.customerTotal)}</b>
+                </button>
+              ))}
+            </section>
           ))}
           {!orders.length ? <p className="muted">No Pabili orders yet.</p> : null}
         </main>
@@ -1239,17 +1328,18 @@ export function PabiliStorefront({
 
       {view === 'track' && order && (
         <main className="pb-track">
-          <div className="pb-page-head overlay">
-            <button type="button" className="ghost" onClick={() => setView('orders')}>←</button>
-            <h2>Order track</h2>
-          </div>
           <OrderTrackMap order={order} />
           <div className="pb-rider-card">
             <div className="pb-rider-row">
               <div className="pb-rider-avatar">{(order.riderName ?? '?').slice(0, 1)}</div>
               <div>
-                <b>{order.riderName ?? 'Finding rider…'}</b>
-                <div className="muted">{order.status} · {order.reference}</div>
+                <div className="pb-track-head">
+                  <b>{order.riderName ?? 'Finding rider…'}</b>
+                  <span className={`pb-status-tag ${orderStatusClass(order.status)}`}>
+                    {orderStatusLabel(order.status)}
+                  </span>
+                </div>
+                <div className="muted">{order.reference}</div>
                 <div className="muted">{order.merchantName}</div>
                 <div className="muted">
                   {order.paymentMethod}
@@ -1491,6 +1581,7 @@ function OrderTrackMap({ order }: { order: OrderDetail }) {
   const mapRef = useRef<MapHandle | null>(null)
   const routeRef = useRef<DirectionsRendererHandle | null>(null)
   const markers = useRef<MarkerHandle[]>([])
+  const overlays = useRef<OverlayHandle[]>([])
 
   useEffect(() => {
     let dead = false
@@ -1508,9 +1599,26 @@ function OrderTrackMap({ order }: { order: OrderDetail }) {
         })
         mapRef.current = map
         markers.current.forEach((m) => m.setMap(null))
+        overlays.current.forEach((o) => o.setMap(null))
+        overlays.current = [
+          pulseStopPin(maps, map, { lat: order.pickupLat, lng: order.pickupLng }, 'pickup'),
+          pulseStopPin(maps, map, { lat: order.dropoffLat, lng: order.dropoffLng }, 'dropoff'),
+        ]
         markers.current = [
-          new maps.Marker({ map, position: { lat: order.pickupLat, lng: order.pickupLng }, title: 'Pickup' }),
-          new maps.Marker({ map, position: { lat: order.dropoffLat, lng: order.dropoffLng }, title: 'Drop-off' }),
+          new maps.Marker({
+            map,
+            position: { lat: order.pickupLat, lng: order.pickupLng },
+            title: 'Pickup',
+            icon: stopDragIcon(maps),
+            zIndex: 6,
+          }),
+          new maps.Marker({
+            map,
+            position: { lat: order.dropoffLat, lng: order.dropoffLng },
+            title: 'Drop-off',
+            icon: stopDragIcon(maps),
+            zIndex: 6,
+          }),
         ]
         routeRef.current = drawDrivingRoute(
           maps,
@@ -1527,6 +1635,8 @@ function OrderTrackMap({ order }: { order: OrderDetail }) {
       dead = true
       markers.current.forEach((m) => m.setMap(null))
       markers.current = []
+      overlays.current.forEach((o) => o.setMap(null))
+      overlays.current = []
     }
   }, [order.id, order.pickupLat, order.pickupLng, order.dropoffLat, order.dropoffLng])
 
