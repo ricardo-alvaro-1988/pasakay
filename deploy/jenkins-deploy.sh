@@ -166,7 +166,7 @@ write_release_metadata
 
 trap - EXIT
 
-${sudo_cmd} rm -f "${package}" /tmp/yapasakay-jenkins-deploy.sh || true
+${sudo_cmd} rm -f "${package}" "$0" || true
 ${sudo_cmd} find "${release_root}" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' \
     | sort -n \
     | head -n -5 \
