@@ -5,6 +5,7 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '20'))
         disableConcurrentBuilds()
         timestamps()
+        skipDefaultCheckout(true)
     }
 
     triggers {
@@ -15,7 +16,7 @@ pipeline {
     environment {
         APP_NAME = 'yapasakay'
         DEPLOY_HOST = 'yapasakay.com'
-        PASAKAY_RELEASE_FILE = '/var/lib/yapasakay/release.json'
+        PRODUCTION_RELEASE_FILE = '/var/lib/pricebadz/release.json'
         SSH_CREDENTIALS_ID = 'yapasakay-prod-ssh'
         DOTNET_CLI_TELEMETRY_OPTOUT = '1'
         DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
@@ -24,7 +25,11 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                script {
+                    def checkoutInfo = checkout scm
+                    env.GIT_BRANCH = checkoutInfo.GIT_BRANCH
+                    env.GIT_COMMIT = checkoutInfo.GIT_COMMIT
+                }
                 sh 'git rev-parse --short HEAD > .git-short-sha'
             }
         }
@@ -93,12 +98,10 @@ pipeline {
             }
         }
 
-        stage('Deploy Production Sites') {
+        stage('Deploy Branch Sites') {
             when {
-                anyOf {
-                    branch 'main'
-                    branch 'master'
-                    expression { env.BRANCH_NAME == null || env.BRANCH_NAME == '' }
+                expression {
+                    !env.CHANGE_ID && env.GIT_BRANCH in ['main', 'origin/main', 'Staging', 'origin/Staging']
                 }
             }
             steps {
@@ -110,6 +113,7 @@ pipeline {
                     sh '''#!/usr/bin/env bash
                         set -euxo pipefail
 
+                        bash deploy/branch-targets.sh "${GIT_BRANCH}" > .jenkins/targets
                         package="$(cat .jenkins/package/name)"
                         ssh_opts="-i ${SSH_KEY} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
@@ -120,22 +124,18 @@ pipeline {
 
                             echo "Deploying ${target_name} to ${target_host}:${deploy_path}"
                             remote_package="/tmp/${target_name}-${package}"
+                            remote_script="/tmp/${target_name}-deploy-${BUILD_NUMBER}-${GIT_COMMIT}.sh"
                             version_source_file=""
-                            if [ "${target_name}" != "yapasakay" ]; then
-                                version_source_file="${PASAKAY_RELEASE_FILE}"
+                            if [ "${target_name}" = "pasakyaman" ] || [ "${target_name}" = "trygoride" ]; then
+                                version_source_file="${PRODUCTION_RELEASE_FILE}"
                             fi
 
                             scp ${ssh_opts} ".jenkins/package/${package}" "${SSH_USER}@${target_host}:${remote_package}"
-                            scp ${ssh_opts} deploy/jenkins-deploy.sh "${SSH_USER}@${target_host}:/tmp/yapasakay-jenkins-deploy.sh"
+                            scp ${ssh_opts} deploy/jenkins-deploy.sh "${SSH_USER}@${target_host}:${remote_script}"
 
                             ssh -n ${ssh_opts} "${SSH_USER}@${target_host}" \
-                                "bash /tmp/yapasakay-jenkins-deploy.sh '${remote_package}' '${deploy_path}' '${deploy_service}' '${BUILD_NUMBER}' '${GIT_COMMIT:-unknown}' '${target_name}' '${env_file}' '${health_url}' '${release_root}' '' '${version_source_file}'"
-                        done <<TARGETS
-yapasakay|${DEPLOY_HOST}|/var/www/yapasakay|yapasakay.service|/etc/yapasakay/yapasakay-api.env|http://127.0.0.1:5003/health|/var/www/releases/yapasakay
-pricebadz|${DEPLOY_HOST}|/var/www/pricebadz|pricebadz.service|/etc/pricebadz/pricebadz-api.env|http://127.0.0.1:5004/health|/var/www/releases/pricebadz
-pasakyaman|${DEPLOY_HOST}|/var/www/pasakyaman|pasakyaman.service|/etc/pasakyaman/pasakyaman-api.env|http://127.0.0.1:5005/health|/var/www/releases/pasakyaman
-trygoride|${DEPLOY_HOST}|/var/www/trygoride|trygoride.service|/etc/trygoride/trygoride-api.env|http://127.0.0.1:5006/health|/var/www/releases/trygoride
-TARGETS
+                                "bash '${remote_script}' '${remote_package}' '${deploy_path}' '${deploy_service}' '${BUILD_NUMBER}' '${GIT_COMMIT:-unknown}' '${target_name}' '${env_file}' '${health_url}' '${release_root}' '' '${version_source_file}'"
+                        done < .jenkins/targets
                     '''
                 }
             }
