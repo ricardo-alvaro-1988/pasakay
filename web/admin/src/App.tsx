@@ -11274,6 +11274,7 @@ function OperatorDeriveFaresPage() {
                   draft={draft}
                   rates={null}
                   single={slot.isCargo || slot.maxPassengers <= 1 || usesSinglePassengerFare(slot.vehicleType)}
+                  maxPassengers={slot.maxPassengers}
                   onChange={(patch) => {
                     setExtraDrafts((current) => {
                       const base = current[slot.code] ?? draft
@@ -11735,6 +11736,7 @@ function OperatorFaresPage() {
                   draft={draft}
                   rates={slot.rates}
                   single={slotSingle(slot)}
+                  maxPassengers={slot.maxPassengers}
                   onChange={(patch) => changeExtra(slot, patch)}
                   onRequestOffer={(apply) => requestOffer(slot.code, slot.name, slot.vehicleType, apply)}
                 />
@@ -11768,6 +11770,7 @@ function ExtraVehicleFareEditor({
   draft,
   rates,
   single: singleMode,
+  maxPassengers,
   onChange,
   onRequestOffer,
 }: {
@@ -11777,12 +11780,14 @@ function ExtraVehicleFareEditor({
   draft: FareDraft
   rates: FareRates | null
   single?: boolean
+  maxPassengers?: number
   onChange: (patch: Partial<FareDraft>) => void
   onRequestOffer?: (apply: () => void) => void
 }) {
   const total = commissionSum(systemPercent, draft)
   const single = singleMode ?? usesSinglePassengerFare(vehicle)
   const tier = draft.passengerTiers[0] ?? defaultTierDraft()
+  const seatCap = Math.max(1, maxPassengers ?? (single ? 1 : 12))
 
   function patchTier(tiers: FareTierDraft[]) {
     onChange({ passengerTiers: tiers })
@@ -11809,7 +11814,7 @@ function ExtraVehicleFareEditor({
         </div>
       </header>
       <div className="fare-vehicle-block">
-        <div className="fare-vehicle-label">{single ? 'Rates' : 'Passenger tiers'}</div>
+        <div className="fare-vehicle-label">{single ? 'Rates' : `Passenger tiers (max ${seatCap} seats)`}</div>
         {single ? (
           <div className="fare-tier-editor">
             <table className="fare-tier-table">
@@ -11835,7 +11840,11 @@ function ExtraVehicleFareEditor({
               <tbody>
                 {draft.passengerTiers.map((row, index) => (
                   <tr key={index}>
-                    <td><input value={row.passengerCount} onChange={(e) => patchTier(draft.passengerTiers.map((t, i) => i === index ? { ...t, passengerCount: e.target.value } : t))} /></td>
+                    <td><input value={row.passengerCount} onChange={(e) => {
+                      const raw = Math.floor(Number(e.target.value) || 1)
+                      const nextCount = String(Math.min(seatCap, Math.max(1, raw)))
+                      patchTier(draft.passengerTiers.map((t, i) => i === index ? { ...t, passengerCount: nextCount } : t))
+                    }} /></td>
                     <td><input value={row.baseFare} onChange={(e) => patchTier(draft.passengerTiers.map((t, i) => i === index ? { ...t, baseFare: e.target.value } : t))} /></td>
                     <td><input value={row.includedKm} onChange={(e) => patchTier(draft.passengerTiers.map((t, i) => i === index ? { ...t, includedKm: e.target.value } : t))} /></td>
                     <td><input value={row.perKm} onChange={(e) => patchTier(draft.passengerTiers.map((t, i) => i === index ? { ...t, perKm: e.target.value } : t))} /></td>
@@ -11851,10 +11860,12 @@ function ExtraVehicleFareEditor({
               type="button"
               className="btn tiny"
               style={{ marginTop: 8 }}
+              disabled={draft.passengerTiers.length >= seatCap}
               onClick={() => {
                 const used = new Set(draft.passengerTiers.map((t) => Number(t.passengerCount) || 0))
                 let nextCount = 1
-                while (used.has(nextCount)) nextCount += 1
+                while (used.has(nextCount) && nextCount <= seatCap) nextCount += 1
+                if (nextCount > seatCap) return
                 const last = draft.passengerTiers[draft.passengerTiers.length - 1] ?? defaultTierDraft()
                 patchTier([...draft.passengerTiers, { ...last, passengerCount: String(nextCount) }])
               }}

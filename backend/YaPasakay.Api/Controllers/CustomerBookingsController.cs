@@ -407,7 +407,15 @@ public class CustomerBookingsController(
             .Where(x => opIds.Contains(x.OperatorId)
                 && x.MunicipalityId == municipalityId
                 && x.IsActive)
-            .Select(x => new { x.OperatorId, x.VehicleType, x.VehicleCategoryId })
+            .Select(x => new
+            {
+                x.OperatorId,
+                x.VehicleType,
+                x.VehicleCategoryId,
+                MaxTier = x.PassengerTiers
+                    .Select(t => (int?)t.PassengerCount)
+                    .Max(),
+            })
             .ToListAsync(cancellationToken);
 
         var enabledOffers = await db.OperatorVehicleOffers
@@ -430,6 +438,46 @@ public class CustomerBookingsController(
             .Select(x => x.VehicleCategoryId!.Value)
             .ToHashSet();
 
+        // When pickup is inside a derive zone, seat caps come from that zone's passenger tiers.
+        var deriveTierByType = new Dictionary<VehicleType, int>();
+        if (request.PickupLat is double dLat && request.PickupLng is double dLng && dLat != 0 && dLng != 0)
+        {
+            var zones = await db.DeriveFareZones
+                .AsNoTracking()
+                .Include(x => x.Matrices)
+                .ThenInclude(x => x.PassengerTiers)
+                .Where(x => opIds.Contains(x.OperatorId) && x.IsActive)
+                .OrderByDescending(x => x.Priority)
+                .ThenByDescending(x => x.CreatedAtUtc)
+                .ToListAsync(cancellationToken);
+            foreach (var zone in zones)
+            {
+                var ring = GeoPolygon.Parse(zone.PolygonJson);
+                if (!GeoPolygon.Contains(ring, dLat, dLng))
+                {
+                    continue;
+                }
+
+                foreach (var matrix in zone.Matrices.Where(m => m.IsActive))
+                {
+                    var tierMax = matrix.PassengerTiers.Count > 0
+                        ? matrix.PassengerTiers.Max(t => t.PassengerCount)
+                        : 0;
+                    if (tierMax <= 0)
+                    {
+                        continue;
+                    }
+
+                    if (!deriveTierByType.TryGetValue(matrix.VehicleType, out var existing) || tierMax < existing)
+                    {
+                        deriveTierByType[matrix.VehicleType] = tierMax;
+                    }
+                }
+
+                break; // highest-priority matching zone only
+            }
+        }
+
         // Always list every platform preset for a covered area (Sedan included).
         // available = Admin-enabled on a covering operator AND Offered (active fare) here.
         var vehicles = new List<CustomerVehicleOfferDto>();
@@ -438,12 +486,25 @@ public class CustomerBookingsController(
             var enabled = enabledCategoryIds.Contains(preset.Id);
             var hasFare = offeredCategoryIds.Contains(preset.Id) || offeredTypes.Contains(preset.LegacyEnum);
             var offer = enabledOffers.FirstOrDefault(x => x.VehicleCategoryId == preset.Id);
+            var fareCaps = offeredRows
+                .Where(x => x.VehicleCategoryId == preset.Id || x.VehicleType == preset.LegacyEnum)
+                .Select(x => x.MaxTier)
+                .Where(x => x is > 0)
+                .Select(x => x!.Value)
+                .ToList();
+            var fareCap = fareCaps.Count > 0 ? fareCaps.Min() : (int?)null;
+            if (deriveTierByType.TryGetValue(preset.LegacyEnum, out var deriveCap))
+            {
+                fareCap = fareCap is > 0 ? Math.Min(fareCap.Value, deriveCap) : deriveCap;
+            }
+
+            var maxPassengers = EffectiveSeatCapacity(preset.MaxPassengers, offer?.MaxPassengers, fareCap);
             vehicles.Add(new CustomerVehicleOfferDto(
                 preset.Id,
                 preset.Code,
                 offer?.DisplayName ?? preset.Name,
                 preset.IconKey,
-                offer?.MaxPassengers ?? preset.MaxPassengers,
+                maxPassengers,
                 preset.IsCargo,
                 enabled && hasFare,
                 VehicleCatalog.ApiName(preset.LegacyEnum)));
@@ -469,12 +530,21 @@ public class CustomerBookingsController(
                 continue;
             }
 
+            var customFareCaps = offeredRows
+                .Where(x => x.VehicleCategoryId == cat.Id)
+                .Select(x => x.MaxTier)
+                .Where(x => x is > 0)
+                .Select(x => x!.Value)
+                .ToList();
             vehicles.Add(new CustomerVehicleOfferDto(
                 cat.Id,
                 cat.Code,
                 o.DisplayName ?? cat.Name,
                 cat.IconKey,
-                o.MaxPassengers ?? cat.MaxPassengers,
+                EffectiveSeatCapacity(
+                    cat.MaxPassengers,
+                    o.MaxPassengers,
+                    customFareCaps.Count > 0 ? customFareCaps.Min() : null),
                 cat.IsCargo,
                 offeredCategoryIds.Contains(cat.Id),
                 VehicleCatalog.ApiName(VehicleType.Custom)));
@@ -903,7 +973,6 @@ public class CustomerBookingsController(
         }
 
         var (distance, eta) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
-        var passengers = VehicleTypeRules.ClampPassengers(vehicle, isCargo, maxPassengers, request.PassengerCount);
 
         var fareRow = await OperatorMaps.LoadFareMatrixAsync(
             db,
@@ -927,6 +996,14 @@ public class CustomerBookingsController(
         {
             return new PreparedBooking { Error = derive.Error };
         }
+
+        // Cap seats by offer override and by highest configured passenger fare tier.
+        var pricingTiers = derive.Zone is not null && derive.Matrix is not null
+            ? derive.Matrix.PassengerTiers?.Select(t => t.PassengerCount).ToList()
+            : fareRow.PassengerTiers?.Select(t => t.PassengerCount).ToList();
+        var tierCap = pricingTiers is { Count: > 0 } ? pricingTiers.Max() : (int?)null;
+        maxPassengers = EffectiveSeatCapacity(maxPassengers, null, tierCap);
+        var passengers = VehicleTypeRules.ClampPassengers(vehicle, isCargo, maxPassengers, request.PassengerCount);
 
         if (derive.Zone is not null && derive.Matrix is not null)
         {
@@ -1029,6 +1106,21 @@ public class CustomerBookingsController(
 
         var wholePesos = Math.Floor(amount);
         return wholePesos > MaxCustomerBoostAmount ? MaxCustomerBoostAmount : wholePesos;
+    }
+
+    /// <summary>
+    /// Seat capacity = offer override (or catalog), capped by the highest passenger fare tier when tiers exist.
+    /// Example: Sedan catalog 4 with fare tiers only up to 3 → customer max is 3.
+    /// </summary>
+    private static int EffectiveSeatCapacity(int catalogOrCategoryMax, int? offerMax, int? fareTierMax)
+    {
+        var seats = offerMax is > 0 ? offerMax.Value : Math.Max(1, catalogOrCategoryMax);
+        if (fareTierMax is > 0)
+        {
+            seats = Math.Min(seats, fareTierMax.Value);
+        }
+
+        return Math.Max(1, seats);
     }
 
     private async Task<RiderProfile?> PickRiderAsync(

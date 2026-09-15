@@ -689,7 +689,41 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
                 cancellationToken);
         }
 
+        // Keep vehicle offer seat capacity aligned with the highest passenger fare tier.
+        await SyncOfferMaxPassengersAsync(fare.OperatorId, fare.VehicleType, fare.VehicleCategoryId, tiers, cancellationToken);
+
         return null;
+    }
+
+    private async Task SyncOfferMaxPassengersAsync(
+        Guid operatorId,
+        VehicleType vehicleType,
+        Guid? vehicleCategoryId,
+        IReadOnlyList<FarePassengerTierBody> tiers,
+        CancellationToken cancellationToken)
+    {
+        if (VehicleTypeRules.UsesSinglePassengerTier(vehicleType) || VehicleTypeRules.IsCargo(vehicleType))
+        {
+            return;
+        }
+
+        var categoryId = vehicleCategoryId ?? VehicleCatalog.IdFor(vehicleType);
+        var offer = await db.OperatorVehicleOffers
+            .FirstOrDefaultAsync(x => x.OperatorId == operatorId && x.VehicleCategoryId == categoryId, cancellationToken);
+        if (offer is null)
+        {
+            return;
+        }
+
+        var maxSeats = tiers.Count > 0 ? tiers.Max(t => t.PassengerCount) : VehicleTypeRules.MaxPassengers(vehicleType);
+        if (offer.MaxPassengers == maxSeats)
+        {
+            return;
+        }
+
+        offer.MaxPassengers = Math.Max(1, maxSeats);
+        offer.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task AddOfferingLogAsync(
