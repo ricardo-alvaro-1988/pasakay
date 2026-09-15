@@ -11879,6 +11879,11 @@ function ExtraVehicleFareEditor({
           <div><small>Total</small><strong className={total === 100 ? '' : 'error'}>{percent(total)}</strong></div>
         </div>
         {rates ? <p className="muted tiny" style={{ marginTop: 8 }}>Saved rates exist for this municipality.</p> : <p className="muted tiny" style={{ marginTop: 8 }}>No matrix yet — save to create one.</p>}
+        {draft.isActive !== (rates?.isActive ?? false) ? (
+          <p className="error tiny" style={{ marginTop: 6 }}>
+            Offered status changed — click <strong>Save fare matrix</strong> or customers will still see “Not offered”.
+          </p>
+        ) : null}
       </div>
     </section>
   )
