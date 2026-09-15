@@ -335,8 +335,8 @@ public class CustomerBookingsController(
         }
 
         var pickupDetails = (request.PickupDetails ?? string.Empty).Trim();
-        var dropoffDetails = (request.DropoffDetails ?? string.Empty).Trim();
-        if (pickupDetails.Length == 0 || dropoffDetails.Length == 0)
+        // Vehicle availability is based on pickup municipality; drop-off is optional here.
+        if (pickupDetails.Length == 0)
         {
             return Ok(new CustomerServiceCheckResponse(true, null, true, true));
         }

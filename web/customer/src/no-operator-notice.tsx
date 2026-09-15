@@ -19,7 +19,8 @@ export function useNoOperatorNotice(
     setMotorcycleAvailable(true)
     setTricycleAvailable(true)
     setVehicles([])
-    if (!enabled || !pickup || !dropoff) return
+    // Load offered vehicles from pickup municipality (do not wait for drop-off).
+    if (!enabled || !pickup) return
 
     let cancelled = false
     let timer: number | undefined
@@ -38,18 +39,19 @@ export function useNoOperatorNotice(
       pickupDetails: pickup.details,
       pickupLat: pickup.lat,
       pickupLng: pickup.lng,
-      dropoffBarangayId: dropoff.barangayId,
-      dropoffDetails: dropoff.details,
+      dropoffBarangayId: dropoff?.barangayId,
+      dropoffDetails: dropoff?.details,
     }).then((result) => {
       if (cancelled) return
       setMotorcycleAvailable(!!result.motorcycleAvailable)
       setTricycleAvailable(!!result.tricycleAvailable)
       const list = Array.isArray(result.vehicles) ? result.vehicles : []
       setVehicles(list)
-      if (!result.municipalityHasOperator) startWait()
+      // Only warn about uncovered area once both stops are chosen.
+      if (dropoff && !result.municipalityHasOperator) startWait()
     }).catch(() => {
       if (cancelled) return
-      if (coverageHint) startWait()
+      if (dropoff && coverageHint) startWait()
     })
 
     return () => {
