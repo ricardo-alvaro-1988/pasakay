@@ -117,7 +117,7 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = error });
         }
 
-        var zone = await LoadZoneAsync(op.Id, id, cancellationToken);
+        var zone = await LoadZoneForEditAsync(op.Id, id, cancellationToken);
         if (zone is null)
         {
             return NotFound(new { message = "Derive fare zone not found." });
@@ -132,6 +132,10 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
 
         try
         {
+            // Persist zone scalars once up front so later matrix inserts do not keep
+            // re-saving a Modified zone alongside raw SQL tier rewrites.
+            await db.SaveChangesAsync(cancellationToken);
+
             foreach (var (type, rates) in slots)
             {
                 var body = VehicleTypeRules.UsesSinglePassengerTier(type) ? SinglePassengerRates(rates) : rates;
@@ -164,7 +168,7 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         }
 
         await db.Entry(op).Collection(x => x.VehicleOffers).LoadAsync(cancellationToken);
-        var zone = await LoadZoneAsync(op.Id, id, cancellationToken);
+        var zone = await LoadZoneForEditAsync(op.Id, id, cancellationToken);
         if (zone is null)
         {
             return NotFound(new { message = "Derive fare zone not found." });
@@ -173,7 +177,8 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         zone.IsActive = !zone.IsActive;
         zone.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(MapDetail(op, zone));
+        var saved = await LoadZoneAsync(op.Id, zone.Id, cancellationToken);
+        return Ok(MapDetail(op, saved!));
     }
 
     [HttpDelete("{id:guid}")]
@@ -376,8 +381,11 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         matrix.UpdatedAtUtc = DateTime.UtcNow;
         matrix.VehicleCategoryId ??= VehicleCatalog.IdFor(matrix.VehicleType);
 
+        // Do NOT touch PassengerTiers through EF — they are rewritten with raw SQL below.
+        // Tracking them (from Include) causes DbUpdateConcurrencyException when SaveChanges
+        // later inserts another vehicle matrix (e.g. adding Sedan to an existing zone).
         var isNew = db.Entry(matrix).State == EntityState.Added;
-        DetachPassengerTiers(matrix);
+        DetachAllPassengerTiers();
         await db.SaveChangesAsync(cancellationToken);
 
         if (!isNew)
@@ -398,16 +406,17 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         }
     }
 
-    void DetachPassengerTiers(DeriveFareMatrix matrix)
+    void DetachAllPassengerTiers()
     {
-        foreach (var entry in db.ChangeTracker.Entries<DeriveFarePassengerTier>()
-            .Where(e => e.Entity.DeriveFareMatrixId == matrix.Id || ReferenceEquals(e.Entity.Matrix, matrix))
-            .ToList())
+        foreach (var entry in db.ChangeTracker.Entries<DeriveFarePassengerTier>().ToList())
         {
             entry.State = EntityState.Detached;
         }
 
-        matrix.PassengerTiers.Clear();
+        foreach (var entry in db.ChangeTracker.Entries<DeriveFareMatrix>().ToList())
+        {
+            entry.Entity.PassengerTiers.Clear();
+        }
     }
 
     static IReadOnlyList<FarePassengerTierBody> NormalizeTiers(
@@ -456,8 +465,18 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         return $"Could not save derive fare zone. {root}";
     }
 
+    /// <summary>
+    /// Load zone with matrices only — never Include PassengerTiers for edits.
+    /// Tiers are rewritten with raw SQL in PersistRatesAsync; tracking them causes concurrency conflicts.
+    /// </summary>
+    async Task<DeriveFareZone?> LoadZoneForEditAsync(Guid operatorId, Guid id, CancellationToken cancellationToken) =>
+        await db.DeriveFareZones
+            .Include(x => x.Matrices)
+            .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == operatorId, cancellationToken);
+
     async Task<DeriveFareZone?> LoadZoneAsync(Guid operatorId, Guid id, CancellationToken cancellationToken) =>
         await db.DeriveFareZones
+            .AsNoTracking()
             .Include(x => x.Matrices)
             .ThenInclude(x => x.PassengerTiers)
             .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == operatorId, cancellationToken);
