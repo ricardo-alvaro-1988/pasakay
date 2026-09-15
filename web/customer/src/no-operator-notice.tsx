@@ -69,8 +69,12 @@ export function useNoOperatorNotice(
     dropoff?.lng,
   ])
 
-  const availableTypes = vehicles.length
-    ? vehicles.filter((v) => v.available).map((v) => v.vehicleType)
+  // Only enter catalog/offers mode when at least one offer is bookable.
+  // Seeded-but-disabled types must not hide legacy motorcycle/tricycle flags.
+  const availableVehicles = vehicles.filter((v) => v.available)
+  const useOffers = availableVehicles.length > 0
+  const availableTypes = useOffers
+    ? availableVehicles.map((v) => v.vehicleType as VehicleType)
     : ([
         motorcycleAvailable ? 'Motorcycle' : null,
         tricycleAvailable ? 'Tricycle' : null,
@@ -82,6 +86,8 @@ export function useNoOperatorNotice(
     motorcycleAvailable,
     tricycleAvailable,
     vehicles,
+    availableVehicles,
+    useOffers,
     availableTypes,
     isTypeAvailable: (type: VehicleType) => availableTypes.includes(type),
   }

@@ -435,8 +435,9 @@ public class CustomerBookingsController(
             }
         }
 
-        // Kill switch: empty vehicles forces customer UI back to motorcycle/tricycle bools.
-        if (!config.GetValue("VehicleCatalog:UseOffersForCustomerUi", true))
+        // Kill switch / empty bookable list: empty vehicles forces customer UI back to moto/trike bools.
+        if (!config.GetValue("VehicleCatalog:UseOffersForCustomerUi", true)
+            || vehicles.All(v => !v.Available))
         {
             vehicles.Clear();
         }

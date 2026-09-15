@@ -378,8 +378,8 @@ export function ScheduleScreen({
   }, [pickup, dropoff, vehicle, vehicleCategoryId, payment, paymentRef, passengers])
 
   useEffect(() => {
-    if (noOperator.vehicles.length) {
-      const available = noOperator.vehicles.filter((v) => v.available)
+    if (noOperator.useOffers) {
+      const available = noOperator.availableVehicles
       const current = available.find((v) => v.id === vehicleCategoryId)
       if (current) return
       const first = available[0]
@@ -395,7 +395,7 @@ export function ScheduleScreen({
       if (types.length && !types.includes(current)) return types[0] ?? current
       return current
     })
-  }, [noOperator.availableTypes, noOperator.vehicles, vehicleCategoryId])
+  }, [noOperator.availableTypes, noOperator.availableVehicles, noOperator.useOffers, vehicleCategoryId])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -484,8 +484,8 @@ export function ScheduleScreen({
       </div>
       <p className="section-title">Vehicle</p>
       <div className="vehicles">
-        {(noOperator.vehicles.length
-          ? noOperator.vehicles.filter((v) => v.available)
+        {(noOperator.useOffers
+          ? noOperator.availableVehicles
           : noOperator.availableTypes.map((t) => ({
               id: t,
               vehicleType: t,
@@ -503,6 +503,7 @@ export function ScheduleScreen({
           const cargo = 'isCargo' in item && typeof item.isCargo === 'boolean'
             ? item.isCargo
             : vehicleIsCargo(type)
+          const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
           return (
             <button
               key={categoryId ?? type}
@@ -515,7 +516,7 @@ export function ScheduleScreen({
               }}
             >
               <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
-                <img src={vehicleArt(type)} alt="" />
+                <img src={vehicleArt(type, iconKey)} alt="" />
               </span>
               <span className="copy">
                 <b>{'name' in item ? item.name : vehicleLabel(type)}</b>

@@ -591,9 +591,8 @@ function Home({
           const one = await quoteOne(hail.vehicleType)
           next[one.key] = one.quote
           quoteError = one.error
-        } else if (noOperator.vehicles.length) {
-          const tasks = noOperator.vehicles
-            .filter((v) => v.available)
+        } else if (noOperator.useOffers) {
+          const tasks = noOperator.availableVehicles
             .map((v) => quoteOne(v.vehicleType as VehicleType, v.id, v.maxPassengers, v.isCargo))
           const results = await Promise.all(tasks)
           for (const one of results) {
@@ -620,21 +619,6 @@ function Home({
         if (hail) {
           setVehicle(hail.vehicleType)
           setVehicleCategoryId(null)
-        } else {
-          const currentKey = quoteKey(vehicle, vehicleCategoryId)
-          if (!next[currentKey]) {
-            const firstKey = Object.keys(next).find((k) => next[k])
-            if (firstKey) {
-              const offer = noOperator.vehicles.find((v) => v.id === firstKey)
-              if (offer) {
-                setVehicleCategoryId(offer.id)
-                setVehicle(offer.vehicleType as VehicleType)
-              } else {
-                setVehicleCategoryId(null)
-                setVehicle(firstKey as VehicleType)
-              }
-            }
-          }
         }
       } catch (err) {
         if (!ignore) setError(err instanceof Error ? err.message : 'Could not quote fare.')
@@ -644,12 +628,13 @@ function Home({
     }
     void load()
     return () => { ignore = true }
-  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers, noOperator.availableTypes, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.vehicles, vehicle, vehicleCategoryId])
+    // Intentionally omit vehicle / vehicleCategoryId so tapping a vehicle does not re-quote all types.
+  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers, noOperator.availableTypes, noOperator.availableVehicles, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.useOffers])
 
   useEffect(() => {
     if (hail) return
-    if (noOperator.vehicles.length) {
-      const available = noOperator.vehicles.filter((v) => v.available)
+    if (noOperator.useOffers) {
+      const available = noOperator.availableVehicles
       const current = available.find((v) => v.id === vehicleCategoryId)
       if (current) return
       const first = available[0]
@@ -664,7 +649,7 @@ function Home({
       if (noOperator.isTypeAvailable(current)) return current
       return noOperator.availableTypes[0] ?? current
     })
-  }, [hail, noOperator.availableTypes, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.vehicles, vehicleCategoryId])
+  }, [hail, noOperator.availableTypes, noOperator.availableVehicles, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.useOffers, vehicleCategoryId])
 
   useEffect(() => {
     const available = Object.values(quotes).some((q) => q?.hasActivePromos)
@@ -672,7 +657,8 @@ function Home({
   }, [quotes, promoCode])
 
   const selectedQuoteKey = quoteKey(vehicle, vehicleCategoryId)
-  const dispatchMode = quotes[selectedQuoteKey]?.bookingDispatchMode ?? 'Broadcast'
+  const selectedQuote = quotes[selectedQuoteKey] ?? quotes[vehicle] ?? null
+  const dispatchMode = selectedQuote?.bookingDispatchMode ?? 'Broadcast'
   const needsRiderPick = !hail && (dispatchMode === 'Selection' || (dispatchMode === 'Both' && dispatchChoice === 'pick'))
 
   useEffect(() => {
@@ -912,7 +898,7 @@ function Home({
       : 'Open this page in Chrome on your Android phone, then tap the logo to install.')
   }
 
-  const quote = quotes[selectedQuoteKey]
+  const quote = selectedQuote
   const quotePay = quote ? (quote.customerFare ?? quote.fare) : 0
   const quoteOriginal = quote?.originalFare && quote.originalFare > quotePay ? quote.originalFare : null
   const modalBoost = Math.min(500, Math.max(0, Math.floor(draftBoost || 0)))
@@ -1105,8 +1091,8 @@ function Home({
                 <div className="vehicles">
                   {(hail
                     ? [{ id: hail.vehicleType, vehicleType: hail.vehicleType, name: vehicleLabel(hail.vehicleType), available: true } as const]
-                    : (noOperator.vehicles.length
-                        ? noOperator.vehicles.filter((v) => v.available)
+                    : (noOperator.useOffers
+                        ? noOperator.availableVehicles
                         : noOperator.availableTypes.map((t) => ({
                             id: t,
                             vehicleType: t,
@@ -1126,6 +1112,7 @@ function Home({
                     const cargo = 'isCargo' in item && typeof item.isCargo === 'boolean'
                       ? item.isCargo
                       : vehicleIsCargo(type)
+                    const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
                     return (
                       <button
                         key={itemKey}
@@ -1139,7 +1126,7 @@ function Home({
                         }}
                       >
                         <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
-                          <img src={vehicleArt(type)} alt="" />
+                          <img src={vehicleArt(type, iconKey)} alt="" />
                         </span>
                         <span className="copy">
                           <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
