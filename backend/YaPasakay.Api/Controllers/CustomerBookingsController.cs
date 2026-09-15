@@ -391,11 +391,10 @@ public class CustomerBookingsController(
 
         var coveringOps = await db.Operators
             .AsNoTracking()
-            .Include(x => x.VehicleOffers!)
-            .ThenInclude(o => o.VehicleCategory)
             .Where(x => x.IsActive && (
                 x.Areas.Any(a => a.Barangay.MunicipalityId == municipalityId)))
             .OrderBy(x => x.CompanyName)
+            .Select(x => new { x.Id, x.CompanyName })
             .ToListAsync(cancellationToken);
         if (coveringOps.Count == 0)
         {
@@ -410,118 +409,88 @@ public class CustomerBookingsController(
                 && x.IsActive)
             .Select(x => new { x.OperatorId, x.VehicleType, x.VehicleCategoryId })
             .ToListAsync(cancellationToken);
-        var offeredByOp = offeredRows
-            .GroupBy(x => x.OperatorId)
-            .ToDictionary(
-                g => g.Key,
-                g => (
-                    Types: g.Select(x => x.VehicleType).ToHashSet(),
-                    Categories: g.Where(x => x.VehicleCategoryId is not null)
-                        .Select(x => x.VehicleCategoryId!.Value)
-                        .ToHashSet()));
 
-        // Union catalog rows across covering operators so Sedan offered by any of them is visible.
-        var vehiclesByCategory = new Dictionary<Guid, CustomerVehicleOfferDto>();
-        foreach (var op in coveringOps)
-        {
-            offeredByOp.TryGetValue(op.Id, out var offered);
-            var offeredTypes = offered.Types ?? [];
-            var offeredCategories = offered.Categories ?? [];
-
-            foreach (var o in op.VehicleOffers ?? [])
+        var enabledOffers = await db.OperatorVehicleOffers
+            .AsNoTracking()
+            .Where(x => opIds.Contains(x.OperatorId) && x.IsEnabled)
+            .Select(x => new
             {
-                var cat = o.VehicleCategory;
-                if (cat is null || !cat.IsActive)
-                {
-                    continue;
-                }
+                x.OperatorId,
+                x.VehicleCategoryId,
+                x.DisplayName,
+                x.MaxPassengers,
+                x.CommissionPercent,
+            })
+            .ToListAsync(cancellationToken);
 
-                VehicleType type;
-                if (cat.LegacyEnumValue is int v && Enum.IsDefined(typeof(VehicleType), v))
-                {
-                    type = (VehicleType)v;
-                }
-                else if (VehicleCatalog.TypeFor(cat.Id) is VehicleType platformType)
-                {
-                    type = platformType;
-                }
-                else
-                {
-                    type = VehicleType.Custom;
-                }
+        var enabledCategoryIds = enabledOffers.Select(x => x.VehicleCategoryId).ToHashSet();
+        var offeredTypes = offeredRows.Select(x => x.VehicleType).ToHashSet();
+        var offeredCategoryIds = offeredRows
+            .Where(x => x.VehicleCategoryId is not null)
+            .Select(x => x.VehicleCategoryId!.Value)
+            .ToHashSet();
 
-                var hasFare = type == VehicleType.Custom
-                    ? offeredCategories.Contains(cat.Id)
-                    : offeredCategories.Contains(cat.Id) || offeredTypes.Contains(type);
-
-                // Only Admin-enabled types appear in the customer picker.
-                // available=false means enabled but not Offered for this municipality.
-                if (!o.IsEnabled)
-                {
-                    continue;
-                }
-
-                var available = hasFare;
-
-                if (vehiclesByCategory.TryGetValue(cat.Id, out var existing))
-                {
-                    if (!existing.Available && available)
-                    {
-                        vehiclesByCategory[cat.Id] = existing with { Available = true };
-                    }
-
-                    continue;
-                }
-
-                vehiclesByCategory[cat.Id] = new CustomerVehicleOfferDto(
-                    cat.Id,
-                    cat.Code,
-                    o.DisplayName ?? cat.Name,
-                    cat.IconKey,
-                    o.MaxPassengers ?? cat.MaxPassengers,
-                    cat.IsCargo,
-                    available,
-                    VehicleCatalog.ApiName(type));
-            }
+        // Always list every platform preset for a covered area (Sedan included).
+        // available = Admin-enabled on a covering operator AND Offered (active fare) here.
+        var vehicles = new List<CustomerVehicleOfferDto>();
+        foreach (var preset in VehicleCatalog.PlatformPresets.OrderBy(p => p.SortOrder))
+        {
+            var enabled = enabledCategoryIds.Contains(preset.Id);
+            var hasFare = offeredCategoryIds.Contains(preset.Id) || offeredTypes.Contains(preset.LegacyEnum);
+            var offer = enabledOffers.FirstOrDefault(x => x.VehicleCategoryId == preset.Id);
+            vehicles.Add(new CustomerVehicleOfferDto(
+                preset.Id,
+                preset.Code,
+                offer?.DisplayName ?? preset.Name,
+                preset.IconKey,
+                offer?.MaxPassengers ?? preset.MaxPassengers,
+                preset.IsCargo,
+                enabled && hasFare,
+                VehicleCatalog.ApiName(preset.LegacyEnum)));
         }
 
-        var vehicles = vehiclesByCategory.Values
-            .OrderBy(v => VehicleCatalog.PresetFor(v.Id)?.SortOrder ?? 500)
-            .ThenBy(v => v.Name)
-            .ToList();
-
-        // Legacy operators before offer seed: fall back to fare matrices only.
-        if (vehicles.Count == 0)
+        // Custom operator categories (enabled only).
+        var customOffers = await db.OperatorVehicleOffers
+            .AsNoTracking()
+            .Include(x => x.VehicleCategory)
+            .Where(x => opIds.Contains(x.OperatorId)
+                && x.IsEnabled
+                && x.VehicleCategory != null
+                && x.VehicleCategory.IsActive
+                && x.VehicleCategory.OperatorId != null)
+            .OrderBy(x => x.VehicleCategory!.SortOrder)
+            .ThenBy(x => x.VehicleCategory!.Name)
+            .ToListAsync(cancellationToken);
+        foreach (var o in customOffers)
         {
-            var offeredSet = offeredRows.Select(x => x.VehicleType).ToHashSet();
-            foreach (var preset in VehicleCatalog.PlatformPresets.Where(p => p.DefaultEnabled))
+            var cat = o.VehicleCategory!;
+            if (vehicles.Any(v => v.Id == cat.Id))
             {
-                vehicles.Add(new CustomerVehicleOfferDto(
-                    preset.Id,
-                    preset.Code,
-                    preset.Name,
-                    preset.IconKey,
-                    preset.MaxPassengers,
-                    preset.IsCargo,
-                    offeredSet.Contains(preset.LegacyEnum),
-                    VehicleCatalog.ApiName(preset.LegacyEnum)));
+                continue;
             }
+
+            vehicles.Add(new CustomerVehicleOfferDto(
+                cat.Id,
+                cat.Code,
+                o.DisplayName ?? cat.Name,
+                cat.IconKey,
+                o.MaxPassengers ?? cat.MaxPassengers,
+                cat.IsCargo,
+                offeredCategoryIds.Contains(cat.Id),
+                VehicleCatalog.ApiName(VehicleType.Custom)));
         }
 
         // Kill switch: empty vehicles forces customer UI back to moto/trike bools.
-        // Keep the list when at least one Admin-enabled type exists (even if not yet Offered),
-        // so Sedan/etc. remain visible instead of disappearing into the legacy 2-type UI.
         if (!config.GetValue("VehicleCatalog:UseOffersForCustomerUi", true))
         {
             vehicles.Clear();
         }
 
-        var anyOfferedTypes = offeredRows.Select(x => x.VehicleType).ToHashSet();
         return Ok(new CustomerServiceCheckResponse(
             true,
             municipalityName,
-            anyOfferedTypes.Contains(VehicleType.Motorcycle),
-            anyOfferedTypes.Contains(VehicleType.Tricycle),
+            offeredTypes.Contains(VehicleType.Motorcycle),
+            offeredTypes.Contains(VehicleType.Tricycle),
             vehicles));
     }
 
