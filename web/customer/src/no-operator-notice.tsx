@@ -40,7 +40,7 @@ export function useNoOperatorNotice(
       pickupLat: pickup.lat,
       pickupLng: pickup.lng,
       dropoffBarangayId: dropoff?.barangayId,
-      dropoffDetails: dropoff?.details,
+      dropoffDetails: dropoff?.details ?? '',
     }).then((result) => {
       if (cancelled) return
       setMotorcycleAvailable(!!result.motorcycleAvailable)

@@ -558,7 +558,7 @@ export const api = {
     pickupLat: number
     pickupLng: number
     dropoffBarangayId?: string
-    dropoffDetails: string
+    dropoffDetails?: string
   }) => request<{
     municipalityHasOperator: boolean
     municipalityName: string | null
