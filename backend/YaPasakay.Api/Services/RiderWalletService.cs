@@ -216,7 +216,12 @@ public class RiderWalletService(AppDbContext db)
         DeriveFareMatrix? deriveMatrix = null;
         if (trip.DeriveFareZoneId is Guid zoneId)
         {
-            deriveMatrix = await OperatorMaps.LoadDeriveFareMatrixAsync(db, zoneId, trip.VehicleType, cancellationToken);
+            deriveMatrix = await OperatorMaps.LoadDeriveFareMatrixAsync(
+                db,
+                zoneId,
+                trip.VehicleType,
+                trip.VehicleCategoryId,
+                cancellationToken);
         }
 
         var op = trip.Operator
@@ -358,11 +363,9 @@ public class RiderWalletService(AppDbContext db)
         var splits = new Dictionary<Guid, (decimal Admin, decimal Operator)>();
         foreach (var trip in trips)
         {
-            FareMatrix? fare = null;
-            if (trip.PickupBarangay is not null)
-            {
-                fareLookup.TryGetValue((trip.OperatorId, trip.VehicleType, trip.PickupBarangay.MunicipalityId), out fare);
-            }
+            FareMatrix? fare = trip.PickupBarangay is not null
+                ? fareLookup.Resolve(trip, trip.PickupBarangay.MunicipalityId)
+                : null;
 
             var breakdown = RideCommissionCalculator.ForTrip(trip, trip.Operator, fare);
             if (breakdown is null)

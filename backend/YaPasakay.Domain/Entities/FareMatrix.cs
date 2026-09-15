@@ -10,6 +10,8 @@ public class FareMatrix : BaseEntity
     public Guid MunicipalityId { get; set; }
     public Municipality Municipality { get; set; } = null!;
     public VehicleType VehicleType { get; set; }
+    public Guid? VehicleCategoryId { get; set; }
+    public VehicleCategory? VehicleCategory { get; set; }
     public decimal BaseFare { get; set; }
     public decimal PerKm { get; set; }
     public decimal MinimumFare { get; set; }

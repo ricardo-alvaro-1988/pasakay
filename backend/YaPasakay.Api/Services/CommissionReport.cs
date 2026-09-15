@@ -84,11 +84,9 @@ public static class CommissionReport
         var items = trips.Select(trip =>
         {
             var municipalityId = trip.PickupBarangay?.MunicipalityId;
-            Domain.Entities.FareMatrix? fare = null;
-            if (municipalityId is Guid mid)
-            {
-                fares.TryGetValue((trip.OperatorId, trip.VehicleType, mid), out fare);
-            }
+            Domain.Entities.FareMatrix? fare = municipalityId is Guid mid
+                ? fares.Resolve(trip, mid)
+                : null;
 
             var breakdown = RideCommissionCalculator.ForTrip(trip, fare);
             var when = trip.CompletedAtUtc ?? trip.ScheduledAtUtc ?? trip.RequestedAtUtc;

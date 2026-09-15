@@ -15,9 +15,37 @@ String? asTextOrNull(dynamic value) {
 String vehicleLabel(dynamic value) {
   switch (asText(value)) {
     case '1':
+    case 'Motorcycle':
+    case 'motorcycle':
       return 'Motorcycle';
     case '2':
+    case 'Tricycle':
+    case 'tricycle':
       return 'Tricycle';
+    case '3':
+    case 'Sedan':
+    case 'sedan':
+      return 'Sedan';
+    case '4':
+    case 'Mpv':
+    case 'mpv':
+      return 'MPV';
+    case '5':
+    case 'Suv':
+    case 'suv':
+      return 'SUV';
+    case '6':
+    case 'Van':
+    case 'van':
+      return 'Van';
+    case '7':
+    case 'PickupL300':
+    case 'pickup-l300':
+      return 'Pickup L300';
+    case '8':
+    case 'PickupCargo':
+    case 'pickup-cargo':
+      return 'Pickup (Cargo)';
     default:
       return asText(value);
   }

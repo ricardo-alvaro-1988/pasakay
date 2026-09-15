@@ -23,6 +23,8 @@ public class RiderApplication : BaseEntity
     public string PhoneNumber { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public VehicleType VehicleType { get; set; }
+    public Guid? VehicleCategoryId { get; set; }
+    public VehicleCategory? VehicleCategory { get; set; }
     public string PlateNumber { get; set; } = string.Empty;
     public string VehicleFranchiseNumber { get; set; } = string.Empty;
     public string? VehicleModel { get; set; }

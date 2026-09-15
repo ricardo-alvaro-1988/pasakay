@@ -8,6 +8,8 @@ public class CreateRiderForm
     public string Phone { get; set; } = string.Empty;
     public string? Password { get; set; }
     public VehicleType VehicleType { get; set; } = VehicleType.Motorcycle;
+    /// <summary>Optional; when set, VehicleType is resolved from the category (Custom=100 for operator-owned).</summary>
+    public Guid? VehicleCategoryId { get; set; }
     public string PlateNumber { get; set; } = string.Empty;
     public string VehicleFranchiseNumber { get; set; } = string.Empty;
     public string? VehicleModel { get; set; }

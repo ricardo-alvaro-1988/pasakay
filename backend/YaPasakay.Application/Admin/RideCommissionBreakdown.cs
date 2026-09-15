@@ -72,7 +72,7 @@ public static class RideCommissionCalculator
 
     public static (decimal SystemAmount, decimal OperatorAmount, decimal DriverAmount) Sum(
         IEnumerable<Trip> trips,
-        IReadOnlyDictionary<(Guid OperatorId, VehicleType VehicleType, Guid MunicipalityId), FareMatrix> fares)
+        FareMatrixLookup fares)
     {
         decimal system = 0;
         decimal op = 0;
@@ -80,11 +80,9 @@ public static class RideCommissionCalculator
         foreach (var trip in trips)
         {
             var municipalityId = trip.PickupBarangay?.MunicipalityId;
-            FareMatrix? fare = null;
-            if (municipalityId is Guid mid)
-            {
-                fares.TryGetValue((trip.OperatorId, trip.VehicleType, mid), out fare);
-            }
+            FareMatrix? fare = municipalityId is Guid mid
+                ? fares.Resolve(trip, mid)
+                : null;
 
             var breakdown = ForTrip(trip, fare);
             if (breakdown is null)

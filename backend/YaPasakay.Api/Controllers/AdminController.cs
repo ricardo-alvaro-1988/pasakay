@@ -6,6 +6,7 @@ using YaPasakay.Api.Services;
 using YaPasakay.Application.Admin;
 using YaPasakay.Application.Auth;
 using YaPasakay.Application.Common;
+using YaPasakay.Domain;
 using YaPasakay.Domain.Entities;
 using YaPasakay.Domain.Enums;
 using YaPasakay.Infrastructure.Auth;
@@ -38,11 +39,13 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         var tripsToday = await db.Trips.CountAsync(
             x => x.Status == TripStatus.Completed && x.CompletedAtUtc >= DateTime.UtcNow.Date,
             cancellationToken);
-        var adminCutToday = await db.Trips
+        var completedTodayTrips = await db.Trips
+            .Include(x => x.Operator)
+            .ThenInclude(o => o.VehicleOffers)
             .Where(x => x.Status == TripStatus.Completed && x.CompletedAtUtc >= DateTime.UtcNow.Date)
-            .SumAsync(x => (decimal?)(x.Fare * (x.VehicleType == VehicleType.Motorcycle
-                ? x.Operator.MotorcycleCommissionPercent
-                : x.Operator.TricycleCommissionPercent) / 100m), cancellationToken) ?? 0;
+            .Select(x => new { x.Fare, x.VehicleType, x.Operator })
+            .ToListAsync(cancellationToken);
+        var adminCutToday = completedTodayTrips.Sum(x => CommissionCut.Of(x.Fare, x.VehicleType, x.Operator));
         var openSos = await db.SupportTickets.CountAsync(
             x => x.Kind == SupportKind.Sos && x.Status == SupportStatus.Open,
             cancellationToken);
@@ -82,6 +85,18 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             })
             .ToList();
 
+        var riderRows = await db.RiderProfiles
+            .Select(x => new
+            {
+                x.VehicleType,
+                x.VehicleCategoryId,
+                Code = x.VehicleCategory != null ? x.VehicleCategory.Code : null,
+                Name = x.VehicleCategory != null ? x.VehicleCategory.Name : null
+            })
+            .ToListAsync(cancellationToken);
+        var riderVehicleCounts = VehicleCountMaps.FromEntries(
+            riderRows.Select(x => (x.VehicleType, x.VehicleCategoryId, x.Code, x.Name)));
+
         var recent = await db.Operators
             .OrderByDescending(x => x.CreatedAtUtc)
             .Take(6)
@@ -90,7 +105,14 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 Operator = x,
                 RiderCount = x.Riders.Count,
                 Motorcycle = x.Riders.Count(r => r.VehicleType == VehicleType.Motorcycle),
-                Tricycle = x.Riders.Count(r => r.VehicleType == VehicleType.Tricycle)
+                Tricycle = x.Riders.Count(r => r.VehicleType == VehicleType.Tricycle),
+                RiderEntries = x.Riders.Select(r => new
+                {
+                    r.VehicleType,
+                    r.VehicleCategoryId,
+                    Code = r.VehicleCategory != null ? r.VehicleCategory.Code : null,
+                    Name = r.VehicleCategory != null ? r.VehicleCategory.Name : null
+                }).ToList()
             })
             .ToListAsync(cancellationToken);
 
@@ -101,12 +123,18 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             ridersTrike,
             customers,
             tripsToday,
-            Math.Round(adminCutToday, 2, MidpointRounding.AwayFromZero),
+            CommissionCut.Round(adminCutToday),
             openSos,
             unreadSosAlerts,
             pendingAccountDeletes,
             series,
-            recent.Select(x => MapOperator(x.Operator, x.RiderCount, x.Motorcycle, x.Tricycle)).ToList()));
+            recent.Select(x => MapOperator(
+                x.Operator,
+                x.RiderCount,
+                x.Motorcycle,
+                x.Tricycle,
+                VehicleCountMaps.FromEntries(x.RiderEntries.Select(r => (r.VehicleType, r.VehicleCategoryId, r.Code, r.Name))))).ToList(),
+            riderVehicleCounts));
     }
 
     [HttpGet("search")]
@@ -186,12 +214,24 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 Operator = x,
                 RiderCount = x.Riders.Count,
                 Motorcycle = x.Riders.Count(r => r.VehicleType == VehicleType.Motorcycle),
-                Tricycle = x.Riders.Count(r => r.VehicleType == VehicleType.Tricycle)
+                Tricycle = x.Riders.Count(r => r.VehicleType == VehicleType.Tricycle),
+                RiderEntries = x.Riders.Select(r => new
+                {
+                    r.VehicleType,
+                    r.VehicleCategoryId,
+                    Code = r.VehicleCategory != null ? r.VehicleCategory.Code : null,
+                    Name = r.VehicleCategory != null ? r.VehicleCategory.Name : null
+                }).ToList()
             })
             .ToListAsync(cancellationToken);
 
         return Ok(new PagedResult<OperatorListItem>(
-            items.Select(x => MapOperator(x.Operator, x.RiderCount, x.Motorcycle, x.Tricycle)).ToList(),
+            items.Select(x => MapOperator(
+                x.Operator,
+                x.RiderCount,
+                x.Motorcycle,
+                x.Tricycle,
+                VehicleCountMaps.FromEntries(x.RiderEntries.Select(r => (r.VehicleType, r.VehicleCategoryId, r.Code, r.Name))))).ToList(),
             page,
             pageSize,
             total));
@@ -301,6 +341,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         var fareQuery = db.FareMatrices
             .AsNoTracking()
             .Include(x => x.Operator)
+                .ThenInclude(o => o.VehicleOffers)
+                    .ThenInclude(o => o.VehicleCategory)
             .Include(x => x.Municipality)
             .Include(x => x.Surcharges)
             .Include(x => x.PassengerTiers)
@@ -335,6 +377,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                     MotorcycleCommissionPercent = sample.Operator.MotorcycleCommissionPercent,
                     TricycleCommissionPercent = sample.Operator.TricycleCommissionPercent,
                     MunicipalityName = sample.Municipality.Name,
+                    Operator = sample.Operator,
                     Rows = g.ToList()
                 };
             })
@@ -355,7 +398,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 group.MotorcycleCommissionPercent,
                 group.TricycleCommissionPercent,
                 MapFareRates(group.Rows.FirstOrDefault(x => x.VehicleType == VehicleType.Motorcycle), includeSamples: false),
-                MapFareRates(group.Rows.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle), includeSamples: false)))
+                MapFareRates(group.Rows.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle), includeSamples: false),
+                OperatorMaps.VehicleFareSlots(group.Operator, group.Rows, includeSamples: false)))
             .ToList();
 
         return Ok(new PagedResult<OperatorFareListItem>(items, page, pageSize, total));
@@ -367,7 +411,10 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         [FromQuery] Guid? municipalityId,
         CancellationToken cancellationToken)
     {
-        var op = await db.Operators.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        var op = await db.Operators
+            .Include(x => x.VehicleOffers)
+                .ThenInclude(x => x.VehicleCategory)
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (op is null)
         {
             return NotFound();
@@ -410,7 +457,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             selectedName,
             municipalities,
             MapFareRates(fares.FirstOrDefault(x => x.VehicleType == VehicleType.Motorcycle), includeSamples: true),
-            MapFareRates(fares.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle), includeSamples: true)));
+            MapFareRates(fares.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle), includeSamples: true),
+            OperatorMaps.VehicleFareSlots(op, fares, includeSamples: true)));
     }
 
     [HttpPost("operators")]
@@ -522,7 +570,161 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
 
         OperatorAudit.Record(db, User, op.Id, AuditAction.OperatorCreated, $"Created Operator {op.CompanyName}.");
         await db.SaveChangesAsync(cancellationToken);
+        await VehicleCatalogBootstrap.EnsureAsync(db, cancellationToken);
+        await ApplyLegacyCommissionToOffersAsync(op.Id, motorcycleCommission, tricycleCommission, cancellationToken);
         return Ok(MapOperator(op, 0, 0, 0));
+    }
+
+    public record AdminVehicleOfferDto(
+        Guid Id,
+        Guid VehicleCategoryId,
+        string Code,
+        string Name,
+        string IconKey,
+        int MaxPassengers,
+        bool IsCargo,
+        bool IsEnabled,
+        decimal CommissionPercent,
+        bool IsCustom,
+        string VehicleType);
+
+    public record AdminVehicleOfferCommissionItem(
+        Guid VehicleCategoryId,
+        decimal CommissionPercent,
+        bool? IsEnabled = null);
+
+    public record SaveAdminVehicleOffersRequest(IReadOnlyList<AdminVehicleOfferCommissionItem> Items);
+
+    [HttpGet("operators/{id:guid}/vehicle-offers")]
+    public async Task<ActionResult<IReadOnlyList<AdminVehicleOfferDto>>> ListOperatorVehicleOffers(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var op = await db.Operators.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (op is null) return NotFound();
+
+        await VehicleCatalogBootstrap.EnsureAsync(db, cancellationToken);
+
+        var rows = await db.OperatorVehicleOffers
+            .AsNoTracking()
+            .Include(x => x.VehicleCategory)
+            .Where(x => x.OperatorId == id && x.VehicleCategory != null && x.VehicleCategory.IsActive)
+            .OrderBy(x => x.VehicleCategory!.SortOrder)
+            .ThenBy(x => x.VehicleCategory!.Name)
+            .ToListAsync(cancellationToken);
+
+        return Ok(rows.Select(MapAdminOffer).ToList());
+    }
+
+    [HttpPut("operators/{id:guid}/vehicle-offers")]
+    public async Task<ActionResult<IReadOnlyList<AdminVehicleOfferDto>>> SaveOperatorVehicleOffers(
+        Guid id,
+        [FromBody] SaveAdminVehicleOffersRequest request,
+        CancellationToken cancellationToken)
+    {
+        var op = await db.Operators
+            .Include(x => x.VehicleOffers)
+            .ThenInclude(x => x.VehicleCategory)
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (op is null) return NotFound();
+
+        await VehicleCatalogBootstrap.EnsureAsync(db, cancellationToken);
+        await db.Entry(op).Collection(x => x.VehicleOffers).Query()
+            .Include(x => x.VehicleCategory)
+            .LoadAsync(cancellationToken);
+
+        foreach (var item in request.Items ?? [])
+        {
+            var (ok, percent, error) = ParseCommission(item.CommissionPercent, "vehicle");
+            if (!ok) return BadRequest(new { message = error });
+
+            var offer = op.VehicleOffers.FirstOrDefault(x => x.VehicleCategoryId == item.VehicleCategoryId);
+            if (offer?.VehicleCategory is null) continue;
+
+            offer.CommissionPercent = FareCommissionSplit.Round(percent);
+            if (item.IsEnabled is bool enabled)
+            {
+                offer.IsEnabled = enabled;
+            }
+            offer.UpdatedAtUtc = DateTime.UtcNow;
+
+            if (offer.VehicleCategory.LegacyEnumValue == (int)VehicleType.Motorcycle)
+            {
+                op.MotorcycleCommissionPercent = offer.CommissionPercent;
+            }
+            else if (offer.VehicleCategory.LegacyEnumValue == (int)VehicleType.Tricycle)
+            {
+                op.TricycleCommissionPercent = offer.CommissionPercent;
+            }
+        }
+
+        var fares = await db.FareMatrices.Where(x => x.OperatorId == op.Id).ToListAsync(cancellationToken);
+        foreach (var fare in fares)
+        {
+            FareCommissionSplit.KeepOperatorShare(
+                fare,
+                FareCommissionSplit.SystemPercent(op, fare.VehicleCategoryId, fare.VehicleType));
+        }
+
+        op.UpdatedAtUtc = DateTime.UtcNow;
+        OperatorAudit.Record(db, User, op.Id, AuditAction.OperatorUpdated, $"Updated vehicle commissions for {op.CompanyName}.");
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Ok(op.VehicleOffers
+            .Where(x => x.VehicleCategory is { IsActive: true })
+            .OrderBy(x => x.VehicleCategory!.SortOrder)
+            .ThenBy(x => x.VehicleCategory!.Name)
+            .Select(MapAdminOffer)
+            .ToList());
+    }
+
+    private static AdminVehicleOfferDto MapAdminOffer(OperatorVehicleOffer offer)
+    {
+        var cat = offer.VehicleCategory!;
+        var vehicleType = cat.LegacyEnumValue is int v && Enum.IsDefined(typeof(VehicleType), v)
+            ? ((VehicleType)v).ToString()
+            : (cat.OperatorId is null
+                ? (VehicleCatalog.TypeFor(cat.Id)?.ToString() ?? cat.Code)
+                : VehicleType.Custom.ToString());
+        return new AdminVehicleOfferDto(
+            offer.Id,
+            cat.Id,
+            cat.Code,
+            offer.DisplayName ?? cat.Name,
+            cat.IconKey,
+            offer.MaxPassengers ?? cat.MaxPassengers,
+            cat.IsCargo,
+            offer.IsEnabled,
+            offer.CommissionPercent,
+            cat.OperatorId is not null,
+            vehicleType);
+    }
+
+    private async Task ApplyLegacyCommissionToOffersAsync(
+        Guid operatorId,
+        decimal motorcycleCommission,
+        decimal tricycleCommission,
+        CancellationToken cancellationToken)
+    {
+        var offers = await db.OperatorVehicleOffers
+            .Include(x => x.VehicleCategory)
+            .Where(x => x.OperatorId == operatorId)
+            .ToListAsync(cancellationToken);
+        foreach (var offer in offers)
+        {
+            if (offer.VehicleCategory?.LegacyEnumValue == (int)VehicleType.Motorcycle)
+            {
+                offer.CommissionPercent = FareCommissionSplit.Round(motorcycleCommission);
+                offer.UpdatedAtUtc = DateTime.UtcNow;
+            }
+            else if (offer.VehicleCategory?.LegacyEnumValue == (int)VehicleType.Tricycle)
+            {
+                offer.CommissionPercent = FareCommissionSplit.Round(tricycleCommission);
+                offer.UpdatedAtUtc = DateTime.UtcNow;
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     [HttpPut("operators/{id:guid}")]
@@ -611,10 +813,30 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         }
         op.UpdatedAtUtc = DateTime.UtcNow;
 
+        await VehicleCatalogBootstrap.EnsureAsync(db, cancellationToken);
+        await db.Entry(op).Collection(x => x.VehicleOffers).Query()
+            .Include(x => x.VehicleCategory)
+            .LoadAsync(cancellationToken);
+        foreach (var offer in op.VehicleOffers)
+        {
+            if (offer.VehicleCategory?.LegacyEnumValue == (int)VehicleType.Motorcycle)
+            {
+                offer.CommissionPercent = FareCommissionSplit.Round(motorcycleCommission);
+                offer.UpdatedAtUtc = DateTime.UtcNow;
+            }
+            else if (offer.VehicleCategory?.LegacyEnumValue == (int)VehicleType.Tricycle)
+            {
+                offer.CommissionPercent = FareCommissionSplit.Round(tricycleCommission);
+                offer.UpdatedAtUtc = DateTime.UtcNow;
+            }
+        }
+
         var fares = await db.FareMatrices.Where(x => x.OperatorId == op.Id).ToListAsync(cancellationToken);
         foreach (var fare in fares)
         {
-            FareCommissionSplit.KeepOperatorShare(fare, FareCommissionSplit.SystemPercent(op, fare.VehicleType));
+            FareCommissionSplit.KeepOperatorShare(
+                fare,
+                FareCommissionSplit.SystemPercent(op, fare.VehicleCategoryId, fare.VehicleType));
         }
 
         var pabili = await db.PabiliMatrices.FirstOrDefaultAsync(x => x.OperatorId == op.Id, cancellationToken);
@@ -670,7 +892,22 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         var riderCount = await db.RiderProfiles.CountAsync(x => x.OperatorId == id, cancellationToken);
         var mc = await db.RiderProfiles.CountAsync(x => x.OperatorId == id && x.VehicleType == VehicleType.Motorcycle, cancellationToken);
         var trike = await db.RiderProfiles.CountAsync(x => x.OperatorId == id && x.VehicleType == VehicleType.Tricycle, cancellationToken);
-        return Ok(MapOperator(op, riderCount, mc, trike));
+        var riderEntries = await db.RiderProfiles
+            .Where(x => x.OperatorId == id)
+            .Select(x => new
+            {
+                x.VehicleType,
+                x.VehicleCategoryId,
+                Code = x.VehicleCategory != null ? x.VehicleCategory.Code : null,
+                Name = x.VehicleCategory != null ? x.VehicleCategory.Name : null
+            })
+            .ToListAsync(cancellationToken);
+        return Ok(MapOperator(
+            op,
+            riderCount,
+            mc,
+            trike,
+            VehicleCountMaps.FromEntries(riderEntries.Select(x => (x.VehicleType, x.VehicleCategoryId, x.Code, x.Name)))));
     }
 
     [HttpGet("operators/{id:guid}")]
@@ -686,6 +923,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             .ThenInclude(x => x.Province)
             .Include(x => x.Riders)
             .ThenInclude(x => x.AppUser)
+            .Include(x => x.Riders)
+            .ThenInclude(x => x.VehicleCategory)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
         if (op is null)
@@ -725,7 +964,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             op.CreatedAtUtc,
             OperatorAddressSync.Map(op),
             OperatorAreaSync.Map(op.Areas),
-            riders));
+            riders,
+            VehicleCountMaps.FromRiders(op.Riders)));
     }
 
     [HttpGet("operators/{id:guid}/bookings")]
@@ -859,7 +1099,12 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
 
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 50);
-        var query = db.RiderProfiles.Where(x => x.OperatorId == id).Include(x => x.AppUser).Include(x => x.PaymentMethods).AsQueryable();
+        var query = db.RiderProfiles
+            .Where(x => x.OperatorId == id)
+            .Include(x => x.AppUser)
+            .Include(x => x.PaymentMethods)
+            .Include(x => x.VehicleCategory)
+            .AsQueryable();
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = q.Trim();
@@ -887,6 +1132,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         var rider = await db.RiderProfiles
             .Include(x => x.AppUser)
             .Include(x => x.PaymentMethods)
+            .Include(x => x.VehicleCategory)
             .Include(x => x.AddressBarangay)
                 .ThenInclude(x => x!.Municipality)
                     .ThenInclude(x => x.Province)
@@ -1193,7 +1439,12 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
     [HttpGet("government-id-types")]
     public ActionResult<IReadOnlyList<string>> ListGovernmentIdTypes() => Ok(GovernmentIdCatalog.All);
 
-    private static OperatorListItem MapOperator(Operator op, int riderCount, int motorcycle, int tricycle) =>
+    private static OperatorListItem MapOperator(
+        Operator op,
+        int riderCount,
+        int motorcycle,
+        int tricycle,
+        IReadOnlyList<VehicleCountItem>? riderVehicleCounts = null) =>
         new(
             op.Id,
             op.CompanyName,
@@ -1211,7 +1462,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             riderCount,
             motorcycle,
             tricycle,
-            op.CreatedAtUtc);
+            op.CreatedAtUtc,
+            riderVehicleCounts);
 
     private static RiderListItem MapRider(RiderProfile rider) =>
         new(
@@ -1231,7 +1483,10 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             UploadUrls.FromPath(rider.LicensePhotoPath),
             RiderPaymentSync.Map(rider.PaymentMethods),
             rider.CredibilityScore,
-            rider.RiderCancelCount);
+            rider.RiderCancelCount,
+            rider.VehicleCategoryId,
+            rider.VehicleCategory?.Code,
+            rider.VehicleCategory?.Name);
 
     private static RiderDetailResponse MapRiderDetail(RiderProfile rider) =>
         new(
@@ -1253,7 +1508,10 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             OperatorAddressSync.Map(rider),
             RiderPaymentSync.Map(rider.PaymentMethods),
             rider.CredibilityScore,
-            rider.RiderCancelCount);
+            rider.RiderCancelCount,
+            rider.VehicleCategoryId,
+            rider.VehicleCategory?.Code,
+            rider.VehicleCategory?.Name);
 
     private async Task<RideDetailResponse> MapRideDetailAsync(Trip trip, CancellationToken cancellationToken)
     {
@@ -1271,7 +1529,12 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         DeriveFareMatrix? derive = null;
         if (trip.DeriveFareZoneId is Guid zoneId)
         {
-            derive = await OperatorMaps.LoadDeriveFareMatrixAsync(db, zoneId, trip.VehicleType, cancellationToken);
+            derive = await OperatorMaps.LoadDeriveFareMatrixAsync(
+                db,
+                zoneId,
+                trip.VehicleType,
+                trip.VehicleCategoryId,
+                cancellationToken);
         }
 
         return new RideDetailResponse(
@@ -1440,11 +1703,9 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         var rides = tripRows
             .Select(x =>
             {
-                FareMatrix? fare = null;
-                if (x.PickupBarangay is not null)
-                {
-                    pageFares.TryGetValue((x.OperatorId, x.VehicleType, x.PickupBarangay.MunicipalityId), out fare);
-                }
+                FareMatrix? fare = x.PickupBarangay is not null
+                    ? pageFares.Resolve(x, x.PickupBarangay.MunicipalityId)
+                    : null;
 
                 return new RideListItem(
                     x.Id,

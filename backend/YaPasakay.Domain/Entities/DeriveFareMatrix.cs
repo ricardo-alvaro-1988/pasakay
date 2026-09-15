@@ -8,6 +8,8 @@ public class DeriveFareMatrix : BaseEntity
     public Guid DeriveFareZoneId { get; set; }
     public DeriveFareZone Zone { get; set; } = null!;
     public VehicleType VehicleType { get; set; }
+    public Guid? VehicleCategoryId { get; set; }
+    public VehicleCategory? VehicleCategory { get; set; }
     public decimal BaseFare { get; set; }
     public decimal PerKm { get; set; }
     public decimal MinimumFare { get; set; }

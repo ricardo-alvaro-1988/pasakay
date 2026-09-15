@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using YaPasakay.Api.Services;
 using YaPasakay.Application.Admin;
+using YaPasakay.Application.Common;
+using YaPasakay.Domain;
 using YaPasakay.Domain.Entities;
 using YaPasakay.Domain.Enums;
 using YaPasakay.Infrastructure.Persistence;
@@ -29,6 +31,48 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         return Ok(await BuildDetailAsync(op!, municipalityId, cancellationToken));
     }
 
+    [HttpGet("offering-terms")]
+    public ActionResult<VehicleOfferingTermsInfo> OfferingTerms() =>
+        Ok(new VehicleOfferingTermsInfo(VehicleOfferingTerms.Version, VehicleOfferingTerms.Text));
+
+    [HttpGet("offering-logs")]
+    public async Task<ActionResult<PagedResult<VehicleOfferingLogItem>>> OfferingLogs(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null) return StatusCode(status, new { message });
+
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 100);
+        var query = db.VehicleOfferingLogs.AsNoTracking()
+            .Where(x => x.OperatorId == op.Id)
+            .OrderByDescending(x => x.AtUtc);
+        var total = await query.CountAsync(cancellationToken);
+        var rows = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(x => new VehicleOfferingLogItem(
+                x.Id,
+                x.OperatorId,
+                op.CompanyName,
+                x.MunicipalityId,
+                x.Municipality != null ? x.Municipality.Name : null,
+                x.VehicleCategoryId,
+                x.VehicleCode,
+                x.VehicleName,
+                x.VehicleType.ToString(),
+                x.IsOffered,
+                x.ActorName,
+                x.ActorRole,
+                x.AcceptedTerms,
+                x.TermsVersion,
+                x.AtUtc))
+            .ToListAsync(cancellationToken);
+        return Ok(new PagedResult<VehicleOfferingLogItem>(rows, page, pageSize, total));
+    }
+
     [HttpPut]
     public async Task<ActionResult<OperatorFareDetailResponse>> SaveRates(
         [FromBody] SaveFareRatesRequest request,
@@ -40,9 +84,14 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             return StatusCode(status, new { message });
         }
 
-        if (request.VehicleType is not VehicleType.Motorcycle and not VehicleType.Tricycle)
+        if (VehicleTypeRules.ValidateChoice(request.VehicleType) is { } invalidVehicle)
         {
-            return BadRequest(new { message = "Choose Motorcycle or Tricycle." });
+            return BadRequest(new { message = invalidVehicle });
+        }
+
+        if (request.VehicleType == VehicleType.Custom && request.VehicleCategoryId is null)
+        {
+            return BadRequest(new { message = "Custom fares require a vehicle category." });
         }
 
         if (request.BaseFare < 0 || request.PerKm < 0 || request.MinimumFare < 0 || request.IncludedKm < 0
@@ -57,8 +106,19 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = coverageError });
         }
 
+        // Include offers for commission lookup + enable gate
+        await db.Entry(op).Collection(x => x.VehicleOffers).LoadAsync(cancellationToken);
+
+        var categoryId = request.VehicleCategoryId ?? VehicleCatalog.IdFor(request.VehicleType);
+        var offer = op.VehicleOffers.FirstOrDefault(x => x.VehicleCategoryId == categoryId);
+        if (offer is null || !offer.IsEnabled)
+        {
+            return BadRequest(new { message = "That vehicle type is not enabled for this operator. Ask Super Admin to enable it." });
+        }
+
+        var systemPercent = FareCommissionSplit.SystemPercent(op, request.VehicleCategoryId, request.VehicleType);
         var splitError = FareCommissionSplit.Validate(
-            FareCommissionSplit.SystemPercent(op, request.VehicleType),
+            systemPercent,
             request.OperatorCommissionPercent,
             request.DriverCommissionPercent);
         if (splitError is not null)
@@ -70,14 +130,19 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             op.Id,
             request.MunicipalityId,
             request.VehicleType,
-            FareCommissionSplit.SystemPercent(op, request.VehicleType),
+            request.VehicleCategoryId,
+            systemPercent,
             cancellationToken);
         try
         {
-            var rates = request.VehicleType == VehicleType.Motorcycle
+            var rates = VehicleTypeRules.UsesSinglePassengerTier(request.VehicleType)
                 ? SinglePassengerRates(ToVehicleBody(request))
                 : ToVehicleBody(request);
-            await PersistRatesAsync(fare!, rates, cancellationToken);
+            var offerError = await PersistRatesAsync(fare!, rates, User, cancellationToken);
+            if (offerError is not null)
+            {
+                return BadRequest(new { message = offerError });
+            }
         }
         catch (DbUpdateException ex)
         {
@@ -112,40 +177,67 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = coverageError });
         }
 
-        var motorcycleError = FareCommissionSplit.Validate(
-            op.MotorcycleCommissionPercent,
-            request.Motorcycle.OperatorCommissionPercent,
-            request.Motorcycle.DriverCommissionPercent);
-        if (motorcycleError is not null)
+        await db.Entry(op).Collection(x => x.VehicleOffers).LoadAsync(cancellationToken);
+        var motorcycleEnabled = op.VehicleOffers.Any(x =>
+            x.IsEnabled && x.VehicleCategoryId == VehicleCatalog.IdFor(VehicleType.Motorcycle));
+        var tricycleEnabled = op.VehicleOffers.Any(x =>
+            x.IsEnabled && x.VehicleCategoryId == VehicleCatalog.IdFor(VehicleType.Tricycle));
+        if (!motorcycleEnabled && !tricycleEnabled)
         {
-            return BadRequest(new { message = $"Motorcycle: {motorcycleError}" });
+            return BadRequest(new { message = "Motorcycle and Tricycle are not enabled for this operator." });
         }
 
-        var tricycleError = FareCommissionSplit.Validate(
-            op.TricycleCommissionPercent,
-            request.Tricycle.OperatorCommissionPercent,
-            request.Tricycle.DriverCommissionPercent);
-        if (tricycleError is not null)
+        if (motorcycleEnabled)
         {
-            return BadRequest(new { message = $"Tricycle: {tricycleError}" });
+            var motorcycleError = FareCommissionSplit.Validate(
+                op.MotorcycleCommissionPercent,
+                request.Motorcycle.OperatorCommissionPercent,
+                request.Motorcycle.DriverCommissionPercent);
+            if (motorcycleError is not null)
+            {
+                return BadRequest(new { message = $"Motorcycle: {motorcycleError}" });
+            }
         }
 
-        var motorcycle = await EnsureMatrixAsync(
-            op.Id,
-            request.MunicipalityId,
-            VehicleType.Motorcycle,
-            op.MotorcycleCommissionPercent,
-            cancellationToken);
-        var tricycle = await EnsureMatrixAsync(
-            op.Id,
-            request.MunicipalityId,
-            VehicleType.Tricycle,
-            op.TricycleCommissionPercent,
-            cancellationToken);
+        if (tricycleEnabled)
+        {
+            var tricycleError = FareCommissionSplit.Validate(
+                op.TricycleCommissionPercent,
+                request.Tricycle.OperatorCommissionPercent,
+                request.Tricycle.DriverCommissionPercent);
+            if (tricycleError is not null)
+            {
+                return BadRequest(new { message = $"Tricycle: {tricycleError}" });
+            }
+        }
+
         try
         {
-            await PersistRatesAsync(motorcycle!, SinglePassengerRates(request.Motorcycle), cancellationToken);
-            await PersistRatesAsync(tricycle!, request.Tricycle, cancellationToken);
+            if (motorcycleEnabled)
+            {
+                var motorcycle = await EnsureMatrixAsync(
+                    op.Id,
+                    request.MunicipalityId,
+                    VehicleType.Motorcycle,
+                    null,
+                    op.MotorcycleCommissionPercent,
+                    cancellationToken);
+                var mcError = await PersistRatesAsync(motorcycle!, SinglePassengerRates(request.Motorcycle), User, cancellationToken);
+                if (mcError is not null) return BadRequest(new { message = mcError });
+            }
+
+            if (tricycleEnabled)
+            {
+                var tricycle = await EnsureMatrixAsync(
+                    op.Id,
+                    request.MunicipalityId,
+                    VehicleType.Tricycle,
+                    null,
+                    op.TricycleCommissionPercent,
+                    cancellationToken);
+                var trikeError = await PersistRatesAsync(tricycle!, request.Tricycle, User, cancellationToken);
+                if (trikeError is not null) return BadRequest(new { message = trikeError });
+            }
         }
         catch (DbUpdateException ex)
         {
@@ -200,7 +292,7 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         }
 
         var types = (request.VehicleTypes ?? [])
-            .Where(x => x is VehicleType.Motorcycle or VehicleType.Tricycle)
+            .Where(VehicleTypeRules.IsKnown)
             .Distinct()
             .ToList();
         if (types.Count == 0)
@@ -233,6 +325,7 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
                         op.Id,
                         municipalityId,
                         vehicleType,
+                        null,
                         FareCommissionSplit.SystemPercent(op, vehicleType),
                         cancellationToken);
                     await PersistSurchargeAsync(fare!, parsed.Item!, cancellationToken);
@@ -277,11 +370,12 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             op.Id,
             municipalityId,
             vehicleType,
+            null,
             FareCommissionSplit.SystemPercent(op, vehicleType),
             cancellationToken);
         if (fare is null)
         {
-            return BadRequest(new { message = "Choose Motorcycle or Tricycle." });
+            return BadRequest(new { message = "Choose a valid vehicle type." });
         }
 
         var parsed = ParseSurcharge(request);
@@ -399,6 +493,11 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
                     .Select(x => x.Name)
                     .FirstOrDefaultAsync(cancellationToken);
 
+        await db.Entry(op).Collection(x => x.VehicleOffers)
+            .Query()
+            .Include(o => o.VehicleCategory)
+            .LoadAsync(cancellationToken);
+
         return new OperatorFareDetailResponse(
             op.Id,
             op.CompanyName,
@@ -409,7 +508,8 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             selectedName,
             municipalities,
             OperatorMaps.FareRates(fares.FirstOrDefault(x => x.VehicleType == VehicleType.Motorcycle), true),
-            OperatorMaps.FareRates(fares.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle), true));
+            OperatorMaps.FareRates(fares.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle), true),
+            OperatorMaps.VehicleFareSlots(op, fares, includeSamples: true));
     }
 
     private async Task<string?> RequireCoveredMunicipalityAsync(
@@ -484,7 +584,8 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             request.OperatorCommissionPercent,
             request.DriverCommissionPercent,
             request.IsActive,
-            request.PassengerTiers);
+            request.PassengerTiers,
+            request.AcceptedOfferTerms);
 
     private static string DescribeSurchargeDbError(Exception ex)
     {
@@ -525,11 +626,22 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         return $"Could not save fare matrix. {root}";
     }
 
-    private async Task PersistRatesAsync(
+    private async Task<string?> PersistRatesAsync(
         FareMatrix fare,
         FareVehicleRatesBody rates,
+        System.Security.Claims.ClaimsPrincipal user,
         CancellationToken cancellationToken)
     {
+        var previousOffered = fare.IsActive;
+        var nextOffered = rates.IsActive;
+        if (nextOffered
+            && !previousOffered
+            && VehicleOfferingTerms.RequiresTermsAcceptance(fare.VehicleType)
+            && !rates.AcceptedOfferTerms)
+        {
+            return "Accept the vehicle offering terms and conditions before offering this vehicle type.";
+        }
+
         var tiers = NormalizeTiers(
             rates.PassengerTiers,
             rates.BaseFare,
@@ -543,8 +655,13 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         fare.IncludedKm = FareCommissionSplit.Round(primary.IncludedKm);
         fare.OperatorCommissionPercent = FareCommissionSplit.Round(rates.OperatorCommissionPercent);
         fare.DriverCommissionPercent = FareCommissionSplit.Round(rates.DriverCommissionPercent);
-        fare.IsActive = rates.IsActive;
+        fare.IsActive = nextOffered;
         fare.UpdatedAtUtc = DateTime.UtcNow;
+
+        if (previousOffered != nextOffered)
+        {
+            await AddOfferingLogAsync(fare, nextOffered, rates.AcceptedOfferTerms, user, cancellationToken);
+        }
 
         // 1. Save FareMatrix scalar changes (and insert new matrix row when State == Added).
         //    Do NOT touch PassengerTiers through EF — we manage them via raw SQL below
@@ -571,6 +688,74 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
                 [Guid.NewGuid(), fare.Id, tier.PassengerCount, tier.BaseFare, tier.PerKm, tier.MinimumFare, tier.IncludedKm, now],
                 cancellationToken);
         }
+
+        return null;
+    }
+
+    private async Task AddOfferingLogAsync(
+        FareMatrix fare,
+        bool isOffered,
+        bool acceptedTerms,
+        System.Security.Claims.ClaimsPrincipal user,
+        CancellationToken cancellationToken)
+    {
+        Guid? actorId = null;
+        var raw = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (Guid.TryParse(raw, out var id))
+        {
+            actorId = id;
+        }
+
+        string actorName = user.FindFirst("name")?.Value
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
+            ?? user.Identity?.Name
+            ?? "Operator";
+        if (actorId is Guid uid)
+        {
+            var named = await db.Users.AsNoTracking()
+                .Where(x => x.Id == uid)
+                .Select(x => x.FullName)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(named))
+            {
+                actorName = named;
+            }
+        }
+
+        string code;
+        string name;
+        if (fare.VehicleCategoryId is Guid categoryId)
+        {
+            var cat = await db.VehicleCategories.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == categoryId, cancellationToken);
+            code = cat?.Code ?? fare.VehicleType.ToString().ToLowerInvariant();
+            name = cat?.Name ?? fare.VehicleType.ToString();
+        }
+        else
+        {
+            var preset = VehicleCatalog.PresetFor(fare.VehicleType);
+            code = preset?.Code ?? fare.VehicleType.ToString().ToLowerInvariant();
+            name = preset?.Name ?? fare.VehicleType.ToString();
+        }
+
+        db.VehicleOfferingLogs.Add(new VehicleOfferingLog
+        {
+            OperatorId = fare.OperatorId,
+            MunicipalityId = fare.MunicipalityId,
+            VehicleCategoryId = fare.VehicleCategoryId ?? VehicleCatalog.IdFor(fare.VehicleType),
+            VehicleType = fare.VehicleType,
+            VehicleCode = code,
+            VehicleName = name,
+            IsOffered = isOffered,
+            ActorUserId = actorId,
+            ActorName = actorName.Length > 120 ? actorName[..120] : actorName,
+            ActorRole = "Operator",
+            AcceptedTerms = isOffered && acceptedTerms,
+            TermsVersion = isOffered && VehicleOfferingTerms.RequiresTermsAcceptance(fare.VehicleType)
+                ? VehicleOfferingTerms.Version
+                : null,
+            AtUtc = DateTime.UtcNow,
+        });
     }
 
     /// <summary>
@@ -660,10 +845,61 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
         Guid operatorId,
         Guid municipalityId,
         VehicleType vehicleType,
+        Guid? vehicleCategoryId,
         decimal systemPercent,
         CancellationToken cancellationToken)
     {
-        if (vehicleType is not VehicleType.Motorcycle and not VehicleType.Tricycle)
+        if (vehicleCategoryId is Guid categoryId)
+        {
+            var category = await db.VehicleCategories
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == categoryId && x.IsActive, cancellationToken);
+            if (category is null)
+            {
+                return null;
+            }
+
+            if (category.OperatorId is null)
+            {
+                vehicleType = category.LegacyEnumValue is int legacy && Enum.IsDefined(typeof(VehicleType), legacy)
+                    ? (VehicleType)legacy
+                    : VehicleCatalog.TypeFor(category.Id) ?? vehicleType;
+            }
+            else if (category.OperatorId != operatorId)
+            {
+                return null;
+            }
+            else
+            {
+                vehicleType = VehicleType.Custom;
+            }
+
+            var byCategory = await db.FareMatrices
+                .FirstOrDefaultAsync(
+                    x => x.OperatorId == operatorId
+                        && x.MunicipalityId == municipalityId
+                        && x.VehicleCategoryId == categoryId,
+                    cancellationToken);
+            if (byCategory is not null)
+            {
+                return byCategory;
+            }
+
+            var created = new FareMatrix
+            {
+                OperatorId = operatorId,
+                MunicipalityId = municipalityId,
+                VehicleType = vehicleType,
+                VehicleCategoryId = categoryId,
+                IncludedKm = 1,
+                IsActive = VehicleOfferingTerms.DefaultOffered(vehicleType)
+            };
+            FareCommissionSplit.ApplyDefaults(created, systemPercent);
+            db.FareMatrices.Add(created);
+            return created;
+        }
+
+        if (!VehicleTypeRules.IsKnown(vehicleType))
         {
             return null;
         }
@@ -677,6 +913,10 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
                 cancellationToken);
         if (fare is not null)
         {
+            if (fare.VehicleCategoryId is null && VehicleTypeRules.IsKnown(vehicleType))
+            {
+                fare.VehicleCategoryId = VehicleCatalog.IdFor(vehicleType);
+            }
             return fare;
         }
 
@@ -685,8 +925,9 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
             OperatorId = operatorId,
             MunicipalityId = municipalityId,
             VehicleType = vehicleType,
+            VehicleCategoryId = VehicleCatalog.IdFor(vehicleType),
             IncludedKm = 1,
-            IsActive = true
+            IsActive = VehicleOfferingTerms.DefaultOffered(vehicleType)
         };
         FareCommissionSplit.ApplyDefaults(fare, systemPercent);
         db.FareMatrices.Add(fare);

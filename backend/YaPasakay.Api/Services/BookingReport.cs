@@ -128,11 +128,9 @@ public static class BookingReport
         var fares = await OperatorMaps.LoadFareMatrixLookupAsync(db, trips, cancellationToken);
         return trips.Select(trip =>
         {
-            Domain.Entities.FareMatrix? fare = null;
-            if (trip.PickupBarangay is not null)
-            {
-                fares.TryGetValue((trip.OperatorId, trip.VehicleType, trip.PickupBarangay.MunicipalityId), out fare);
-            }
+            Domain.Entities.FareMatrix? fare = trip.PickupBarangay is not null
+                ? fares.Resolve(trip, trip.PickupBarangay.MunicipalityId)
+                : null;
 
             var breakdown = RideCommissionCalculator.ForTrip(trip, fare);
             var when = trip.CompletedAtUtc ?? trip.ScheduledAtUtc ?? trip.RequestedAtUtc;

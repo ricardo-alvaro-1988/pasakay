@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using YaPasakay.Application.Admin;
+using YaPasakay.Domain;
 using YaPasakay.Domain.Entities;
 using YaPasakay.Domain.Enums;
 using YaPasakay.Infrastructure.Persistence;
@@ -26,7 +27,10 @@ public static class OperatorMaps
             UploadUrls.FromPath(rider.LicensePhotoPath),
             RiderPaymentSync.Map(rider.PaymentMethods),
             rider.CredibilityScore,
-            rider.RiderCancelCount);
+            rider.RiderCancelCount,
+            rider.VehicleCategoryId,
+            rider.VehicleCategory?.Code,
+            rider.VehicleCategory?.Name);
 
     public static FleetRiderItem Fleet(RiderProfile rider, TripStatus? status, string? bookingReference) =>
         new(
@@ -63,7 +67,10 @@ public static class OperatorMaps
             OperatorAddressSync.Map(rider),
             RiderPaymentSync.Map(rider.PaymentMethods),
             rider.CredibilityScore,
-            rider.RiderCancelCount);
+            rider.RiderCancelCount,
+            rider.VehicleCategoryId,
+            rider.VehicleCategory?.Code,
+            rider.VehicleCategory?.Name);
 
     public static CustomerListItem Customer(CustomerProfile customer) =>
         new(
@@ -173,7 +180,12 @@ public static class OperatorMaps
         DeriveFareMatrix? derive = null;
         if (trip.DeriveFareZoneId is Guid zoneId)
         {
-            derive = await LoadDeriveFareMatrixAsync(db, zoneId, trip.VehicleType, cancellationToken);
+            derive = await LoadDeriveFareMatrixAsync(
+                db,
+                zoneId,
+                trip.VehicleType,
+                trip.VehicleCategoryId,
+                cancellationToken);
         }
 
         return RideDetail(trip, fare, derive);
@@ -190,14 +202,13 @@ public static class OperatorMaps
             return null;
         }
 
-        return await db.FareMatrices
-            .Include(x => x.Surcharges)
-            .FirstOrDefaultAsync(
-                x => x.OperatorId == trip.OperatorId
-                    && x.VehicleType == trip.VehicleType
-                    && x.MunicipalityId == municipalityId
-                    && x.IsActive,
-                cancellationToken);
+        return await LoadFareMatrixAsync(
+            db,
+            trip.OperatorId,
+            trip.VehicleType,
+            municipalityId.Value,
+            trip.VehicleCategoryId,
+            cancellationToken);
     }
 
     public static async Task<FareMatrix?> LoadFareMatrixAsync(
@@ -205,8 +216,27 @@ public static class OperatorMaps
         Guid operatorId,
         VehicleType vehicleType,
         Guid municipalityId,
-        CancellationToken cancellationToken) =>
-        await db.FareMatrices
+        Guid? vehicleCategoryId,
+        CancellationToken cancellationToken)
+    {
+        if (vehicleCategoryId is Guid categoryId)
+        {
+            var byCategory = await db.FareMatrices
+                .Include(x => x.PassengerTiers)
+                .Include(x => x.Surcharges)
+                .FirstOrDefaultAsync(
+                    x => x.OperatorId == operatorId
+                        && x.MunicipalityId == municipalityId
+                        && x.VehicleCategoryId == categoryId
+                        && x.IsActive,
+                    cancellationToken);
+            if (byCategory is not null)
+            {
+                return byCategory;
+            }
+        }
+
+        return await db.FareMatrices
             .Include(x => x.PassengerTiers)
             .Include(x => x.Surcharges)
             .FirstOrDefaultAsync(
@@ -215,19 +245,38 @@ public static class OperatorMaps
                     && x.MunicipalityId == municipalityId
                     && x.IsActive,
                 cancellationToken);
+    }
 
     public static async Task<DeriveFareMatrix?> LoadDeriveFareMatrixAsync(
         AppDbContext db,
         Guid zoneId,
         VehicleType vehicleType,
-        CancellationToken cancellationToken) =>
-        await db.DeriveFareMatrices
+        Guid? vehicleCategoryId,
+        CancellationToken cancellationToken)
+    {
+        if (vehicleCategoryId is Guid categoryId)
+        {
+            var byCategory = await db.DeriveFareMatrices
+                .Include(x => x.PassengerTiers)
+                .FirstOrDefaultAsync(
+                    x => x.DeriveFareZoneId == zoneId
+                        && x.VehicleCategoryId == categoryId
+                        && x.IsActive,
+                    cancellationToken);
+            if (byCategory is not null)
+            {
+                return byCategory;
+            }
+        }
+
+        return await db.DeriveFareMatrices
             .Include(x => x.PassengerTiers)
             .FirstOrDefaultAsync(
                 x => x.DeriveFareZoneId == zoneId
                     && x.VehicleType == vehicleType
                     && x.IsActive,
                 cancellationToken);
+    }
 
     public static async Task<Guid?> ResolvePickupMunicipalityIdAsync(
         AppDbContext db,
@@ -423,11 +472,9 @@ public static class OperatorMaps
         var rides = tripRows
             .Select(x =>
             {
-                FareMatrix? fare = null;
-                if (x.PickupBarangay is not null)
-                {
-                    pageFares.TryGetValue((x.OperatorId, x.VehicleType, x.PickupBarangay.MunicipalityId), out fare);
-                }
+                FareMatrix? fare = x.PickupBarangay is not null
+                    ? pageFares.Resolve(x, x.PickupBarangay.MunicipalityId)
+                    : null;
 
                 return new RideListItem(
                     x.Id,
@@ -456,23 +503,28 @@ public static class OperatorMaps
         return new RiderRidesResponse(summary, series, new PagedResult<RideListItem>(rides, page, pageSize, total));
     }
 
-    public static async Task<Dictionary<(Guid OperatorId, VehicleType VehicleType, Guid MunicipalityId), FareMatrix>> LoadFareMatrixLookupAsync(
+    public static async Task<FareMatrixLookup> LoadFareMatrixLookupAsync(
         AppDbContext db,
         IReadOnlyList<Trip> trips,
         CancellationToken cancellationToken)
     {
         if (trips.Count == 0)
         {
-            return [];
+            return FareMatrixLookup.Empty;
         }
 
         var operatorIds = trips.Select(x => x.OperatorId).Distinct().ToList();
         var fares = await db.FareMatrices
             .Where(x => operatorIds.Contains(x.OperatorId) && x.IsActive)
             .ToListAsync(cancellationToken);
-        return fares
+        var byCategory = fares
+            .Where(x => x.VehicleCategoryId is not null)
+            .GroupBy(x => (x.OperatorId, CategoryId: x.VehicleCategoryId!.Value, x.MunicipalityId))
+            .ToDictionary(g => g.Key, g => g.First());
+        var byType = fares
             .GroupBy(x => (x.OperatorId, x.VehicleType, x.MunicipalityId))
             .ToDictionary(g => g.Key, g => g.First());
+        return new FareMatrixLookup(byCategory, byType);
     }
 
     public static FareRatesItem? FareRates(FareMatrix? fare, bool includeSamples)
@@ -514,6 +566,67 @@ public static class OperatorMaps
             includeSamples
                 ? FareQuote.SamplesForPassengers(fare, sampleTier?.PassengerCount ?? 1)
                 : []);
+    }
+
+    /// <summary>Enabled platform presets plus enabled custom operator categories, with dual-read rates.</summary>
+    public static IReadOnlyList<OperatorVehicleFareSlot> VehicleFareSlots(
+        Operator op,
+        IReadOnlyList<FareMatrix> fares,
+        bool includeSamples)
+    {
+        var vehicles = VehicleCatalog.PlatformPresets
+            .OrderBy(x => x.SortOrder)
+            .Select(preset =>
+            {
+                var offer = op.VehicleOffers?.FirstOrDefault(o => o.VehicleCategoryId == preset.Id);
+                if (offer is null || !offer.IsEnabled)
+                {
+                    return null;
+                }
+
+                var system = offer.CommissionPercent;
+                return new OperatorVehicleFareSlot(
+                    preset.LegacyEnum,
+                    preset.Id,
+                    preset.Code,
+                    offer.DisplayName ?? preset.Name,
+                    preset.IsCargo,
+                    offer.MaxPassengers ?? preset.MaxPassengers,
+                    system,
+                    FareRates(
+                        fares.FirstOrDefault(x => x.VehicleCategoryId == preset.Id)
+                            ?? fares.FirstOrDefault(x => x.VehicleType == preset.LegacyEnum),
+                        includeSamples));
+            })
+            .Where(x => x is not null)
+            .Cast<OperatorVehicleFareSlot>()
+            .ToList();
+
+        var platformCategoryIds = VehicleCatalog.PlatformPresets.Select(x => x.Id).ToHashSet();
+        foreach (var offer in (op.VehicleOffers ?? [])
+                     .Where(o => o.IsEnabled
+                         && o.VehicleCategory is not null
+                         && o.VehicleCategory.IsActive
+                         && o.VehicleCategory.OperatorId == op.Id
+                         && !platformCategoryIds.Contains(o.VehicleCategoryId))
+                     .OrderBy(o => o.VehicleCategory!.SortOrder)
+                     .ThenBy(o => o.VehicleCategory!.Name))
+        {
+            var cat = offer.VehicleCategory!;
+            vehicles.Add(new OperatorVehicleFareSlot(
+                VehicleType.Custom,
+                cat.Id,
+                cat.Code,
+                offer.DisplayName ?? cat.Name,
+                cat.IsCargo,
+                offer.MaxPassengers ?? cat.MaxPassengers,
+                offer.CommissionPercent,
+                FareRates(
+                    fares.FirstOrDefault(x => x.VehicleCategoryId == cat.Id),
+                    includeSamples)));
+        }
+
+        return vehicles;
     }
 
     public static IReadOnlyList<FarePassengerTierItem> MapPassengerTiers(FareMatrix fare)

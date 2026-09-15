@@ -32,7 +32,12 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
 
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 50);
-        var query = db.RiderProfiles.Where(x => x.OperatorId == op!.Id).Include(x => x.AppUser).Include(x => x.PaymentMethods).AsQueryable();
+        var query = db.RiderProfiles
+            .Where(x => x.OperatorId == op!.Id)
+            .Include(x => x.AppUser)
+            .Include(x => x.PaymentMethods)
+            .Include(x => x.VehicleCategory)
+            .AsQueryable();
         if (!string.IsNullOrWhiteSpace(q))
         {
             var term = q.Trim();
@@ -65,6 +70,7 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
         var rider = await db.RiderProfiles
             .Include(x => x.AppUser)
             .Include(x => x.PaymentMethods)
+            .Include(x => x.VehicleCategory)
             .Include(x => x.AddressBarangay)
                 .ThenInclude(x => x!.Municipality)
                     .ThenInclude(x => x.Province)
@@ -84,7 +90,14 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
             return StatusCode(status, new { message });
         }
 
-        var parsed = await ParseAsync(form, null, cancellationToken);
+        var vehicle = await RiderVehicleResolve.ResolveAsync(
+            db, op.Id, form.VehicleCategoryId, form.VehicleType, cancellationToken);
+        if (vehicle.Error is not null)
+        {
+            return BadRequest(new { message = vehicle.Error });
+        }
+
+        var parsed = await ParseAsync(form, vehicle.Type, null, cancellationToken);
         if (parsed.Error is not null)
         {
             return BadRequest(new { message = parsed.Error });
@@ -108,7 +121,8 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
         {
             AppUser = user,
             OperatorId = op.Id,
-            VehicleType = form.VehicleType,
+            VehicleType = vehicle.Type,
+            VehicleCategoryId = vehicle.CategoryId,
             PlateNumber = parsed.Plate,
             VehicleFranchiseNumber = parsed.Franchise,
             VehicleModel = parsed.Model,
@@ -167,7 +181,15 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
             return NotFound();
         }
 
-        var parsed = await ParseAsync(form, rider.AppUserId, cancellationToken);
+        var vehicle = await RiderVehicleResolve.ResolveAsync(
+            db, op.Id, form.VehicleCategoryId, form.VehicleType, cancellationToken,
+            requireEnabled: form.VehicleCategoryId is null || form.VehicleCategoryId != rider.VehicleCategoryId);
+        if (vehicle.Error is not null)
+        {
+            return BadRequest(new { message = vehicle.Error });
+        }
+
+        var parsed = await ParseAsync(form, vehicle.Type, rider.AppUserId, cancellationToken);
         if (parsed.Error is not null)
         {
             return BadRequest(new { message = parsed.Error });
@@ -192,7 +214,8 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
         }
 
         rider.AppUser.UpdatedAtUtc = DateTime.UtcNow;
-        rider.VehicleType = form.VehicleType;
+        rider.VehicleType = vehicle.Type;
+        rider.VehicleCategoryId = vehicle.CategoryId;
         rider.PlateNumber = parsed.Plate;
         rider.VehicleFranchiseNumber = parsed.Franchise;
         rider.VehicleModel = parsed.Model;
@@ -335,6 +358,7 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
         var rider = await db.RiderProfiles
             .Include(x => x.AppUser)
             .Include(x => x.PaymentMethods)
+            .Include(x => x.VehicleCategory)
             .Include(x => x.AddressBarangay)
                 .ThenInclude(x => x!.Municipality)
                     .ThenInclude(x => x.Province)
@@ -344,6 +368,7 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
 
     private async Task<(string Name, string Phone, string Plate, string Franchise, string? Model, string LicenseType, string LicenseNumber, string? Error)> ParseAsync(
         CreateRiderForm form,
+        VehicleType vehicleType,
         Guid? userId,
         CancellationToken cancellationToken)
     {
@@ -358,11 +383,6 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
             return ("", "", "", "", null, "", "", "Name, phone, plate, vehicle franchise number, license type, and license number are required.");
         }
 
-        if (form.VehicleType is not VehicleType.Motorcycle and not VehicleType.Tricycle)
-        {
-            return ("", "", "", "", null, "", "", "Choose Motorcycle or Tricycle.");
-        }
-
         var taken = await db.Users.AnyAsync(
             x => x.PhoneNumber == phone && (userId == null || x.Id != userId),
             cancellationToken);
@@ -372,7 +392,7 @@ public class OperatorRidersController(AppDbContext db, UploadStore uploads) : Co
         }
 
         var model = string.IsNullOrWhiteSpace(form.VehicleModel) ? null : form.VehicleModel.Trim();
-        if (model is not null && LooksLikeVehicleTypeLabel(model, form.VehicleType))
+        if (model is not null && LooksLikeVehicleTypeLabel(model, vehicleType))
         {
             model = null;
         }

@@ -186,6 +186,7 @@ export const ADMIN_MENU_GROUPS: SideNavGroup[] = [
     label: 'Report',
     items: [
       { id: 'commission', label: 'Commission', icon: '％', live: true },
+      { id: 'offering-log', label: 'Offering log', icon: '☰', live: true },
     ],
   },
   {
@@ -245,6 +246,7 @@ export const OPERATOR_MENU_GROUPS: SideNavGroup[] = [
     label: 'Rates',
     items: [
       { id: 'fares', label: 'Fare matrix', icon: '₱' },
+      { id: 'offering-log', label: 'Offering log', icon: '☰' },
       { id: 'derive-fares', label: 'Derive fare', icon: '◎' },
       { id: 'surcharges', label: 'Surcharges', icon: '+' },
     ],

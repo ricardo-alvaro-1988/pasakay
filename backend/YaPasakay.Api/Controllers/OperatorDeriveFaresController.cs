@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using YaPasakay.Api.Services;
 using YaPasakay.Application.Admin;
+using YaPasakay.Domain;
 using YaPasakay.Domain.Entities;
 using YaPasakay.Domain.Enums;
 using YaPasakay.Infrastructure.Persistence;
@@ -50,6 +51,7 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             return StatusCode(status, new { message });
         }
 
+        await db.Entry(op).Collection(x => x.VehicleOffers).LoadAsync(cancellationToken);
         var zone = await LoadZoneAsync(op.Id, id, cancellationToken);
         return zone is null ? NotFound(new { message = "Derive fare zone not found." }) : Ok(MapDetail(op, zone));
     }
@@ -65,7 +67,9 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             return StatusCode(status, new { message });
         }
 
-        var error = Validate(request, op);
+        await db.Entry(op).Collection(x => x.VehicleOffers).LoadAsync(cancellationToken);
+        var slots = ResolveSlots(request);
+        var error = Validate(request, op, slots);
         if (error is not null)
         {
             return BadRequest(new { message = error });
@@ -81,8 +85,12 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             PolygonJson = GeoPolygon.Serialize(request.Polygon.Select(p => new LatLngPoint(p.Lat, p.Lng))),
         };
         db.DeriveFareZones.Add(zone);
-        db.DeriveFareMatrices.Add(BuildMatrix(zone.Id, VehicleType.Motorcycle, SinglePassengerRates(request.Motorcycle)));
-        db.DeriveFareMatrices.Add(BuildMatrix(zone.Id, VehicleType.Tricycle, request.Tricycle));
+        foreach (var (type, rates) in slots)
+        {
+            var body = VehicleTypeRules.UsesSinglePassengerTier(type) ? SinglePassengerRates(rates) : rates;
+            db.DeriveFareMatrices.Add(BuildMatrix(zone.Id, type, body));
+        }
+
         await db.SaveChangesAsync(cancellationToken);
 
         var saved = await LoadZoneAsync(op.Id, zone.Id, cancellationToken);
@@ -101,7 +109,9 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             return StatusCode(status, new { message });
         }
 
-        var error = Validate(request, op);
+        await db.Entry(op).Collection(x => x.VehicleOffers).LoadAsync(cancellationToken);
+        var slots = ResolveSlots(request);
+        var error = Validate(request, op, slots);
         if (error is not null)
         {
             return BadRequest(new { message = error });
@@ -122,8 +132,11 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
 
         try
         {
-            await PersistRatesAsync(EnsureMatrix(zone, VehicleType.Motorcycle), SinglePassengerRates(request.Motorcycle), cancellationToken);
-            await PersistRatesAsync(EnsureMatrix(zone, VehicleType.Tricycle), request.Tricycle, cancellationToken);
+            foreach (var (type, rates) in slots)
+            {
+                var body = VehicleTypeRules.UsesSinglePassengerTier(type) ? SinglePassengerRates(rates) : rates;
+                await PersistRatesAsync(EnsureMatrix(zone, type), body, cancellationToken);
+            }
         }
         catch (DbUpdateException ex)
         {
@@ -150,6 +163,7 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             return StatusCode(status, new { message });
         }
 
+        await db.Entry(op).Collection(x => x.VehicleOffers).LoadAsync(cancellationToken);
         var zone = await LoadZoneAsync(op.Id, id, cancellationToken);
         if (zone is null)
         {
@@ -188,7 +202,26 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    static string? Validate(SaveDeriveFareZoneRequest request, Operator op)
+    static List<(VehicleType Type, FareVehicleRatesBody Rates)> ResolveSlots(SaveDeriveFareZoneRequest request)
+    {
+        var map = new Dictionary<VehicleType, FareVehicleRatesBody>
+        {
+            [VehicleType.Motorcycle] = request.Motorcycle,
+            [VehicleType.Tricycle] = request.Tricycle,
+        };
+        if (request.Vehicles is { Count: > 0 })
+        {
+            foreach (var slot in request.Vehicles)
+            {
+                if (!VehicleTypeRules.IsKnown(slot.VehicleType)) continue;
+                map[slot.VehicleType] = slot.Rates;
+            }
+        }
+
+        return map.Select(kv => (kv.Key, kv.Value)).ToList();
+    }
+
+    static string? Validate(SaveDeriveFareZoneRequest request, Operator op, List<(VehicleType Type, FareVehicleRatesBody Rates)> slots)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
         {
@@ -205,27 +238,22 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             return "Draw a polygon with at least 3 points.";
         }
 
-        if (InvalidRates(request.Motorcycle) || InvalidRates(request.Tricycle))
+        foreach (var (type, rates) in slots)
         {
-            return "Fare amounts cannot be negative, and passenger tiers must use unique person counts of 1 or more.";
-        }
+            if (InvalidRates(rates))
+            {
+                return "Fare amounts cannot be negative, and passenger tiers must use unique person counts of 1 or more.";
+            }
 
-        var motorcycleError = FareCommissionSplit.Validate(
-            op.MotorcycleCommissionPercent,
-            request.Motorcycle.OperatorCommissionPercent,
-            request.Motorcycle.DriverCommissionPercent);
-        if (motorcycleError is not null)
-        {
-            return $"Motorcycle: {motorcycleError}";
-        }
-
-        var tricycleError = FareCommissionSplit.Validate(
-            op.TricycleCommissionPercent,
-            request.Tricycle.OperatorCommissionPercent,
-            request.Tricycle.DriverCommissionPercent);
-        if (tricycleError is not null)
-        {
-            return $"Tricycle: {tricycleError}";
+            var system = FareCommissionSplit.SystemPercent(op, type);
+            var splitError = FareCommissionSplit.Validate(
+                system,
+                rates.OperatorCommissionPercent,
+                rates.DriverCommissionPercent);
+            if (splitError is not null)
+            {
+                return $"{VehicleTypeRules.Label(type)}: {splitError}";
+            }
         }
 
         return null;
@@ -273,6 +301,7 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         {
             DeriveFareZoneId = zoneId,
             VehicleType = vehicleType,
+            VehicleCategoryId = VehicleCatalog.IdFor(vehicleType),
             BaseFare = FareCommissionSplit.Round(primary.BaseFare),
             PerKm = FareCommissionSplit.Round(primary.PerKm),
             MinimumFare = FareCommissionSplit.Round(primary.MinimumFare),
@@ -313,6 +342,7 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         var existing = zone.Matrices.FirstOrDefault(x => x.VehicleType == vehicleType);
         if (existing is not null)
         {
+            existing.VehicleCategoryId ??= VehicleCatalog.IdFor(vehicleType);
             return existing;
         }
 
@@ -320,6 +350,7 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         {
             DeriveFareZoneId = zone.Id,
             VehicleType = vehicleType,
+            VehicleCategoryId = VehicleCatalog.IdFor(vehicleType),
             IsActive = true,
         };
         zone.Matrices.Add(created);
@@ -343,8 +374,8 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         matrix.DriverCommissionPercent = FareCommissionSplit.Round(rates.DriverCommissionPercent);
         matrix.IsActive = rates.IsActive;
         matrix.UpdatedAtUtc = DateTime.UtcNow;
+        matrix.VehicleCategoryId ??= VehicleCatalog.IdFor(matrix.VehicleType);
 
-        // Save zone/matrix scalars via EF; manage tiers with raw SQL to avoid unique-index / concurrency issues.
         var isNew = db.Entry(matrix).State == EntityState.Added;
         DetachPassengerTiers(matrix);
         await db.SaveChangesAsync(cancellationToken);
@@ -436,6 +467,30 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         var polygon = GeoPolygon.Parse(zone.PolygonJson)
             .Select(p => new DeriveFareLatLng(p.Lat, p.Lng))
             .ToList();
+        var vehicles = VehicleCatalog.PlatformPresets
+            .OrderBy(x => x.SortOrder)
+            .Select(preset =>
+            {
+                var offer = op.VehicleOffers?.FirstOrDefault(o => o.VehicleCategoryId == preset.Id);
+                if (offer is null || !offer.IsEnabled)
+                {
+                    return null;
+                }
+
+                return new DeriveFareVehicleSlot(
+                    preset.LegacyEnum,
+                    preset.Code,
+                    offer.DisplayName ?? preset.Name,
+                    preset.IsCargo,
+                    offer.MaxPassengers ?? preset.MaxPassengers,
+                    offer.CommissionPercent,
+                    MapRates(zone.Matrices.FirstOrDefault(x => x.VehicleType == preset.LegacyEnum)
+                        ?? zone.Matrices.FirstOrDefault(x => x.VehicleCategoryId == preset.Id)));
+            })
+            .Where(x => x is not null)
+            .Cast<DeriveFareVehicleSlot>()
+            .ToList();
+
         return new DeriveFareZoneDetailResponse(
             zone.Id,
             zone.Name,
@@ -446,7 +501,8 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             op.MotorcycleCommissionPercent,
             op.TricycleCommissionPercent,
             MapRates(zone.Matrices.FirstOrDefault(x => x.VehicleType == VehicleType.Motorcycle)),
-            MapRates(zone.Matrices.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle)));
+            MapRates(zone.Matrices.FirstOrDefault(x => x.VehicleType == VehicleType.Tricycle)),
+            vehicles);
     }
 
     static DeriveFareRatesItem? MapRates(DeriveFareMatrix? matrix)
@@ -470,7 +526,9 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             tiers.Add(new FarePassengerTierItem(1, matrix.BaseFare, matrix.PerKm, matrix.MinimumFare, matrix.IncludedKm));
         }
 
-        var sampleCount = matrix.VehicleType == VehicleType.Motorcycle ? 1 : Math.Max(1, tiers[0].PassengerCount);
+        var sampleCount = VehicleTypeRules.UsesSinglePassengerTier(matrix.VehicleType)
+            ? 1
+            : Math.Max(1, tiers[0].PassengerCount);
         return new DeriveFareRatesItem(
             matrix.VehicleType,
             matrix.BaseFare,

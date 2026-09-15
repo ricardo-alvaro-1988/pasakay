@@ -1104,6 +1104,7 @@ input:-webkit-autofill:focus {
 }
 .tag.mc { background: var(--accent-soft); color: var(--accent); }
 .tag.trike { background: rgba(30, 120, 90, 0.16); color: #1b8a5a; }
+.tag.other { background: rgba(100, 116, 139, 0.16); color: #475569; }
 .tag.payment { font-weight: 600; letter-spacing: 0.01em; }
 .tag.payment-cash { background: rgba(120, 120, 130, 0.16); color: var(--text); }
 .tag.payment-gcash { background: rgba(0, 87, 184, 0.16); color: #0070e0; }

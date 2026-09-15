@@ -264,6 +264,9 @@ a { color: var(--accent); font-weight: 700; text-decoration: none; }
   gap: 10px;
   margin: 18px 0 0;
 }
+.login-vehicle-cards .login-vehicle-card:last-child:nth-child(3) {
+  grid-column: 1 / -1;
+}
 .login-vehicle-card {
   display: flex;
   align-items: center;

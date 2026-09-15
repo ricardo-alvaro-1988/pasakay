@@ -291,6 +291,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
             operatorId,
             vehicleType,
             municipalityId.Value,
+            null,
             cancellationToken);
         if (fare is null)
         {

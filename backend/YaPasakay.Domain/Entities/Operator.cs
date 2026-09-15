@@ -51,5 +51,7 @@ public class Operator : BaseEntity
     public ICollection<OperatorPabiliPaymentMethod> PabiliPaymentMethods { get; set; } = new List<OperatorPabiliPaymentMethod>();
     public ICollection<DeriveFareZone> DeriveFareZones { get; set; } = new List<DeriveFareZone>();
     public ICollection<Merchant> Merchants { get; set; } = new List<Merchant>();
+    public ICollection<OperatorVehicleOffer> VehicleOffers { get; set; } = new List<OperatorVehicleOffer>();
+    public ICollection<VehicleCategory> CustomVehicleCategories { get; set; } = new List<VehicleCategory>();
     public PabiliMatrix? PabiliMatrix { get; set; }
 }

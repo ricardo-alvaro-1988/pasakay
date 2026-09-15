@@ -21,7 +21,7 @@ import {
   tripHeadline,
   VehicleType,
 } from './api'
-import { VEHICLE_ART } from './vehicle-art'
+import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
 import { BookingHistoryRating, RateRidePanel } from './rate-ride'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
 
@@ -330,6 +330,7 @@ export function ScheduleScreen({
   onPickDropoff: () => void
 }) {
   const [vehicle, setVehicle] = useState<VehicleType>('Motorcycle')
+  const [vehicleCategoryId, setVehicleCategoryId] = useState<string | null>(null)
   const [passengers, setPassengers] = useState(1)
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
   const [paymentRef, setPaymentRef] = useState('')
@@ -353,7 +354,7 @@ export function ScheduleScreen({
     async function load() {
       setQuoting(true)
       try {
-        const next = await api.quote(bookBody(vehicle, pickup!, dropoff!, payment, paymentRef, vehicle === 'Tricycle' ? passengers : 1))
+        const next = await api.quote(bookBody(vehicle, pickup!, dropoff!, payment, paymentRef, passengers, vehicleCategoryId))
         if (ignore) return
         setQuote(next)
         setCoverageHint(false)
@@ -374,15 +375,27 @@ export function ScheduleScreen({
     }
     void load()
     return () => { ignore = true }
-  }, [pickup, dropoff, vehicle, payment, paymentRef, passengers])
+  }, [pickup, dropoff, vehicle, vehicleCategoryId, payment, paymentRef, passengers])
 
   useEffect(() => {
+    if (noOperator.vehicles.length) {
+      const available = noOperator.vehicles.filter((v) => v.available)
+      const current = available.find((v) => v.id === vehicleCategoryId)
+      if (current) return
+      const first = available[0]
+      if (first) {
+        setVehicleCategoryId(first.id)
+        setVehicle(first.vehicleType as VehicleType)
+      }
+      return
+    }
+    setVehicleCategoryId(null)
     setVehicle((current) => {
-      if (current === 'Motorcycle' && !noOperator.motorcycleAvailable && noOperator.tricycleAvailable) return 'Tricycle'
-      if (current === 'Tricycle' && !noOperator.tricycleAvailable && noOperator.motorcycleAvailable) return 'Motorcycle'
+      const types = noOperator.availableTypes
+      if (types.length && !types.includes(current)) return types[0] ?? current
       return current
     })
-  }, [noOperator.motorcycleAvailable, noOperator.tricycleAvailable])
+  }, [noOperator.availableTypes, noOperator.vehicles, vehicleCategoryId])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -408,7 +421,7 @@ export function ScheduleScreen({
     setNote('')
     try {
       onDesk(await api.book({
-        ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, vehicle === 'Tricycle' ? passengers : 1),
+        ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, passengers, vehicleCategoryId),
         scheduledAtUtc,
       }))
       setNote('Scheduled. Riders are notified about an hour before pickup.')
@@ -471,20 +484,48 @@ export function ScheduleScreen({
       </div>
       <p className="section-title">Vehicle</p>
       <div className="vehicles">
-        {noOperator.motorcycleAvailable && (
-          <button type="button" className={`vehicle ${vehicle === 'Motorcycle' ? 'on' : ''}`} onClick={() => { setVehicle('Motorcycle'); setPassengers(1) }}>
-            <span className="icon moto"><img src={VEHICLE_ART.Motorcycle} alt="" /></span>
-            <span className="copy"><b>Motorcycle</b></span>
-          </button>
-        )}
-        {noOperator.tricycleAvailable && (
-          <button type="button" className={`vehicle ${vehicle === 'Tricycle' ? 'on' : ''}`} onClick={() => setVehicle('Tricycle')}>
-            <span className="icon"><img src={VEHICLE_ART.Tricycle} alt="" /></span>
-            <span className="copy"><b>Tricycle</b></span>
-          </button>
-        )}
+        {(noOperator.vehicles.length
+          ? noOperator.vehicles.filter((v) => v.available)
+          : noOperator.availableTypes.map((t) => ({
+              id: t,
+              vehicleType: t,
+              name: vehicleLabel(t),
+              maxPassengers: vehicleMaxPassengers(t),
+              isCargo: vehicleIsCargo(t),
+            }))
+        ).map((item) => {
+          const type = item.vehicleType as VehicleType
+          const categoryId = 'id' in item && item.id !== type ? item.id : null
+          const selected = categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId
+          const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
+            ? item.maxPassengers
+            : vehicleMaxPassengers(type)
+          const cargo = 'isCargo' in item && typeof item.isCargo === 'boolean'
+            ? item.isCargo
+            : vehicleIsCargo(type)
+          return (
+            <button
+              key={categoryId ?? type}
+              type="button"
+              className={`vehicle ${selected ? 'on' : ''}`}
+              onClick={() => {
+                setVehicle(type)
+                setVehicleCategoryId(categoryId)
+                setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))
+              }}
+            >
+              <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
+                <img src={vehicleArt(type)} alt="" />
+              </span>
+              <span className="copy">
+                <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
+                {cargo ? <small className="muted">Cargo</small> : null}
+              </span>
+            </button>
+          )
+        })}
       </div>
-      {vehicle === 'Tricycle' && (
+      {!vehicleIsCargo(vehicle) && vehicleMaxPassengers(vehicle) > 1 && (
         <div className="passenger-picker" role="group" aria-label="Number of passengers">
           <span className="passenger-label">Passengers</span>
           <div className="passenger-controls">
@@ -501,24 +542,25 @@ export function ScheduleScreen({
               className="passenger-input"
               type="number"
               min={1}
-              max={4}
+              max={vehicleMaxPassengers(vehicle)}
               inputMode="numeric"
               value={passengers}
               onChange={(e) => {
+                const max = vehicleMaxPassengers(vehicle)
                 const next = Math.floor(Number(e.target.value))
                 if (!Number.isFinite(next) || next < 1) {
                   setPassengers(1)
                   return
                 }
-                setPassengers(Math.min(4, next))
+                setPassengers(Math.min(max, next))
               }}
               aria-label="Passenger count"
             />
             <button
               type="button"
               className="passenger-btn"
-              disabled={passengers >= 4}
-              onClick={() => setPassengers((n) => Math.min(4, n + 1))}
+              disabled={passengers >= vehicleMaxPassengers(vehicle)}
+              onClick={() => setPassengers((n) => Math.min(vehicleMaxPassengers(vehicle), n + 1))}
               aria-label="More passengers"
             >
               +
@@ -580,9 +622,11 @@ export function ScheduleScreen({
   )
 }
 
-function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', passengerCount = 1): BookBody {
+function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', passengerCount = 1, categoryId?: string | null): BookBody {
+  const max = vehicleMaxPassengers(vehicle)
   return {
     vehicleType: vehicle,
+    vehicleCategoryId: categoryId ?? undefined,
     pickupBarangayId: pickup.barangayId,
     pickupDetails: pickup.details || pickup.label,
     pickupLat: pickup.lat,
@@ -593,7 +637,7 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     dropoffLng: dropoff.lng,
     paymentMethod: payment,
     paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
-    passengerCount: vehicle === 'Motorcycle' ? 1 : Math.min(4, Math.max(1, passengerCount)),
+    passengerCount: vehicleIsCargo(vehicle) || max <= 1 ? 1 : Math.min(max, Math.max(1, passengerCount)),
   }
 }
 

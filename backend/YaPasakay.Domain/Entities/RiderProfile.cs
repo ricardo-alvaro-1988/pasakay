@@ -10,6 +10,8 @@ public class RiderProfile : BaseEntity
     public Guid OperatorId { get; set; }
     public Operator Operator { get; set; } = null!;
     public VehicleType VehicleType { get; set; }
+    public Guid? VehicleCategoryId { get; set; }
+    public VehicleCategory? VehicleCategory { get; set; }
     public string PlateNumber { get; set; } = string.Empty;
     public string VehicleFranchiseNumber { get; set; } = string.Empty;
     public string? VehicleModel { get; set; }

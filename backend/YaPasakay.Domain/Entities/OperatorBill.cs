@@ -19,4 +19,5 @@ public class OperatorBill : BaseEntity
     public string? Note { get; set; }
     public BillStatus Status { get; set; } = BillStatus.Issued;
     public ICollection<Trip> Trips { get; set; } = new List<Trip>();
+    public ICollection<OperatorBillVehicleLine> VehicleLines { get; set; } = new List<OperatorBillVehicleLine>();
 }

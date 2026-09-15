@@ -116,7 +116,7 @@ export function AuthScreen({
   return (
     <div className="login">
       <LoginBrandPanel
-        kicker="Motorcycle · Tricycle · Live map"
+        kicker="Motorcycle · Tricycle · Sedan · More"
         title="Go where you need to go."
         description={`Book a ride in seconds, watch your rider on the map, and get there with ${brandName}.`}
         showPoints
@@ -127,7 +127,7 @@ export function AuthScreen({
       <div className="login-form">
         <img className="login-form-mark" src={brandLogo} alt="" />
         <h2>Welcome back</h2>
-        <p className="lede login-lede-full">Sign in with Google to book a motorcycle or tricycle, or create your {brandName} profile in one tap.</p>
+        <p className="lede login-lede-full">Sign in with Google to book a ride, or create your {brandName} profile in one tap.</p>
         <p className="lede login-lede-short">Sign in with Google to book rides and track your driver live.</p>
         {missingClient && (
           <p className="error">Google sign-in is not configured. Add GoogleAuth:ClientId in the API appsettings.</p>

@@ -123,11 +123,9 @@ public static class RiderReport
             foreach (var trip in riderTrips)
             {
                 booking += trip.Fare;
-                Domain.Entities.FareMatrix? fare = null;
-                if (trip.PickupBarangay is not null)
-                {
-                    fares.TryGetValue((trip.OperatorId, trip.VehicleType, trip.PickupBarangay.MunicipalityId), out fare);
-                }
+                Domain.Entities.FareMatrix? fare = trip.PickupBarangay is not null
+                    ? fares.Resolve(trip, trip.PickupBarangay.MunicipalityId)
+                    : null;
 
                 var breakdown = RideCommissionCalculator.ForTrip(trip, fare);
                 if (breakdown is not null)

@@ -2,13 +2,46 @@ const TOKEN_KEY = 'yapasakay-access'
 const REFRESH_KEY = 'yapasakay-refresh'
 
 export type UserRole = 'Admin' | 'Operator' | 'Rider' | 'Customer'
-export type VehicleType = 'Motorcycle' | 'Tricycle'
+export type VehicleType =
+  | 'Motorcycle'
+  | 'Tricycle'
+  | 'Sedan'
+  | 'Mpv'
+  | 'Suv'
+  | 'Van'
+  | 'PickupL300'
+  | 'PickupCargo'
+  | 'Custom'
+
+export const PLATFORM_VEHICLE_TYPES: VehicleType[] = [
+  'Motorcycle',
+  'Tricycle',
+  'Sedan',
+  'Mpv',
+  'Suv',
+  'Van',
+  'PickupL300',
+  'PickupCargo',
+]
+
+export function vehicleTypeLabel(type: string) {
+  switch (type) {
+    case 'PickupL300': return 'Pickup L300'
+    case 'PickupCargo': return 'Pickup (Cargo)'
+    case 'Mpv': return 'MPV'
+    case 'Suv': return 'SUV'
+    case 'Custom': return 'Custom'
+    default: return type
+  }
+}
+
 export type PageId =
   | 'overview'
   | 'operators'
   | 'customers'
   | 'territories'
   | 'fares'
+  | 'offering-log'
   | 'derive-fares'
   | 'surcharges'
   | 'billing'
@@ -72,6 +105,13 @@ export type OverviewSeriesPoint = {
   tripsCompleted: number
 }
 
+export type VehicleCountItem = {
+  code: string
+  name: string
+  vehicleType: VehicleType
+  count: number
+}
+
 export type OperatorListItem = {
   id: string
   companyName: string
@@ -95,6 +135,7 @@ export type OperatorListItem = {
   riderCount: number
   ridersMotorcycle: number
   ridersTricycle: number
+  riderVehicleCounts?: VehicleCountItem[]
   createdAtUtc: string
 }
 
@@ -105,6 +146,7 @@ export type Overview = {
   riders: number
   ridersMotorcycle: number
   ridersTricycle: number
+  riderVehicleCounts?: VehicleCountItem[]
   customers: number
   tripsToday: number
   adminCutToday: number
@@ -120,6 +162,9 @@ export type RiderListItem = {
   fullName: string
   phoneNumber: string
   vehicleType: VehicleType
+  vehicleCategoryId?: string | null
+  vehicleCategoryCode?: string | null
+  vehicleCategoryName?: string | null
   plateNumber: string
   vehicleFranchiseNumber: string
   vehicleModel: string | null
@@ -157,6 +202,15 @@ export type RiderInvitePublicInfo = {
   token: string
   companyName: string
   statusPath: string
+  vehicles?: RiderInviteVehicleOption[] | null
+}
+
+export type RiderInviteVehicleOption = {
+  vehicleCategoryId: string
+  code: string
+  name: string
+  vehicleType: string
+  isCustom: boolean
 }
 
 export type RiderApplicationListItem = {
@@ -164,6 +218,9 @@ export type RiderApplicationListItem = {
   fullName: string
   phoneNumber: string
   vehicleType: string
+  vehicleCategoryId?: string | null
+  vehicleCategoryCode?: string | null
+  vehicleCategoryName?: string | null
   plateNumber: string
   status: string
   createdAtUtc: string
@@ -174,6 +231,9 @@ export type RiderApplicationDetail = {
   fullName: string
   phoneNumber: string
   vehicleType: string
+  vehicleCategoryId?: string | null
+  vehicleCategoryCode?: string | null
+  vehicleCategoryName?: string | null
   plateNumber: string
   vehicleFranchiseNumber: string
   vehicleModel: string | null
@@ -830,6 +890,15 @@ export type DeriveFareZoneDetail = {
   tricycleCommissionPercent: number
   motorcycle: DeriveFareRates | null
   tricycle: DeriveFareRates | null
+  vehicles?: Array<{
+    vehicleType: VehicleType
+    code: string
+    name: string
+    isCargo: boolean
+    maxPassengers: number
+    systemCommissionPercent: number
+    rates: DeriveFareRates | null
+  }>
 }
 
 export type SaveDeriveFareZoneBody = {
@@ -858,6 +927,19 @@ export type SaveDeriveFareZoneBody = {
     isActive: boolean
     passengerTiers: FarePassengerTier[]
   }
+  vehicles?: Array<{
+    vehicleType: VehicleType
+    rates: {
+      baseFare: number
+      perKm: number
+      minimumFare: number
+      includedKm: number
+      operatorCommissionPercent: number
+      driverCommissionPercent: number
+      isActive: boolean
+      passengerTiers: FarePassengerTier[]
+    }
+  }>
 }
 
 export type FleetDuty = 'available' | 'pending' | 'waiting' | 'ongoing' | 'offline'
@@ -905,7 +987,53 @@ export type OperatorFleet = {
   onMap: number
   motorcycle: number
   tricycle: number
+  vehicleCounts?: VehicleCountItem[]
   riders: FleetRider[]
+}
+
+export type OperatorVehicleOffer = {
+  id: string
+  vehicleCategoryId: string
+  code: string
+  name: string
+  iconKey: string
+  maxPassengers: number
+  isCargo: boolean
+  isEnabled: boolean
+  commissionPercent: number
+  displayName: string | null
+  maxPassengersOverride: number | null
+  isCustom: boolean
+  vehicleType: string
+}
+
+export type VehicleOfferingLogItem = {
+  id: string
+  operatorId: string
+  operatorName: string
+  municipalityId?: string | null
+  municipalityName?: string | null
+  vehicleCategoryId?: string | null
+  vehicleCode: string
+  vehicleName: string
+  vehicleType: string
+  isOffered: boolean
+  actorName: string
+  actorRole: string
+  acceptedTerms: boolean
+  termsVersion?: string | null
+  atUtc: string
+}
+
+export type OperatorFareVehicleSlot = {
+  vehicleType: VehicleType
+  vehicleCategoryId: string
+  code: string
+  name: string
+  isCargo: boolean
+  maxPassengers: number
+  systemCommissionPercent: number
+  rates: FareRates | null
 }
 
 export type OperatorFareMatrix = {
@@ -919,6 +1047,7 @@ export type OperatorFareMatrix = {
   municipalities: IdName[]
   motorcycle: FareRates | null
   tricycle: FareRates | null
+  vehicles?: OperatorFareVehicleSlot[]
 }
 
 export type OperatorFareListItem = {
@@ -931,6 +1060,13 @@ export type OperatorFareListItem = {
   tricycleCommissionPercent: number
   motorcycle: FareRates | null
   tricycle: FareRates | null
+  vehicles?: OperatorFareVehicleSlot[]
+}
+
+export type BillingVehicleLine = {
+  vehicleCode: string
+  vehicleName: string
+  amount: number
 }
 
 export type BillingOperator = {
@@ -945,6 +1081,7 @@ export type BillingOperator = {
   pendingCommission: number
   pendingMotorcycle: number
   pendingTricycle: number
+  pendingVehicleLines?: BillingVehicleLine[]
   pendingTripCount: number
   oldestUnbilledUtc: string | null
   newestUnbilledUtc: string | null
@@ -975,6 +1112,7 @@ export type OperatorBill = {
   createdAtUtc: string
   note: string | null
   trips: BillTrip[]
+  vehicleLines?: BillingVehicleLine[]
 }
 
 export type BillingOperatorDetail = BillingOperator & {
@@ -1197,6 +1335,7 @@ export type OperatorOverview = {
   riders: number
   ridersMotorcycle: number
   ridersTricycle: number
+  riderVehicleCounts?: VehicleCountItem[]
   tripsToday: number
   openSos: number
   openTickets: number
@@ -1467,6 +1606,16 @@ export const api = {
   updateOperator: (id: string, body: FormData) =>
     request<OperatorListItem>(`/api/admin/operators/${id}`, { method: 'PUT', body }),
   operator: (id: string) => request<OperatorDetail>(`/api/admin/operators/${id}`),
+  adminOperatorVehicleOffers: (operatorId: string) =>
+    request<OperatorVehicleOffer[]>(`/api/admin/operators/${operatorId}/vehicle-offers`),
+  saveAdminOperatorVehicleOffers: (
+    operatorId: string,
+    items: Array<{ vehicleCategoryId: string; commissionPercent: number; isEnabled?: boolean }>,
+  ) =>
+    request<OperatorVehicleOffer[]>(`/api/admin/operators/${operatorId}/vehicle-offers`, {
+      method: 'PUT',
+      body: JSON.stringify({ items }),
+    }),
   adminOperatorBookings: (operatorId: string, q = '', page = 1, pageSize = 10, status?: TripStatus | '', from?: string, to?: string) => {
     const params = new URLSearchParams({
       q,
@@ -2484,6 +2633,9 @@ export const api = {
     operatorCommissionPercent: number
     driverCommissionPercent: number
     isActive: boolean
+    passengerTiers?: FarePassengerTier[]
+    vehicleCategoryId?: string
+    acceptedOfferTerms?: boolean
   }) => request<OperatorFareMatrix>('/api/operator/fares', { method: 'PUT', body: JSON.stringify(body) }),
   saveOperatorFareMatrix: (body: {
     municipalityId: string
@@ -2496,6 +2648,7 @@ export const api = {
       driverCommissionPercent: number
       isActive: boolean
       passengerTiers: FarePassengerTier[]
+      acceptedOfferTerms?: boolean
     }
     tricycle: {
       baseFare: number
@@ -2506,8 +2659,18 @@ export const api = {
       driverCommissionPercent: number
       isActive: boolean
       passengerTiers: FarePassengerTier[]
+      acceptedOfferTerms?: boolean
     }
   }) => request<OperatorFareMatrix>('/api/operator/fares/matrix', { method: 'PUT', body: JSON.stringify(body) }),
+  vehicleOfferingTerms: () => request<{ version: string; text: string }>('/api/operator/fares/offering-terms'),
+  operatorVehicleOfferingLogs: (page = 1, pageSize = 20) =>
+    request<Paged<VehicleOfferingLogItem>>(`/api/operator/fares/offering-logs?page=${page}&pageSize=${pageSize}`),
+  adminVehicleOfferingLogs: (q = '', operatorId?: string, page = 1, pageSize = 20) => {
+    const params = new URLSearchParams({ q, page: String(page), pageSize: String(pageSize) })
+    if (operatorId) params.set('operatorId', operatorId)
+    return request<Paged<VehicleOfferingLogItem>>(`/api/admin/vehicle-offering-logs?${params}`)
+  },
+  adminVehicleOfferingTerms: () => request<{ version: string; text: string }>('/api/admin/vehicle-offering-logs/terms'),
   deriveFareZones: () => request<{ items: DeriveFareZoneListItem[] }>('/api/operator/derive-fares'),
   deriveFareZone: (id: string) => request<DeriveFareZoneDetail>(`/api/operator/derive-fares/${id}`),
   createDeriveFareZone: (body: SaveDeriveFareZoneBody) =>
@@ -2559,6 +2722,41 @@ export const api = {
   }),
   deleteOperatorSurcharge: (id: string) =>
     request<OperatorFareMatrix>(`/api/operator/fares/surcharges/${id}/delete`, { method: 'POST' }),
+  operatorVehicleOffers: () => request<OperatorVehicleOffer[]>('/api/operator/vehicle-offers'),
+  saveOperatorVehicleOffer: (offerId: string, body: {
+    isEnabled: boolean
+    commissionPercent: number
+    displayName?: string | null
+    maxPassengers?: number | null
+  }) => request<OperatorVehicleOffer>(`/api/operator/vehicle-offers/${offerId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  }),
+  createOperatorCustomVehicle: (body: {
+    name: string
+    code?: string
+    maxPassengers: number
+    iconKey: string
+    isCargo: boolean
+    commissionPercent: number
+    isEnabled: boolean
+  }) => request<OperatorVehicleOffer>('/api/operator/vehicle-offers/custom', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  }),
+  updateCustomVehicle: (categoryId: string, body: {
+    name: string
+    maxPassengers: number
+    iconKey: string
+    isCargo: boolean
+  }) => request<OperatorVehicleOffer>(`/api/operator/vehicle-offers/custom/${categoryId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  }),
+  deactivateCustomVehicle: (categoryId: string) =>
+    request<OperatorVehicleOffer>(`/api/operator/vehicle-offers/custom/${categoryId}/deactivate`, {
+      method: 'POST',
+    }),
   operatorSupport: (q = '', kind?: SupportKind | '', status?: SupportStatus | '', page = 1, pageSize = 10) => {
     const params = new URLSearchParams({ q, page: String(page), pageSize: String(pageSize) })
     if (kind) params.set('kind', kind)

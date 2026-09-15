@@ -58,6 +58,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PabiliOrderItem> PabiliOrderItems => Set<PabiliOrderItem>();
     public DbSet<PabiliOrderItemAddon> PabiliOrderItemAddons => Set<PabiliOrderItemAddon>();
     public DbSet<PabiliOrderOffer> PabiliOrderOffers => Set<PabiliOrderOffer>();
+    public DbSet<VehicleCategory> VehicleCategories => Set<VehicleCategory>();
+    public DbSet<OperatorVehicleOffer> OperatorVehicleOffers => Set<OperatorVehicleOffer>();
+    public DbSet<OperatorBillVehicleLine> OperatorBillVehicleLines => Set<OperatorBillVehicleLine>();
+    public DbSet<VehicleOfferingLog> VehicleOfferingLogs => Set<VehicleOfferingLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -137,6 +141,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.Operator)
                 .WithMany(x => x.Riders)
                 .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.VehicleCategory)
+                .WithMany()
+                .HasForeignKey(x => x.VehicleCategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasMany(x => x.PaymentMethods)
                 .WithOne(x => x.Rider)
@@ -315,6 +323,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany()
                 .HasForeignKey(x => x.OperatorId)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.VehicleCategory)
+                .WithMany()
+                .HasForeignKey(x => x.VehicleCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Rider)
                 .WithMany(x => x.Trips)
                 .HasForeignKey(x => x.RiderId)
@@ -342,7 +354,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         modelBuilder.Entity<FareMatrix>(entity =>
         {
-            entity.HasIndex(x => new { x.OperatorId, x.VehicleType, x.MunicipalityId }).IsUnique();
+            entity.HasIndex(x => new { x.OperatorId, x.MunicipalityId, x.VehicleCategoryId })
+                .IsUnique()
+                .HasFilter("[VehicleCategoryId] IS NOT NULL");
+            entity.HasIndex(x => x.VehicleType);
             entity.Property(x => x.BaseFare).HasColumnType("decimal(18,2)");
             entity.Property(x => x.PerKm).HasColumnType("decimal(18,2)");
             entity.Property(x => x.MinimumFare).HasColumnType("decimal(18,2)");
@@ -356,6 +371,54 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.Municipality)
                 .WithMany(x => x.FareMatrices)
                 .HasForeignKey(x => x.MunicipalityId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.VehicleCategory)
+                .WithMany()
+                .HasForeignKey(x => x.VehicleCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<VehicleCategory>(entity =>
+        {
+            entity.HasIndex(x => x.Code).IsUnique().HasFilter("[OperatorId] IS NULL");
+            entity.HasIndex(x => new { x.OperatorId, x.Code }).IsUnique().HasFilter("[OperatorId] IS NOT NULL");
+            entity.Property(x => x.Code).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Name).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.IconKey).HasMaxLength(40).IsRequired();
+            entity.HasOne(x => x.Operator)
+                .WithMany(x => x.CustomVehicleCategories)
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OperatorVehicleOffer>(entity =>
+        {
+            entity.HasIndex(x => new { x.OperatorId, x.VehicleCategoryId }).IsUnique();
+            entity.Property(x => x.CommissionPercent).HasColumnType("decimal(5,2)");
+            entity.Property(x => x.DisplayName).HasMaxLength(80);
+            entity.HasOne(x => x.Operator)
+                .WithMany(x => x.VehicleOffers)
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.VehicleCategory)
+                .WithMany(x => x.Offers)
+                .HasForeignKey(x => x.VehicleCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OperatorBillVehicleLine>(entity =>
+        {
+            entity.HasIndex(x => x.OperatorBillId);
+            entity.Property(x => x.VehicleCode).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.VehicleName).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Amount).HasColumnType("decimal(18,2)");
+            entity.HasOne(x => x.OperatorBill)
+                .WithMany(x => x.VehicleLines)
+                .HasForeignKey(x => x.OperatorBillId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.VehicleCategory)
+                .WithMany()
+                .HasForeignKey(x => x.VehicleCategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -499,6 +562,33 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<VehicleOfferingLog>(entity =>
+        {
+            entity.HasIndex(x => x.AtUtc);
+            entity.HasIndex(x => new { x.OperatorId, x.AtUtc });
+            entity.Property(x => x.VehicleCode).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.VehicleName).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.ActorName).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.ActorRole).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.TermsVersion).HasMaxLength(40);
+            entity.HasOne(x => x.Operator)
+                .WithMany()
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Municipality)
+                .WithMany()
+                .HasForeignKey(x => x.MunicipalityId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.VehicleCategory)
+                .WithMany()
+                .HasForeignKey(x => x.VehicleCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Actor)
+                .WithMany()
+                .HasForeignKey(x => x.ActorUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<AccessGroup>(entity =>
         {
             entity.Property(x => x.Name).HasMaxLength(80).IsRequired();
@@ -588,6 +678,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.AddressBarangay)
                 .WithMany()
                 .HasForeignKey(x => x.AddressBarangayId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.VehicleCategory)
+                .WithMany()
+                .HasForeignKey(x => x.VehicleCategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -681,6 +775,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .WithMany(x => x.Matrices)
                 .HasForeignKey(x => x.DeriveFareZoneId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.VehicleCategory)
+                .WithMany()
+                .HasForeignKey(x => x.VehicleCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<DeriveFarePassengerTier>(entity =>

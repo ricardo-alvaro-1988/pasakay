@@ -10,6 +10,8 @@ public class Trip : BaseEntity
     public Guid RiderId { get; set; }
     public RiderProfile Rider { get; set; } = null!;
     public VehicleType VehicleType { get; set; }
+    public Guid? VehicleCategoryId { get; set; }
+    public VehicleCategory? VehicleCategory { get; set; }
     public TripStatus Status { get; set; }
     public string Pickup { get; set; } = string.Empty;
     public string PickupDetails { get; set; } = string.Empty;

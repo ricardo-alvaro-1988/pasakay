@@ -1,7 +1,38 @@
 const TOKEN_KEY = 'yapasakay-customer-access'
 const REFRESH_KEY = 'yapasakay-customer-refresh'
 
-export type VehicleType = 'Motorcycle' | 'Tricycle'
+export type VehicleType =
+  | 'Motorcycle'
+  | 'Tricycle'
+  | 'Sedan'
+  | 'Mpv'
+  | 'Suv'
+  | 'Van'
+  | 'PickupL300'
+  | 'PickupCargo'
+  | 'Custom'
+
+export const PLATFORM_VEHICLE_TYPES: VehicleType[] = [
+  'Motorcycle',
+  'Tricycle',
+  'Sedan',
+  'Mpv',
+  'Suv',
+  'Van',
+  'PickupL300',
+  'PickupCargo',
+]
+
+export type VehicleOffer = {
+  id: string
+  code: string
+  name: string
+  iconKey: string
+  maxPassengers: number
+  isCargo: boolean
+  available: boolean
+  vehicleType: VehicleType
+}
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Other'
 export type TripStatus = 'Pending' | 'Waiting' | 'Ongoing' | 'Completed' | 'Cancelled'
 export type Gender = 'Male' | 'Female' | 'Other'
@@ -148,6 +179,7 @@ export type Stop = {
 
 export type BookBody = {
   vehicleType: VehicleType
+  vehicleCategoryId?: string
   pickupBarangayId?: string
   pickupDetails: string
   pickupLat: number
@@ -507,6 +539,7 @@ export const api = {
     pickupLng: number
     pickupDetails: string
     pickupBarangayId?: string
+    vehicleCategoryId?: string
   }) => {
     const params = new URLSearchParams({
       vehicleType: opts.vehicleType,
@@ -516,6 +549,7 @@ export const api = {
       pickupDetails: opts.pickupDetails,
     })
     if (opts.pickupBarangayId) params.set('pickupBarangayId', opts.pickupBarangayId)
+    if (opts.vehicleCategoryId) params.set('vehicleCategoryId', opts.vehicleCategoryId)
     return request<HailRider[]>(`/api/customer/riders/available?${params}`)
   },
   serviceCheck: (body: {
@@ -530,6 +564,7 @@ export const api = {
     municipalityName: string | null
     motorcycleAvailable: boolean
     tricycleAvailable: boolean
+    vehicles?: VehicleOffer[]
   }>('/api/customer/service-check', {
     method: 'POST',
     body: JSON.stringify(body),

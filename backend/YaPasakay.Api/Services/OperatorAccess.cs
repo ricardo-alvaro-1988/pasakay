@@ -143,9 +143,20 @@ public static class OperatorAccess
             return "commission";
         }
 
+        if (value.StartsWith("/api/operator/vehicle-offers"))
+        {
+            return "riders";
+        }
+
         if (value.StartsWith("/api/operator/derive-fares"))
         {
             return "derive-fares";
+        }
+
+        if (value.StartsWith("/api/operator/fares/offering-logs")
+            || value.StartsWith("/api/operator/fares/offering-terms"))
+        {
+            return "offering-log";
         }
 
         if (value.StartsWith("/api/operator/fares"))

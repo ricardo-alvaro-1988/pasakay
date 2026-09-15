@@ -45,7 +45,7 @@ import { LoginBrandPanel } from './login-brand-panel'
 import { AccountHub, AccountPage, BookingScreen, PaymentBar } from './account-screens'
 import { PabiliStorefront } from './PabiliStorefront'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
-import { VEHICLE_ART } from './vehicle-art'
+import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
 import { ShowQrButton, ShowQrOverlay } from './scan-qr'
 import { TripChatPanel } from './trip-chat'
 import { createDeskConnection, startDeskHub, stopDeskHub, emitDeskChat } from './desk-hub'
@@ -307,6 +307,7 @@ function Home({
   const [pickup, setPickup] = useState<Stop | null>(null)
   const [dropoff, setDropoff] = useState<Stop | null>(null)
   const [vehicle, setVehicle] = useState<VehicleType>('Motorcycle')
+  const [vehicleCategoryId, setVehicleCategoryId] = useState<string | null>(null)
   const [passengers, setPassengers] = useState(1)
   const [payment, setPayment] = useState<PaymentMethod>('Cash')
   const [paymentRef, setPaymentRef] = useState('')
@@ -314,7 +315,7 @@ function Home({
   const [boostOpen, setBoostOpen] = useState(false)
   const [draftBoost, setDraftBoost] = useState(0)
   const [boostCustom, setBoostCustom] = useState('')
-  const [quotes, setQuotes] = useState<Record<VehicleType, Quote | null>>({ Motorcycle: null, Tricycle: null })
+  const [quotes, setQuotes] = useState<Record<string, Quote | null>>({})
   const [quoting, setQuoting] = useState(false)
   const [coverageHint, setCoverageHint] = useState(false)
   const [searchFor, setSearchFor] = useState<SearchTarget>(null)
@@ -561,48 +562,80 @@ function Home({
       return
     }
     let ignore = false
-    async function quoteOne(type: VehicleType): Promise<{ quote: Quote | null; error: string }> {
+    async function quoteOne(
+      type: VehicleType,
+      categoryId?: string | null,
+      maxOverride?: number,
+      cargoOverride?: boolean,
+    ): Promise<{ key: string; quote: Quote | null; error: string }> {
+      const key = quoteKey(type, categoryId)
       try {
-        return { quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, type === 'Tricycle' ? passengers : 1, promoCode, 0)), error: '' }
+        const max = vehicleMaxPassengers(type, maxOverride)
+        const cargo = vehicleIsCargo(type, cargoOverride)
+        const count = cargo || max <= 1 ? 1 : passengers
+        return {
+          key,
+          quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, count, promoCode, 0, categoryId)),
+          error: '',
+        }
       } catch (err) {
-        return { quote: null, error: err instanceof Error ? err.message : 'Could not quote fare.' }
+        return { key, quote: null, error: err instanceof Error ? err.message : 'Could not quote fare.' }
       }
     }
     async function load() {
       setQuoting(true)
       try {
-        const next = { Motorcycle: null, Tricycle: null } as Record<VehicleType, Quote | null>
+        const next: Record<string, Quote | null> = {}
         let quoteError = ''
         if (hail) {
           const one = await quoteOne(hail.vehicleType)
-          next[hail.vehicleType] = one.quote
+          next[one.key] = one.quote
           quoteError = one.error
-        } else {
-          const tasks: Promise<{ type: VehicleType; quote: Quote | null; error: string }>[] = []
-          if (noOperator.motorcycleAvailable) {
-            tasks.push(quoteOne('Motorcycle').then((one) => ({ type: 'Motorcycle' as const, ...one })))
-          }
-          if (noOperator.tricycleAvailable) {
-            tasks.push(quoteOne('Tricycle').then((one) => ({ type: 'Tricycle' as const, ...one })))
-          }
+        } else if (noOperator.vehicles.length) {
+          const tasks = noOperator.vehicles
+            .filter((v) => v.available)
+            .map((v) => quoteOne(v.vehicleType as VehicleType, v.id, v.maxPassengers, v.isCargo))
           const results = await Promise.all(tasks)
           for (const one of results) {
-            next[one.type] = one.quote
+            next[one.key] = one.quote
+            if (!quoteError) quoteError = one.error
+          }
+        } else {
+          const types = noOperator.availableTypes.length
+            ? noOperator.availableTypes
+            : (['Motorcycle', 'Tricycle'] as VehicleType[]).filter((t) => noOperator.isTypeAvailable(t))
+          const tasks = types.map((type) => quoteOne(type))
+          const results = await Promise.all(tasks)
+          for (const one of results) {
+            next[one.key] = one.quote
             if (!quoteError) quoteError = one.error
           }
         }
         if (ignore) return
         setQuotes(next)
-        const uncovered = !next.Motorcycle && !next.Tricycle && isOperatorCoverageError(quoteError)
+        const anyQuote = Object.values(next).some(Boolean)
+        const uncovered = !anyQuote && isOperatorCoverageError(quoteError)
         setCoverageHint(uncovered)
-        setError(next.Motorcycle || next.Tricycle || isOperatorCoverageError(quoteError) ? '' : quoteError)
-        setVehicle((current) => {
-          if (hail) return hail.vehicleType
-          if (next[current]) return current
-          if (next.Motorcycle) return 'Motorcycle'
-          if (next.Tricycle) return 'Tricycle'
-          return current
-        })
+        setError(anyQuote || isOperatorCoverageError(quoteError) ? '' : quoteError)
+        if (hail) {
+          setVehicle(hail.vehicleType)
+          setVehicleCategoryId(null)
+        } else {
+          const currentKey = quoteKey(vehicle, vehicleCategoryId)
+          if (!next[currentKey]) {
+            const firstKey = Object.keys(next).find((k) => next[k])
+            if (firstKey) {
+              const offer = noOperator.vehicles.find((v) => v.id === firstKey)
+              if (offer) {
+                setVehicleCategoryId(offer.id)
+                setVehicle(offer.vehicleType as VehicleType)
+              } else {
+                setVehicleCategoryId(null)
+                setVehicle(firstKey as VehicleType)
+              }
+            }
+          }
+        }
       } catch (err) {
         if (!ignore) setError(err instanceof Error ? err.message : 'Could not quote fare.')
       } finally {
@@ -611,23 +644,35 @@ function Home({
     }
     void load()
     return () => { ignore = true }
-  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers, noOperator.motorcycleAvailable, noOperator.tricycleAvailable])
+  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers, noOperator.availableTypes, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.vehicles, vehicle, vehicleCategoryId])
 
   useEffect(() => {
     if (hail) return
+    if (noOperator.vehicles.length) {
+      const available = noOperator.vehicles.filter((v) => v.available)
+      const current = available.find((v) => v.id === vehicleCategoryId)
+      if (current) return
+      const first = available[0]
+      if (first) {
+        setVehicleCategoryId(first.id)
+        setVehicle(first.vehicleType as VehicleType)
+      }
+      return
+    }
+    setVehicleCategoryId(null)
     setVehicle((current) => {
-      if (current === 'Motorcycle' && !noOperator.motorcycleAvailable && noOperator.tricycleAvailable) return 'Tricycle'
-      if (current === 'Tricycle' && !noOperator.tricycleAvailable && noOperator.motorcycleAvailable) return 'Motorcycle'
-      return current
+      if (noOperator.isTypeAvailable(current)) return current
+      return noOperator.availableTypes[0] ?? current
     })
-  }, [hail, noOperator.motorcycleAvailable, noOperator.tricycleAvailable])
+  }, [hail, noOperator.availableTypes, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.vehicles, vehicleCategoryId])
 
   useEffect(() => {
-    const available = !!(quotes.Motorcycle?.hasActivePromos || quotes.Tricycle?.hasActivePromos)
+    const available = Object.values(quotes).some((q) => q?.hasActivePromos)
     if (!available && promoCode) setPromoCode('')
-  }, [quotes.Motorcycle?.hasActivePromos, quotes.Tricycle?.hasActivePromos, promoCode])
+  }, [quotes, promoCode])
 
-  const dispatchMode = quotes[vehicle]?.bookingDispatchMode ?? 'Broadcast'
+  const selectedQuoteKey = quoteKey(vehicle, vehicleCategoryId)
+  const dispatchMode = quotes[selectedQuoteKey]?.bookingDispatchMode ?? 'Broadcast'
   const needsRiderPick = !hail && (dispatchMode === 'Selection' || (dispatchMode === 'Both' && dispatchChoice === 'pick'))
 
   useEffect(() => {
@@ -645,6 +690,7 @@ function Home({
       pickupLng: pickup.lng,
       pickupDetails: pickup.details || pickup.label,
       pickupBarangayId: pickup.barangayId,
+      vehicleCategoryId: vehicleCategoryId ?? undefined,
     })
       .then((rows) => {
         if (cancelled) return
@@ -658,7 +704,7 @@ function Home({
         if (!cancelled) setLoadingRiders(false)
       })
     return () => { cancelled = true }
-  }, [needsRiderPick, pickup, dropoff, vehicle, payment, trip, hail?.riderId, pickup?.details, pickup?.label])
+  }, [needsRiderPick, pickup, dropoff, vehicle, vehicleCategoryId, payment, trip, hail?.riderId, pickup?.details, pickup?.label])
 
   useEffect(() => {
     if (hail) setShowQr(false)
@@ -866,12 +912,12 @@ function Home({
       : 'Open this page in Chrome on your Android phone, then tap the logo to install.')
   }
 
-  const quote = quotes[vehicle]
+  const quote = quotes[selectedQuoteKey]
   const quotePay = quote ? (quote.customerFare ?? quote.fare) : 0
   const quoteOriginal = quote?.originalFare && quote.originalFare > quotePay ? quote.originalFare : null
   const modalBoost = Math.min(500, Math.max(0, Math.floor(draftBoost || 0)))
   const modalTotal = quotePay + modalBoost
-  const showPromoField = !!(quotes.Motorcycle?.hasActivePromos || quotes.Tricycle?.hasActivePromos || quote?.hasActivePromos)
+  const showPromoField = !!(Object.values(quotes).some((q) => q?.hasActivePromos) || quote?.hasActivePromos)
   const searchingArea = noOperator.searching
   const canBook = !!pickup && !!dropoff && !quoting && !searchingArea && !noOperator.uncovered && !!quote && quote.riderAvailable !== false && !hail?.isBusy && (payment !== 'Other' || !!paymentRef.trim())
     && (!needsRiderPick || !!selectedRiderId)
@@ -934,7 +980,7 @@ function Home({
     setError('')
     try {
       const riderId = hail?.riderId ?? (needsRiderPick ? selectedRiderId ?? undefined : undefined)
-      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, vehicle === 'Tricycle' ? passengers : 1, promoCode, boostAmount)))
+      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, passengers, promoCode, boostAmount, vehicleCategoryId)))
       setDraftBoost(0)
       setBoostCustom('')
     } catch (err) {
@@ -1057,29 +1103,57 @@ function Home({
                   </div>
                 </div>
                 <div className="vehicles">
-                  {(noOperator.motorcycleAvailable || hail?.vehicleType === 'Motorcycle') && (
-                    <button type="button" disabled={!!hail && hail.vehicleType !== 'Motorcycle'} className={`vehicle ${vehicle === 'Motorcycle' ? 'on' : ''}`} onClick={() => { setVehicle('Motorcycle'); setPassengers(1) }}>
-                      <span className="icon moto"><img src={VEHICLE_ART.Motorcycle} alt="" /></span>
-                      <span className="copy">
-                        <b>Motorcycle</b>
-                        <b className="price">{quotes.Motorcycle ? quotePriceLabel(quotes.Motorcycle) : '—'}</b>
-                      </span>
-                    </button>
-                  )}
-                  {(noOperator.tricycleAvailable || hail?.vehicleType === 'Tricycle') && (
-                    <button type="button" disabled={!!hail && hail.vehicleType !== 'Tricycle'} className={`vehicle ${vehicle === 'Tricycle' ? 'on' : ''}`} onClick={() => setVehicle('Tricycle')}>
-                      <span className="icon"><img src={VEHICLE_ART.Tricycle} alt="" /></span>
-                      <span className="copy">
-                        <b>Tricycle</b>
-                        <b className="price">{quotes.Tricycle ? quotePriceLabel(quotes.Tricycle) : '—'}</b>
-                      </span>
-                    </button>
-                  )}
+                  {(hail
+                    ? [{ id: hail.vehicleType, vehicleType: hail.vehicleType, name: vehicleLabel(hail.vehicleType), available: true } as const]
+                    : (noOperator.vehicles.length
+                        ? noOperator.vehicles.filter((v) => v.available)
+                        : noOperator.availableTypes.map((t) => ({
+                            id: t,
+                            vehicleType: t,
+                            name: vehicleLabel(t),
+                            available: true,
+                            maxPassengers: vehicleMaxPassengers(t),
+                            isCargo: vehicleIsCargo(t),
+                          })))
+                  ).map((item) => {
+                    const type = item.vehicleType as VehicleType
+                    const categoryId = 'id' in item && item.id !== type ? item.id : null
+                    const itemKey = quoteKey(type, categoryId)
+                    const selected = categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId
+                    const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
+                      ? item.maxPassengers
+                      : vehicleMaxPassengers(type)
+                    const cargo = 'isCargo' in item && typeof item.isCargo === 'boolean'
+                      ? item.isCargo
+                      : vehicleIsCargo(type)
+                    return (
+                      <button
+                        key={itemKey}
+                        type="button"
+                        disabled={!!hail && hail.vehicleType !== type}
+                        className={`vehicle ${selected ? 'on' : ''}`}
+                        onClick={() => {
+                          setVehicle(type)
+                          setVehicleCategoryId(categoryId)
+                          setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))
+                        }}
+                      >
+                        <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
+                          <img src={vehicleArt(type)} alt="" />
+                        </span>
+                        <span className="copy">
+                          <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
+                          <b className="price">{quotes[itemKey] ? quotePriceLabel(quotes[itemKey]!) : '—'}</b>
+                          {cargo ? <small className="muted">Cargo</small> : null}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
-                {!hail && pickup && dropoff && !noOperator.motorcycleAvailable && !noOperator.tricycleAvailable && (
+                {!hail && pickup && dropoff && noOperator.availableTypes.length === 0 && (
                   <p className="muted" style={{ margin: '8px 0 0' }}>No vehicle types are offered for bookings in this municipality yet.</p>
                 )}
-                {vehicle === 'Tricycle' && (
+                {!vehicleIsCargo(vehicle) && vehicleMaxPassengers(vehicle) > 1 && (
                   <div className="passenger-picker" role="group" aria-label="Number of passengers">
                     <span className="passenger-label">Passengers</span>
                     <div className="passenger-controls">
@@ -1096,24 +1170,25 @@ function Home({
                         className="passenger-input"
                         type="number"
                         min={1}
-                        max={4}
+                        max={vehicleMaxPassengers(vehicle)}
                         inputMode="numeric"
                         value={passengers}
                         onChange={(e) => {
+                          const max = vehicleMaxPassengers(vehicle)
                           const next = Math.floor(Number(e.target.value))
                           if (!Number.isFinite(next) || next < 1) {
                             setPassengers(1)
                             return
                           }
-                          setPassengers(Math.min(4, next))
+                          setPassengers(Math.min(max, next))
                         }}
                         aria-label="Passenger count"
                       />
                       <button
                         type="button"
                         className="passenger-btn"
-                        disabled={passengers >= 4}
-                        onClick={() => setPassengers((n) => Math.min(4, n + 1))}
+                        disabled={passengers >= vehicleMaxPassengers(vehicle)}
+                        onClick={() => setPassengers((n) => Math.min(vehicleMaxPassengers(vehicle), n + 1))}
                         aria-label="More passengers"
                       >
                         +
@@ -1521,12 +1596,17 @@ function mapChromePadding() {
   return { top, right: 16, bottom, left: 16 }
 }
 
-function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', riderId?: string, passengerCount = 1, promoCode = '', customerBoostAmount = 0): BookBody {
+function quoteKey(vehicle: VehicleType, categoryId?: string | null) {
+  return categoryId ?? vehicle
+}
+
+function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', riderId?: string, passengerCount = 1, promoCode = '', customerBoostAmount = 0, categoryId?: string | null): BookBody {
   const code = promoCode.trim()
   const looksComplete = /^save([1-9]|[1-9]\d|100)$/i.test(code)
   const boost = Math.min(500, Math.max(0, Math.floor(customerBoostAmount || 0)))
   return {
     vehicleType: vehicle,
+    vehicleCategoryId: categoryId ?? undefined,
     pickupBarangayId: pickup.barangayId,
     pickupDetails: pickup.details || pickup.label,
     pickupLat: pickup.lat,
@@ -1538,7 +1618,11 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     paymentMethod: payment,
     paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
     riderId,
-    passengerCount: vehicle === 'Motorcycle' ? 1 : Math.min(4, Math.max(1, passengerCount)),
+    passengerCount: (() => {
+      const max = vehicleMaxPassengers(vehicle)
+      if (vehicleIsCargo(vehicle) || max <= 1) return 1
+      return Math.min(max, Math.max(1, passengerCount))
+    })(),
     promoCode: looksComplete ? code : undefined,
     customerBoostAmount: boost > 0 ? boost : undefined,
   }

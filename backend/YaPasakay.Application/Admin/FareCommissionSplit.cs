@@ -69,8 +69,34 @@ public static class FareCommissionSplit
         matrix.UpdatedAtUtc = DateTime.UtcNow;
     }
 
-    public static decimal SystemPercent(Operator op, VehicleType vehicleType) =>
-        vehicleType == VehicleType.Tricycle ? op.TricycleCommissionPercent : op.MotorcycleCommissionPercent;
+    public static decimal SystemPercent(Operator op, VehicleType vehicleType)
+    {
+        var offer = op.VehicleOffers?.FirstOrDefault(x =>
+            x.VehicleCategoryId == Domain.VehicleCatalog.IdFor(vehicleType)
+            || x.VehicleCategory?.LegacyEnumValue == (int)vehicleType);
+        if (offer is not null)
+        {
+            return offer.CommissionPercent;
+        }
+
+        return vehicleType switch
+        {
+            VehicleType.Tricycle => op.TricycleCommissionPercent,
+            VehicleType.Motorcycle => op.MotorcycleCommissionPercent,
+            _ => op.MotorcycleCommissionPercent,
+        };
+    }
+
+    public static decimal SystemPercent(Operator op, Guid? vehicleCategoryId, VehicleType vehicleType)
+    {
+        if (vehicleCategoryId is Guid id)
+        {
+            var byId = op.VehicleOffers?.FirstOrDefault(x => x.VehicleCategoryId == id);
+            if (byId is not null) return byId.CommissionPercent;
+        }
+
+        return SystemPercent(op, vehicleType);
+    }
 
     public static string? Validate(decimal systemPercent, decimal operatorShare, decimal driverShare)
     {

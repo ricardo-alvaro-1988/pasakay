@@ -2,6 +2,8 @@ using YaPasakay.Domain.Enums;
 
 namespace YaPasakay.Application.Admin;
 
+public record VehicleCountItem(string Code, string Name, VehicleType VehicleType, int Count);
+
 public record OverviewSeriesPoint(
     DateOnly Date,
     int OperatorsCreated,
@@ -20,7 +22,8 @@ public record OverviewResponse(
     int UnreadSosAlerts,
     int PendingAccountDeletes,
     IReadOnlyList<OverviewSeriesPoint> Series,
-    IReadOnlyList<OperatorListItem> RecentOperators);
+    IReadOnlyList<OperatorListItem> RecentOperators,
+    IReadOnlyList<VehicleCountItem>? RiderVehicleCounts = null);
 
 public record OperatorListItem(
     Guid Id,
@@ -39,7 +42,8 @@ public record OperatorListItem(
     int RiderCount,
     int RidersMotorcycle,
     int RidersTricycle,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    IReadOnlyList<VehicleCountItem>? RiderVehicleCounts = null);
 
 public record SetActiveRequest(bool IsActive);
 
@@ -96,7 +100,8 @@ public record OperatorDetailResponse(
     DateTime CreatedAtUtc,
     OperatorAddressItem Address,
     IReadOnlyList<OperatorAreaItem> Areas,
-    IReadOnlyList<RiderListItem> Riders);
+    IReadOnlyList<RiderListItem> Riders,
+    IReadOnlyList<VehicleCountItem>? RiderVehicleCounts = null);
 
 public record CustomerServicesResponse(bool PabiliEnabled);
 
@@ -123,7 +128,10 @@ public record RiderListItem(
     string? LicensePhotoUrl,
     IReadOnlyList<PaymentMethod> AcceptedPaymentMethods,
     int CredibilityScore,
-    int RiderCancelCount);
+    int RiderCancelCount,
+    Guid? VehicleCategoryId = null,
+    string? VehicleCategoryCode = null,
+    string? VehicleCategoryName = null);
 
 public record RiderDetailResponse(
     Guid Id,
@@ -144,7 +152,10 @@ public record RiderDetailResponse(
     OperatorAddressItem Address,
     IReadOnlyList<PaymentMethod> AcceptedPaymentMethods,
     int CredibilityScore,
-    int RiderCancelCount);
+    int RiderCancelCount,
+    Guid? VehicleCategoryId = null,
+    string? VehicleCategoryCode = null,
+    string? VehicleCategoryName = null);
 
 public record RideStopItem(
     string Details,
@@ -333,7 +344,18 @@ public record OperatorFareListItem(
     decimal MotorcycleCommissionPercent,
     decimal TricycleCommissionPercent,
     FareRatesItem? Motorcycle,
-    FareRatesItem? Tricycle);
+    FareRatesItem? Tricycle,
+    IReadOnlyList<OperatorVehicleFareSlot>? Vehicles = null);
+
+public record OperatorVehicleFareSlot(
+    VehicleType VehicleType,
+    Guid VehicleCategoryId,
+    string Code,
+    string Name,
+    bool IsCargo,
+    int MaxPassengers,
+    decimal SystemCommissionPercent,
+    FareRatesItem? Rates);
 
 public record OperatorFareDetailResponse(
     Guid OperatorId,
@@ -345,7 +367,13 @@ public record OperatorFareDetailResponse(
     string? MunicipalityName,
     IReadOnlyList<IdName> Municipalities,
     FareRatesItem? Motorcycle,
-    FareRatesItem? Tricycle);
+    FareRatesItem? Tricycle,
+    IReadOnlyList<OperatorVehicleFareSlot>? Vehicles = null);
+
+public record OperatorBillVehicleLineItem(
+    string VehicleCode,
+    string VehicleName,
+    decimal Amount);
 
 public record BillingOperatorListItem(
     Guid OperatorId,
@@ -361,7 +389,8 @@ public record BillingOperatorListItem(
     decimal PendingTricycle,
     int PendingTripCount,
     DateTime? OldestUnbilledUtc,
-    DateTime? NewestUnbilledUtc);
+    DateTime? NewestUnbilledUtc,
+    IReadOnlyList<OperatorBillVehicleLineItem>? PendingVehicleLines = null);
 
 public record BillTripItem(
     DateTime AtUtc,
@@ -384,7 +413,8 @@ public record BillListItem(
     DateTime NotifiedAtUtc,
     DateTime CreatedAtUtc,
     string? Note,
-    IReadOnlyList<BillTripItem> Trips);
+    IReadOnlyList<BillTripItem> Trips,
+    IReadOnlyList<OperatorBillVehicleLineItem>? VehicleLines = null);
 
 public record BillingOperatorDetail(
     Guid OperatorId,
@@ -402,7 +432,8 @@ public record BillingOperatorDetail(
     int PendingTripCount,
     DateTime? OldestUnbilledUtc,
     DateTime? NewestUnbilledUtc,
-    IReadOnlyList<BillListItem> Bills);
+    IReadOnlyList<BillListItem> Bills,
+    IReadOnlyList<OperatorBillVehicleLineItem>? PendingVehicleLines = null);
 
 public record CreateBillRequest(bool DisableOperator, string? Note);
 
@@ -563,7 +594,8 @@ public record OperatorFleetResponse(
     int OnMap,
     int Motorcycle,
     int Tricycle,
-    IReadOnlyList<FleetRiderItem> Riders);
+    IReadOnlyList<FleetRiderItem> Riders,
+    IReadOnlyList<VehicleCountItem>? VehicleCounts = null);
 
 public record ScheduledBookingItem(
     Guid Id,
@@ -752,7 +784,8 @@ public record OperatorOverviewResponse(
     int PendingNow,
     int OngoingNow,
     int CompleteToday,
-    IReadOnlyList<OperatorOverviewSeriesPoint> Series);
+    IReadOnlyList<OperatorOverviewSeriesPoint> Series,
+    IReadOnlyList<VehicleCountItem>? RiderVehicleCounts = null);
 
 public record OperatorInboxItem(
     Guid Id,
@@ -773,7 +806,9 @@ public record SaveFareRatesRequest(
     decimal OperatorCommissionPercent,
     decimal DriverCommissionPercent,
     bool IsActive,
-    IReadOnlyList<FarePassengerTierBody>? PassengerTiers = null);
+    IReadOnlyList<FarePassengerTierBody>? PassengerTiers = null,
+    Guid? VehicleCategoryId = null,
+    bool AcceptedOfferTerms = false);
 
 public record FarePassengerTierBody(
     int PassengerCount,
@@ -790,12 +825,34 @@ public record FareVehicleRatesBody(
     decimal OperatorCommissionPercent,
     decimal DriverCommissionPercent,
     bool IsActive,
-    IReadOnlyList<FarePassengerTierBody>? PassengerTiers = null);
+    IReadOnlyList<FarePassengerTierBody>? PassengerTiers = null,
+    bool AcceptedOfferTerms = false);
 
 public record SaveRelatedFareRatesRequest(
     Guid MunicipalityId,
     FareVehicleRatesBody Motorcycle,
     FareVehicleRatesBody Tricycle);
+
+public record VehicleOfferingLogItem(
+    Guid Id,
+    Guid OperatorId,
+    string OperatorName,
+    Guid? MunicipalityId,
+    string? MunicipalityName,
+    Guid? VehicleCategoryId,
+    string VehicleCode,
+    string VehicleName,
+    string VehicleType,
+    bool IsOffered,
+    string ActorName,
+    string ActorRole,
+    bool AcceptedTerms,
+    string? TermsVersion,
+    DateTime AtUtc);
+
+public record VehicleOfferingTermsInfo(
+    string Version,
+    string Text);
 
 public record SaveFareSurchargeRequest(
     SurchargeKind Kind,
@@ -1143,6 +1200,15 @@ public record DeriveFareRatesItem(
     IReadOnlyList<FarePassengerTierItem> PassengerTiers,
     IReadOnlyList<FareSampleItem> Samples);
 
+public record DeriveFareVehicleSlot(
+    VehicleType VehicleType,
+    string Code,
+    string Name,
+    bool IsCargo,
+    int MaxPassengers,
+    decimal SystemCommissionPercent,
+    DeriveFareRatesItem? Rates);
+
 public record DeriveFareZoneDetailResponse(
     Guid Id,
     string Name,
@@ -1153,7 +1219,12 @@ public record DeriveFareZoneDetailResponse(
     decimal MotorcycleCommissionPercent,
     decimal TricycleCommissionPercent,
     DeriveFareRatesItem? Motorcycle,
-    DeriveFareRatesItem? Tricycle);
+    DeriveFareRatesItem? Tricycle,
+    IReadOnlyList<DeriveFareVehicleSlot>? Vehicles = null);
+
+public record SaveDeriveVehicleRatesBody(
+    VehicleType VehicleType,
+    FareVehicleRatesBody Rates);
 
 public record SaveDeriveFareZoneRequest(
     string Name,
@@ -1162,7 +1233,8 @@ public record SaveDeriveFareZoneRequest(
     int Priority,
     IReadOnlyList<DeriveFareLatLng> Polygon,
     FareVehicleRatesBody Motorcycle,
-    FareVehicleRatesBody Tricycle);
+    FareVehicleRatesBody Tricycle,
+    IReadOnlyList<SaveDeriveVehicleRatesBody>? Vehicles = null);
 
 public record DeriveFareZoneListResponse(IReadOnlyList<DeriveFareZoneListItem> Items);
 

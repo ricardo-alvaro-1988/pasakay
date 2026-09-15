@@ -40,12 +40,15 @@ import {
   TerritoryListItem,
   OperatorFareMatrix,
   OperatorFareListItem,
+  OperatorFareVehicleSlot,
+  VehicleOfferingLogItem,
   DeriveFareZoneDetail,
   DeriveFareZoneListItem,
   DeriveFareRates,
   DeriveFareLatLng,
   BillingOperator,
   BillingOperatorDetail,
+  BillingVehicleLine,
   OperatorBill,
   BillStatus,
   Announcement,
@@ -69,6 +72,9 @@ import {
   AccessStaff,
   TripStatus,
   VehicleType,
+  VehicleCountItem,
+  PLATFORM_VEHICLE_TYPES,
+  vehicleTypeLabel,
   PaymentMethod,
   PAYMENT_METHODS,
   normalizePaymentMethod,
@@ -102,8 +108,10 @@ import {
   BookingReportItem,
   BookingReportResponse,
   RiderInviteLinks,
+  RiderInviteVehicleOption,
   RiderApplicationListItem,
   RiderApplicationDetail,
+  OperatorVehicleOffer,
   SurchargeKind,
   fleetDuty,
   fleetDutyLabel,
@@ -724,6 +732,7 @@ function Shell({
         {page === 'fares' && <FaresPage />}
         {page === 'billing' && <BillingPage />}
         {page === 'commission' && <CommissionReportPage mode="admin" />}
+        {page === 'offering-log' && <VehicleOfferingLogPage mode="admin" />}
         {page === 'announcements' && <AnnouncementsPage />}
         {page === 'support' && <SupportPage />}
         {page === 'audit' && <AuditPage />}
@@ -1007,6 +1016,11 @@ type FareDraft = {
 }
 
 function relatedSurcharges(data: OperatorFareMatrix): RelatedSurcharge[] {
+  if (data.vehicles?.length) {
+    return data.vehicles.flatMap((slot) =>
+      (slot.rates?.surcharges ?? []).map((item) => ({ ...item, vehicleType: slot.vehicleType })),
+    )
+  }
   return [
     ...(data.motorcycle?.surcharges ?? []).map((item) => ({ ...item, vehicleType: 'Motorcycle' as const })),
     ...(data.tricycle?.surcharges ?? []).map((item) => ({ ...item, vehicleType: 'Tricycle' as const })),
@@ -1069,15 +1083,49 @@ function tierDraftsFromRates(rates: FareRates | null, singlePassenger = false): 
   }))
 }
 
-function fareDraft(rates: FareRates | null, system = 10, singlePassenger = false): FareDraft {
+function fareDraft(rates: FareRates | null, system = 10, singlePassenger = false, defaultOffered = false): FareDraft {
   const operatorShare = rates?.operatorCommissionPercent ?? Math.min(20, Math.max(0, roundPercent(100 - system)))
   const driverShare = rates?.driverCommissionPercent ?? roundPercent(Math.max(0, 100 - system - operatorShare))
   return {
     passengerTiers: tierDraftsFromRates(rates, singlePassenger),
     operatorCommissionPercent: String(operatorShare),
     driverCommissionPercent: String(driverShare),
-    isActive: rates?.isActive ?? true,
+    isActive: rates?.isActive ?? defaultOffered,
   }
+}
+
+function requiresVehicleOfferTerms(vehicle: VehicleType | string) {
+  return vehicle !== 'Motorcycle' && vehicle !== 'Tricycle'
+}
+
+function VehicleOfferTermsModal({
+  open,
+  vehicleName,
+  termsText,
+  busy,
+  onCancel,
+  onAccept,
+}: {
+  open: boolean
+  vehicleName: string
+  termsText: string
+  busy?: boolean
+  onCancel: () => void
+  onAccept: () => void
+}) {
+  if (!open) return null
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true">
+      <div className="modal card pad" style={{ maxWidth: 520 }}>
+        <h3 style={{ marginTop: 0 }}>Offer {vehicleName}?</h3>
+        <p className="muted" style={{ whiteSpace: 'pre-wrap' }}>{termsText}</p>
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button type="button" className="btn" disabled={busy} onClick={onCancel}>Cancel</button>
+          <button type="button" className="btn primary" disabled={busy} onClick={onAccept}>I accept — continue</button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 function sameTiers(a: FareTierDraft[], b: FareTierDraft[]) {
@@ -1133,7 +1181,32 @@ function parseDraft(draft: FareDraft, singlePassenger = false) {
   }
 }
 
-function commissionRates(motorcycle: number, tricycle: number) {
+function commissionRates(
+  motorcycle: number,
+  tricycle: number,
+  counts?: VehicleCountItem[] | null,
+  lines?: { vehicleCode: string; vehicleName: string }[] | null,
+) {
+  if (counts?.length) {
+    return (
+      <div>
+        {counts.map((item) => (
+          <div key={item.code}>{item.name}{typeof item.count === 'number' ? ` · ${item.count}` : ''}</div>
+        ))}
+        <div className="muted">System defaults · Motorcycle {percent(motorcycle)} · Tricycle {percent(tricycle)}</div>
+      </div>
+    )
+  }
+  if (lines?.length) {
+    return (
+      <div>
+        {lines.map((line) => (
+          <div key={line.vehicleCode}>{line.vehicleName}</div>
+        ))}
+        <div className="muted">System defaults · Motorcycle {percent(motorcycle)} · Tricycle {percent(tricycle)}</div>
+      </div>
+    )
+  }
   return (
     <div>
       <div>Motorcycle {percent(motorcycle)}</div>
@@ -1145,12 +1218,37 @@ function commissionRates(motorcycle: number, tricycle: number) {
 function normalizeVehicleType(value: unknown): VehicleType | null {
   if (value === 'Motorcycle' || value === 1 || value === '1') return 'Motorcycle'
   if (value === 'Tricycle' || value === 2 || value === '2') return 'Tricycle'
+  if (value === 'Sedan' || value === 3 || value === '3') return 'Sedan'
+  if (value === 'Mpv' || value === 4 || value === '4') return 'Mpv'
+  if (value === 'Suv' || value === 5 || value === '5') return 'Suv'
+  if (value === 'Van' || value === 6 || value === '6') return 'Van'
+  if (value === 'PickupL300' || value === 7 || value === '7') return 'PickupL300'
+  if (value === 'PickupCargo' || value === 8 || value === '8') return 'PickupCargo'
+  if (value === 'Custom' || value === 100 || value === '100') return 'Custom'
   if (typeof value === 'string') {
-    const key = value.trim().toLowerCase()
-    if (key === 'motorcycle') return 'Motorcycle'
-    if (key === 'tricycle') return 'Tricycle'
+    const key = value.trim().toLowerCase().replace(/[_\s]+/g, '-')
+    const map: Record<string, VehicleType> = {
+      motorcycle: 'Motorcycle',
+      tricycle: 'Tricycle',
+      sedan: 'Sedan',
+      mpv: 'Mpv',
+      suv: 'Suv',
+      van: 'Van',
+      'pickup-l300': 'PickupL300',
+      pickupl300: 'PickupL300',
+      'pickup-cargo': 'PickupCargo',
+      pickupcargo: 'PickupCargo',
+      custom: 'Custom',
+    }
+    if (map[key]) return map[key]
+    const asEnum = PLATFORM_VEHICLE_TYPES.find((t) => t.toLowerCase() === value.trim().toLowerCase())
+    if (asEnum) return asEnum
   }
   return null
+}
+
+function usesSinglePassengerFare(type: VehicleType) {
+  return type === 'Motorcycle' || type === 'PickupCargo'
 }
 
 /** True when the "model" is really a vehicle-type label (incl. typos like Motocycle). */
@@ -1183,10 +1281,34 @@ function formatVehicleLine(vehicleType: unknown, model?: string | null, plate?: 
   return [type || null, realModel, plateText || null].filter(Boolean).join(' · ')
 }
 
-function VehicleTag({ type, count }: { type: string | number; count?: number }) {
+const VEHICLE_PIE_COLORS = ['#e30613', '#8be34a', '#7aa2ff', '#d48b00', '#0284c7', '#9333ea', '#f59e0b', '#64748b', '#94a3b8']
+
+function vehicleCountsOrLegacy(
+  counts: VehicleCountItem[] | null | undefined,
+  motorcycle: number,
+  tricycle: number,
+): VehicleCountItem[] {
+  if (counts?.length) return counts
+  return [
+    { code: 'motorcycle', name: 'Motorcycle', vehicleType: 'Motorcycle' as VehicleType, count: motorcycle },
+    { code: 'tricycle', name: 'Tricycle', vehicleType: 'Tricycle' as VehicleType, count: tricycle },
+  ].filter((item) => item.count > 0)
+}
+
+function fleetFilterTypes(counts: VehicleCountItem[] | null | undefined): VehicleType[] {
+  if (counts?.length) {
+    const types = counts.map((item) => item.vehicleType)
+    const platform = PLATFORM_VEHICLE_TYPES.filter((type) => types.includes(type))
+    return types.includes('Custom') ? [...platform, 'Custom'] : platform
+  }
+  return ['Motorcycle', 'Tricycle']
+}
+
+function VehicleTag({ type, count, label: labelOverride }: { type: string | number; count?: number; label?: string }) {
   const normalized = normalizeVehicleType(type)
   const mc = normalized === 'Motorcycle'
-  const label = normalized ?? String(type || 'Vehicle')
+  const label = labelOverride?.trim()
+    || (normalized ? vehicleTypeLabel(normalized) : String(type || 'Vehicle'))
   return (
     <span className={`tag vehicle ${mc ? 'mc' : 'trike'}`}>
       {mc ? (
@@ -1207,6 +1329,25 @@ function VehicleTag({ type, count }: { type: string | number; count?: number }) 
       {typeof count === 'number' ? <em>{count}</em> : null}
     </span>
   )
+}
+
+function riderVehicleTagLabel(row: {
+  vehicleType?: string | number | null
+  vehicleCategoryName?: string | null
+}) {
+  const name = row.vehicleCategoryName?.trim()
+  if (name) return name
+  const normalized = normalizeVehicleType(row.vehicleType)
+  return normalized ? vehicleTypeLabel(normalized) : String(row.vehicleType ?? 'Vehicle')
+}
+
+function applyVehicleOfferSelection(
+  offer: { vehicleCategoryId: string; vehicleType: string; name?: string },
+  setVehicleCategoryId: (id: string) => void,
+  setVehicleType: (type: VehicleType) => void,
+) {
+  setVehicleCategoryId(offer.vehicleCategoryId)
+  setVehicleType(normalizeVehicleType(offer.vehicleType) ?? 'Custom')
 }
 
 function paymentMethodLabel(method: unknown, other?: string | null) {
@@ -2992,10 +3133,12 @@ function OverviewPage({
   }, [range])
 
   const pie = useMemo(
-    () => [
-      { name: 'Motorcycle', value: data?.ridersMotorcycle ?? 0, color: '#e30613' },
-      { name: 'Tricycle', value: data?.ridersTricycle ?? 0, color: '#8be34a' },
-    ],
+    () => vehicleCountsOrLegacy(data?.riderVehicleCounts, data?.ridersMotorcycle ?? 0, data?.ridersTricycle ?? 0)
+      .map((item, index) => ({
+        name: item.name,
+        value: item.count,
+        color: VEHICLE_PIE_COLORS[index % VEHICLE_PIE_COLORS.length],
+      })),
     [data],
   )
 
@@ -3029,8 +3172,9 @@ function OverviewPage({
           <label>Riders</label>
           <strong>{data.riders}</strong>
           <div className="tag-row">
-            <VehicleTag type="Motorcycle" count={data.ridersMotorcycle} />
-            <VehicleTag type="Tricycle" count={data.ridersTricycle} />
+            {vehicleCountsOrLegacy(data.riderVehicleCounts, data.ridersMotorcycle, data.ridersTricycle).map((item) => (
+              <VehicleTag key={item.code} type={item.vehicleType} count={item.count} label={item.name} />
+            ))}
           </div>
         </div>
         <Stat label="Customers" value={data.customers} />
@@ -3244,11 +3388,12 @@ function OperatorsListPage({
                 <td>{row.contactPhone}</td>
                 <td>
                   <div className="tag-row">
-                    <VehicleTag type="Motorcycle" count={row.ridersMotorcycle} />
-                    <VehicleTag type="Tricycle" count={row.ridersTricycle} />
+                    {vehicleCountsOrLegacy(row.riderVehicleCounts, row.ridersMotorcycle, row.ridersTricycle).map((item) => (
+                      <VehicleTag key={item.code} type={item.vehicleType} count={item.count} label={item.name} />
+                    ))}
                   </div>
                 </td>
-                <td>{commissionRates(row.motorcycleCommissionPercent, row.tricycleCommissionPercent)}</td>
+                <td>{commissionRates(row.motorcycleCommissionPercent, row.tricycleCommissionPercent, row.riderVehicleCounts)}</td>
                 <td><StatusTag active={row.isActive} /></td>
                 <td>
                   <button className="btn tiny" type="button" onClick={(e) => { e.stopPropagation(); onEdit(row.id) }}>
@@ -3290,6 +3435,13 @@ function OperatorFormPage({
     pabiliMarkupSystemCommissionPercent: '10',
     pabiliEnabled: false,
   })
+  const [vehicleCommissions, setVehicleCommissions] = useState<Array<{
+    vehicleCategoryId: string
+    code: string
+    name: string
+    commissionPercent: string
+    isEnabled: boolean
+  }>>([])
   const [address, setAddress] = useState<AddressValue>({
     province: null,
     municipality: null,
@@ -3307,31 +3459,61 @@ function OperatorFormPage({
 
   useEffect(() => {
     if (!operatorId) {
+      setVehicleCommissions(
+        PLATFORM_VEHICLE_TYPES.map((type) => ({
+          vehicleCategoryId: type,
+          code: type.toLowerCase(),
+          name: vehicleTypeLabel(type),
+          commissionPercent: type === 'Motorcycle' ? '10' : type === 'Tricycle' ? '5' : '10',
+          isEnabled: type === 'Motorcycle' || type === 'Tricycle',
+        })),
+      )
       return
     }
-    api.operator(operatorId).then((op) => {
-      setExisting(op)
-      setForm({
-        companyName: op.companyName,
-        contactName: op.contactName,
-        phone: op.contactPhone,
-        governmentIdType: op.governmentIdType ?? '',
-        governmentId: op.governmentId,
-        motorcycleCommissionPercent: String(op.motorcycleCommissionPercent ?? 10),
-        tricycleCommissionPercent: String(op.tricycleCommissionPercent ?? 5),
-        pabiliFareSystemCommissionPercent: String(op.pabiliFareSystemCommissionPercent ?? 10),
-        pabiliMarkupSystemCommissionPercent: String(op.pabiliMarkupSystemCommissionPercent ?? 10),
-        pabiliEnabled: !!op.pabiliEnabled,
+    Promise.all([api.operator(operatorId), api.adminOperatorVehicleOffers(operatorId)])
+      .then(([op, offers]) => {
+        setExisting(op)
+        setForm({
+          companyName: op.companyName,
+          contactName: op.contactName,
+          phone: op.contactPhone,
+          governmentIdType: op.governmentIdType ?? '',
+          governmentId: op.governmentId,
+          motorcycleCommissionPercent: String(op.motorcycleCommissionPercent ?? 10),
+          tricycleCommissionPercent: String(op.tricycleCommissionPercent ?? 5),
+          pabiliFareSystemCommissionPercent: String(op.pabiliFareSystemCommissionPercent ?? 10),
+          pabiliMarkupSystemCommissionPercent: String(op.pabiliMarkupSystemCommissionPercent ?? 10),
+          pabiliEnabled: !!op.pabiliEnabled,
+        })
+        setVehicleCommissions(
+          offers.map((offer) => ({
+            vehicleCategoryId: offer.vehicleCategoryId,
+            code: offer.code,
+            name: offer.displayName?.trim() || offer.name,
+            commissionPercent: String(offer.commissionPercent),
+            isEnabled: offer.isEnabled,
+          })),
+        )
+        setAddress({
+          province: op.address?.provinceId ? { id: op.address.provinceId, name: op.address.province } : null,
+          municipality: op.address?.municipalityId ? { id: op.address.municipalityId, name: op.address.municipality } : null,
+          barangay: op.address?.barangayId ? { id: op.address.barangayId, name: op.address.barangay } : null,
+          details: op.address?.details ?? '',
+        })
+        setAreas(op.areas ?? [])
       })
-      setAddress({
-        province: op.address?.provinceId ? { id: op.address.provinceId, name: op.address.province } : null,
-        municipality: op.address?.municipalityId ? { id: op.address.municipalityId, name: op.address.municipality } : null,
-        barangay: op.address?.barangayId ? { id: op.address.barangayId, name: op.address.barangay } : null,
-        details: op.address?.details ?? '',
-      })
-      setAreas(op.areas ?? [])
-    }).catch((err: Error) => setError(err.message))
+      .catch((err: Error) => setError(err.message))
   }, [operatorId])
+
+  function syncLegacyFromVehicleDrafts(drafts: typeof vehicleCommissions) {
+    const moto = drafts.find((x) => x.code === 'motorcycle')
+    const trike = drafts.find((x) => x.code === 'tricycle')
+    setForm((current) => ({
+      ...current,
+      motorcycleCommissionPercent: moto?.commissionPercent ?? current.motorcycleCommissionPercent,
+      tricycleCommissionPercent: trike?.commissionPercent ?? current.tricycleCommissionPercent,
+    }))
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -3347,8 +3529,21 @@ function OperatorFormPage({
       setError('Assign at least one barangay to the area of operation.')
       return
     }
-    const motorcycleCommission = Number(form.motorcycleCommissionPercent)
-    const tricycleCommission = Number(form.tricycleCommissionPercent)
+    for (const row of vehicleCommissions) {
+      const value = Number(row.commissionPercent)
+      if (!Number.isFinite(value) || value < 0 || value > 100) {
+        setError(`${row.name} commission must be a number from 0 to 100.`)
+        return
+      }
+    }
+    const motorcycleCommission = Number(
+      vehicleCommissions.find((x) => x.code === 'motorcycle')?.commissionPercent
+      ?? form.motorcycleCommissionPercent,
+    )
+    const tricycleCommission = Number(
+      vehicleCommissions.find((x) => x.code === 'tricycle')?.commissionPercent
+      ?? form.tricycleCommissionPercent,
+    )
     const pabiliFareSystem = Number(form.pabiliFareSystemCommissionPercent)
     const pabiliMarkupSystem = Number(form.pabiliMarkupSystemCommissionPercent)
     if (!Number.isFinite(motorcycleCommission) || motorcycleCommission < 0 || motorcycleCommission > 100) {
@@ -3407,8 +3602,28 @@ function OperatorFormPage({
       }
       if (isEdit && operatorId) {
         await api.updateOperator(operatorId, data)
+        await api.saveAdminOperatorVehicleOffers(
+          operatorId,
+          vehicleCommissions.map((row) => ({
+            vehicleCategoryId: row.vehicleCategoryId,
+            commissionPercent: Number(row.commissionPercent),
+            isEnabled: row.isEnabled,
+          })),
+        )
       } else {
-        await api.createOperator(data)
+        const created = await api.createOperator(data)
+        const offers = await api.adminOperatorVehicleOffers(created.id)
+        await api.saveAdminOperatorVehicleOffers(
+          created.id,
+          offers.map((offer) => {
+            const draft = vehicleCommissions.find((x) => x.code === offer.code)
+            return {
+              vehicleCategoryId: offer.vehicleCategoryId,
+              commissionPercent: Number(draft?.commissionPercent ?? offer.commissionPercent),
+              isEnabled: draft?.isEnabled ?? offer.isEnabled,
+            }
+          }),
+        )
       }
       onDone()
     } catch (err) {
@@ -3512,31 +3727,50 @@ function OperatorFormPage({
         </section>
 
         <section className="form-section commission">
-          <h3>Platform commission</h3>
-          <p className="form-hint">Set separately for each vehicle type. This is the platform cut of every completed trip fare.</p>
-          <div className="form-grid">
-            <label className="field">
-              <span>Motorcycle (%)</span>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
-                value={form.motorcycleCommissionPercent}
-                onChange={(e) => setForm({ ...form, motorcycleCommissionPercent: e.target.value })}
-              />
-            </label>
-            <label className="field">
-              <span>Tricycle (%)</span>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                step="0.01"
-                value={form.tricycleCommissionPercent}
-                onChange={(e) => setForm({ ...form, tricycleCommissionPercent: e.target.value })}
-              />
-            </label>
+          <h3>Vehicle types &amp; platform commission</h3>
+          <p className="form-hint">
+            Super Admin enables vehicle types and sets system commission for this operator. Operators manage fares only.
+          </p>
+          <div className="stack gap">
+            {vehicleCommissions.map((row) => (
+              <div key={row.vehicleCategoryId} className="form-grid" style={{ alignItems: 'end' }}>
+                <label className="field check" style={{ paddingBottom: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={row.isEnabled}
+                    onChange={(e) => {
+                      setVehicleCommissions((prev) =>
+                        prev.map((item) =>
+                          item.vehicleCategoryId === row.vehicleCategoryId
+                            ? { ...item, isEnabled: e.target.checked }
+                            : item,
+                        ),
+                      )
+                    }}
+                  />
+                  <span>{row.name}</span>
+                </label>
+                <label className="field">
+                  <span>Commission (%)</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={row.commissionPercent}
+                    onChange={(e) => {
+                      const next = vehicleCommissions.map((item) =>
+                        item.vehicleCategoryId === row.vehicleCategoryId
+                          ? { ...item, commissionPercent: e.target.value }
+                          : item,
+                      )
+                      setVehicleCommissions(next)
+                      syncLegacyFromVehicleDrafts(next)
+                    }}
+                  />
+                </label>
+              </div>
+            ))}
           </div>
           <p className="form-hint" style={{ marginTop: 14 }}>Pabili system shares are read-only for operators in Pabili Matrix.</p>
           <div className="form-grid">
@@ -3697,7 +3931,7 @@ function OperatorDetailPage({ id, onBack, onEdit, onBookings }: { id: string; on
               ) : null}
             </p>
             <p>Government ID: {[op.governmentIdType, op.governmentId].filter(Boolean).join(' · ') || '—'}</p>
-            <p>System Comm moto {percent(op.motorcycleCommissionPercent)} · System Comm tri {percent(op.tricycleCommissionPercent)}</p>
+            <p>System defaults · moto {percent(op.motorcycleCommissionPercent)} · tri {percent(op.tricycleCommissionPercent)}</p>
             <div className="area-summary">
               <span>Area of operation</span>
               {(op.areas ?? []).length === 0 ? (
@@ -3707,8 +3941,9 @@ function OperatorDetailPage({ id, onBack, onEdit, onBookings }: { id: string; on
               )}
             </div>
             <div className="tag-row" style={{ marginTop: 10 }}>
-              <VehicleTag type="Motorcycle" count={op.ridersMotorcycle} />
-              <VehicleTag type="Tricycle" count={op.ridersTricycle} />
+              {vehicleCountsOrLegacy(op.riderVehicleCounts, op.ridersMotorcycle, op.ridersTricycle).map((item) => (
+                <VehicleTag key={item.code} type={item.vehicleType} count={item.count} label={item.name} />
+              ))}
               <StatusTag active={op.isActive} />
             </div>
           </div>
@@ -3796,7 +4031,7 @@ function OperatorDetailPage({ id, onBack, onEdit, onBookings }: { id: string; on
                     </div>
                   </td>
                   <td>{rider.phoneNumber}</td>
-                  <td><VehicleTag type={rider.vehicleType} /></td>
+                  <td><VehicleTag type={rider.vehicleType} label={riderVehicleTagLabel(rider)} /></td>
                   <td>{rider.plateNumber}</td>
                   <td>{[rider.licenseType, rider.licenseNumber].filter(Boolean).join(' · ') || '—'}</td>
                   <td><PhotoThumb src={rider.licensePhotoUrl} alt={`${rider.fullName} license`} /></td>
@@ -3896,11 +4131,11 @@ function RiderDetailPage({
                 </>
               ) : null}
             </p>
-            <p>{formatVehicleLine(rider.vehicleType, rider.vehicleModel, rider.plateNumber)}</p>
+            <p>{formatVehicleLine(rider.vehicleCategoryName || rider.vehicleType, rider.vehicleModel, rider.plateNumber)}</p>
             <p>License: {[rider.licenseType, rider.licenseNumber].filter(Boolean).join(' · ') || '—'}</p>
             <p>Credibility: {rider.credibilityScore ?? 100}{rider.riderCancelCount ? ` · ${rider.riderCancelCount} cancel${rider.riderCancelCount === 1 ? '' : 's'}` : ''}</p>
             <div className="tag-row" style={{ marginTop: 10 }}>
-              <VehicleTag type={rider.vehicleType} />
+              <VehicleTag type={rider.vehicleType} label={riderVehicleTagLabel(rider)} />
               <StatusTag active={rider.isActive} />
             </div>
             <button
@@ -4974,6 +5209,47 @@ function sampleFare(rates: FareRates | null, km: number) {
   return row ? peso(row.fare) : '—'
 }
 
+type FareListVehicleColumn = {
+  id: string
+  label: string
+  vehicleType: VehicleType
+}
+
+function fareListVehicleColumns(items: OperatorFareListItem[]): FareListVehicleColumn[] {
+  const seen = new Map<string, FareListVehicleColumn>()
+  for (const row of items) {
+    for (const slot of row.vehicles ?? []) {
+      if (!slot.rates) continue
+      const id = slot.vehicleCategoryId || slot.code
+      if (!seen.has(id)) {
+        seen.set(id, {
+          id,
+          label: slot.name || vehicleTypeLabel(slot.vehicleType),
+          vehicleType: slot.vehicleType,
+        })
+      }
+    }
+  }
+  if (seen.size > 0) {
+    return [...seen.values()]
+  }
+  return [
+    { id: 'motorcycle', label: 'Motorcycle', vehicleType: 'Motorcycle' },
+    { id: 'tricycle', label: 'Tricycle', vehicleType: 'Tricycle' },
+  ]
+}
+
+function fareListRatesForColumn(row: OperatorFareListItem, col: FareListVehicleColumn): FareRates | null {
+  if (row.vehicles?.length) {
+    const slot = row.vehicles.find((s) => (s.vehicleCategoryId || s.code) === col.id)
+      ?? row.vehicles.find((s) => s.vehicleType === col.vehicleType)
+    return slot?.rates ?? null
+  }
+  if (col.vehicleType === 'Motorcycle') return row.motorcycle
+  if (col.vehicleType === 'Tricycle') return row.tricycle
+  return null
+}
+
 function FareListPage({ onOpen }: { onOpen: (operatorId: string, municipalityId: string) => void }) {
   const [q, setQ] = useState('')
   const [vehicle, setVehicle] = useState<VehicleType | ''>('')
@@ -4982,6 +5258,7 @@ function FareListPage({ onOpen }: { onOpen: (operatorId: string, municipalityId:
   const [total, setTotal] = useState(0)
   const [error, setError] = useState('')
   const pageSize = 10
+  const vehicleColumns = useMemo(() => fareListVehicleColumns(items), [items])
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -5001,13 +5278,21 @@ function FareListPage({ onOpen }: { onOpen: (operatorId: string, municipalityId:
       <div className="toolbar">
         <div>
           <h2 style={{ margin: 0 }}>Fare matrix</h2>
-          <p className="muted" style={{ margin: '4px 0 0' }}>Related motorcycle and tricycle rates per municipality. Read-only here. Operators create and edit rates for each city they serve. Time windows use Philippine time.</p>
+          <p className="muted" style={{ margin: '4px 0 0' }}>Related vehicle rates per municipality. Read-only here. Operators create and edit rates for each city they serve.</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="chips">
             <button type="button" className={vehicle === '' ? 'on' : ''} onClick={() => { setVehicle(''); setPage(1) }}>All</button>
-            <button type="button" className={vehicle === 'Motorcycle' ? 'on' : ''} onClick={() => { setVehicle('Motorcycle'); setPage(1) }}>Motorcycle</button>
-            <button type="button" className={vehicle === 'Tricycle' ? 'on' : ''} onClick={() => { setVehicle('Tricycle'); setPage(1) }}>Tricycle</button>
+            {PLATFORM_VEHICLE_TYPES.map((type) => (
+              <button
+                key={type}
+                type="button"
+                className={vehicle === type ? 'on' : ''}
+                onClick={() => { setVehicle(type); setPage(1) }}
+              >
+                {vehicleTypeLabel(type)}
+              </button>
+            ))}
           </div>
           <div className="ac">
             <input
@@ -5026,14 +5311,15 @@ function FareListPage({ onOpen }: { onOpen: (operatorId: string, municipalityId:
               <th>Operator</th>
               <th>Municipality</th>
               <th>Commission</th>
-              <th>Motorcycle</th>
-              <th>Tricycle</th>
+              {vehicleColumns.map((col) => (
+                <th key={col.id}>{col.label}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
             {items.length === 0 ? (
               <tr>
-                <td colSpan={5}>{q.trim() || vehicle ? 'No fare matrices match that filter.' : 'No fare matrices yet.'}</td>
+                <td colSpan={3 + vehicleColumns.length}>{q.trim() || vehicle ? 'No fare matrices match that filter.' : 'No fare matrices yet.'}</td>
               </tr>
             ) : items.map((row) => (
               <tr key={`${row.operatorId}|${row.municipalityId}`} className="clickable" onClick={() => onOpen(row.operatorId, row.municipalityId)}>
@@ -5045,8 +5331,9 @@ function FareListPage({ onOpen }: { onOpen: (operatorId: string, municipalityId:
                 </td>
                 <td>{row.municipalityName}</td>
                 <td>{commissionRates(row.motorcycleCommissionPercent, row.tricycleCommissionPercent)}</td>
-                <td><FareRatesCell rates={row.motorcycle} /></td>
-                <td><FareRatesCell rates={row.tricycle} /></td>
+                {vehicleColumns.map((col) => (
+                  <td key={col.id}><FareRatesCell rates={fareListRatesForColumn(row, col)} /></td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -5122,6 +5409,7 @@ function RelatedFareRatesTable({
   linked,
   onLinked,
   onChange,
+  onRequestOffer,
 }: {
   data: OperatorFareMatrix
   motorcycle?: FareDraft
@@ -5129,6 +5417,7 @@ function RelatedFareRatesTable({
   linked?: boolean
   onLinked?: (value: boolean) => void
   onChange?: (vehicle: VehicleType, patch: Partial<FareDraft>) => void
+  onRequestOffer?: (vehicle: VehicleType, name: string, apply: () => void) => void
 }) {
   const editable = !!onChange && !!motorcycle && !!tricycle
   const mc = motorcycle ?? fareDraft(data.motorcycle, data.motorcycleCommissionPercent, true)
@@ -5168,10 +5457,10 @@ function RelatedFareRatesTable({
     patchTier(vehicle, current.filter((_, i) => i !== index))
   }
 
-  function motorcycleRateEditor(draft: FareDraft, locked: boolean) {
+  function motorcycleRateEditor(draft: FareDraft, locked: boolean, vehicle: VehicleType = 'Motorcycle') {
     const tier = draft.passengerTiers[0] ?? defaultTierDraft()
     function patchRate(key: keyof FareTierDraft, value: string) {
-      onChange?.('Motorcycle', {
+      onChange?.(vehicle, {
         passengerTiers: [{ ...tier, passengerCount: '1', [key]: value }],
       })
     }
@@ -5203,7 +5492,9 @@ function RelatedFareRatesTable({
             </tr>
           </tbody>
         </table>
-        <p className="muted" style={{ margin: '8px 0 0', fontSize: 12 }}>Motorcycle is always 1 passenger.</p>
+        <p className="muted" style={{ margin: '8px 0 0', fontSize: 12 }}>
+          {vehicle === 'PickupCargo' ? 'Cargo bookings use a single fare tier.' : 'Single-passenger vehicle — one fare tier only.'}
+        </p>
       </div>
     )
   }
@@ -5339,14 +5630,26 @@ function RelatedFareRatesTable({
     locked: boolean,
   ) {
     const total = commissionSum(systemPercent, draft)
-    const motorcycle = vehicle === 'Motorcycle'
+    const single = usesSinglePassengerFare(vehicle)
     return (
       <section className="fare-vehicle-panel">
         <header className="fare-vehicle-panel-head">
-          <h3>{vehicle}</h3>
+          <h3>{vehicleTypeLabel(vehicle)}</h3>
           {editable ? (
             <div className="chips">
-              <button type="button" className={draft.isActive ? 'on' : ''} disabled={locked} onClick={() => onChange?.(vehicle, { isActive: true })}>Offered</button>
+              <button
+                type="button"
+                className={draft.isActive ? 'on' : ''}
+                disabled={locked}
+                onClick={() => {
+                  if (draft.isActive) return
+                  const apply = () => onChange?.(vehicle, { isActive: true })
+                  if (onRequestOffer) onRequestOffer(vehicle, vehicleTypeLabel(vehicle), apply)
+                  else apply()
+                }}
+              >
+                Offered
+              </button>
               <button type="button" className={!draft.isActive ? 'on' : ''} disabled={locked} onClick={() => onChange?.(vehicle, { isActive: false })}>Not offered</button>
             </div>
           ) : (
@@ -5355,10 +5658,10 @@ function RelatedFareRatesTable({
         </header>
 
         <div className="fare-vehicle-block">
-          <div className="fare-vehicle-label">{motorcycle ? 'Rates' : 'Passenger tiers'}</div>
+          <div className="fare-vehicle-label">{single ? 'Rates' : 'Passenger tiers'}</div>
           {editable
-            ? (motorcycle ? motorcycleRateEditor(draft, locked) : tiersEditor(vehicle, draft, locked))
-            : (motorcycle ? motorcycleRateReadonly(rates) : tiersReadonly(rates))}
+            ? (single ? motorcycleRateEditor(draft, locked, vehicle) : tiersEditor(vehicle, draft, locked))
+            : (single ? motorcycleRateReadonly(rates) : tiersReadonly(rates))}
         </div>
 
         <div className="fare-vehicle-block">
@@ -5408,22 +5711,87 @@ function RelatedFareRatesTable({
     )
   }
 
+  const extraSlots = (data.vehicles ?? []).filter((slot) => slot.vehicleType !== 'Motorcycle' && slot.vehicleType !== 'Tricycle')
+  const allSlots = data.vehicles ?? []
+  const useVehicleSlots = !editable && allSlots.length > 0
+  const showMotorcycle = !data.vehicles || data.vehicles.some((s) => s.vehicleType === 'Motorcycle' || s.code === 'motorcycle')
+  const showTricycle = !data.vehicles || data.vehicles.some((s) => s.vehicleType === 'Tricycle' || s.code === 'tricycle')
+  const showLinkToggle = editable && showMotorcycle && showTricycle
+
+  function slotRatesSingle(slot: OperatorFareVehicleSlot) {
+    return slot.isCargo || slot.maxPassengers <= 1 || usesSinglePassengerFare(slot.vehicleType)
+  }
+
   return (
     <div className="fare-matrix-layout">
       {editable ? (
         <p className="muted" style={{ marginTop: 0, marginBottom: 12, maxWidth: 640 }}>
-          Offered vehicles appear in the customer app for this municipality. Not offered keeps rates saved but blocks quote and book for that type.
+          Only vehicle types enabled by Super Admin appear here. Offered / Not offered controls booking for this municipality.
         </p>
       ) : null}
-      {editable ? (
+      {showLinkToggle ? (
         <div className="chips" style={{ marginBottom: 14 }}>
-          <button type="button" className={linked ? 'on' : ''} onClick={() => onLinked?.(true)}>Same rates for both</button>
-          <button type="button" className={!linked ? 'on' : ''} onClick={() => onLinked?.(false)}>Set each vehicle</button>
+          <button type="button" className={linked ? 'on' : ''} onClick={() => onLinked?.(true)}>Same rates for motorcycle &amp; tricycle</button>
+          <button type="button" className={!linked ? 'on' : ''} onClick={() => onLinked?.(false)}>Set motorcycle &amp; tricycle separately</button>
         </div>
       ) : null}
       <div className="fare-vehicle-panels">
-        {vehiclePanel('Motorcycle', mc, data.motorcycleCommissionPercent, data.motorcycle, false)}
-        {vehiclePanel('Tricycle', trike, data.tricycleCommissionPercent, data.tricycle, !!linked && editable)}
+        {useVehicleSlots ? allSlots.map((slot) => (
+          <section key={slot.vehicleCategoryId || slot.code} className="fare-vehicle-panel">
+            <header className="fare-vehicle-panel-head">
+              <h3>{slot.name || vehicleTypeLabel(slot.vehicleType)}</h3>
+              {slot.rates
+                ? <span className={`tag status ${slot.rates.isActive ? 'active' : 'inactive'}`}>{slot.rates.isActive ? 'Offered' : 'Not offered'}</span>
+                : <span className="muted">No rates</span>}
+            </header>
+            <div className="fare-vehicle-block">
+              <div className="fare-vehicle-label">{slotRatesSingle(slot) ? 'Rates' : 'Passenger tiers'}</div>
+              {slotRatesSingle(slot) ? motorcycleRateReadonly(slot.rates) : tiersReadonly(slot.rates)}
+            </div>
+            <div className="fare-vehicle-block">
+              <div className="fare-vehicle-label">Commission</div>
+              <div className="fare-commission-grid">
+                <div><small>System</small><strong>{percent(slot.systemCommissionPercent)}</strong></div>
+                <div><small>Operator</small><strong>{slot.rates ? percent(slot.rates.operatorCommissionPercent) : '—'}</strong></div>
+                <div><small>Driver</small><strong>{slot.rates ? percent(slot.rates.driverCommissionPercent) : '—'}</strong></div>
+              </div>
+            </div>
+            <div className="fare-vehicle-block">
+              <div className="fare-vehicle-label">Surcharges</div>
+              <div>{surchargeSummary(slot.rates)}</div>
+            </div>
+          </section>
+        )) : (
+          <>
+            {showMotorcycle ? vehiclePanel('Motorcycle', mc, data.motorcycleCommissionPercent, data.motorcycle, false) : null}
+            {showTricycle ? vehiclePanel('Tricycle', trike, data.tricycleCommissionPercent, data.tricycle, !!linked && editable && showMotorcycle) : null}
+            {!editable && extraSlots.map((slot) => (
+              <section key={slot.vehicleCategoryId || slot.code} className="fare-vehicle-panel">
+                <header className="fare-vehicle-panel-head">
+                  <h3>{slot.name || vehicleTypeLabel(slot.vehicleType)}</h3>
+                  {slot.rates
+                    ? <span className={`tag status ${slot.rates.isActive ? 'active' : 'inactive'}`}>{slot.rates.isActive ? 'Offered' : 'Not offered'}</span>
+                    : <span className="muted">No rates</span>}
+                </header>
+                <div className="fare-vehicle-block">
+                  <div className="fare-vehicle-label">{slotRatesSingle(slot) ? 'Rates' : 'Passenger tiers'}</div>
+                  {slotRatesSingle(slot) ? motorcycleRateReadonly(slot.rates) : tiersReadonly(slot.rates)}
+                </div>
+                <div className="fare-vehicle-block">
+                  <div className="fare-vehicle-label">Commission</div>
+                  <div className="fare-commission-grid">
+                    <div><small>System</small><strong>{percent(slot.systemCommissionPercent)}</strong></div>
+                    <div><small>Operator</small><strong>{slot.rates ? percent(slot.rates.operatorCommissionPercent) : '—'}</strong></div>
+                    <div><small>Driver</small><strong>{slot.rates ? percent(slot.rates.driverCommissionPercent) : '—'}</strong></div>
+                  </div>
+                </div>
+              </section>
+            ))}
+            {editable && !showMotorcycle && !showTricycle && extraSlots.length === 0 ? (
+              <p className="muted">No vehicle types are enabled for this operator. Ask Super Admin to enable types on the operator profile.</p>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   )
@@ -5496,9 +5864,21 @@ function RelatedSurchargeTable({
 }
 
 function RelatedFareSamples({ data }: { data: OperatorFareMatrix }) {
-  const samples = data.motorcycle?.samples ?? data.tricycle?.samples ?? []
+  const sampleSlots: Array<{ key: string; label: string; rates: FareRates | null }> = data.vehicles?.length
+    ? data.vehicles
+        .filter((slot) => (slot.rates?.samples?.length ?? 0) > 0)
+        .map((slot) => ({
+          key: slot.vehicleCategoryId || slot.code,
+          label: slot.name || vehicleTypeLabel(slot.vehicleType),
+          rates: slot.rates,
+        }))
+    : [
+        ...(data.motorcycle ? [{ key: 'motorcycle', label: 'Motorcycle', rates: data.motorcycle }] : []),
+        ...(data.tricycle ? [{ key: 'tricycle', label: 'Tricycle', rates: data.tricycle }] : []),
+      ]
+  const samples = sampleSlots[0]?.rates?.samples ?? []
   if (samples.length === 0) {
-    return <p className="muted" style={{ marginTop: 18 }}>No distance samples yet. Save rates to see motorcycle and tricycle side by side.</p>
+    return <p className="muted" style={{ marginTop: 18 }}>No distance samples yet. Save rates to see vehicle fares side by side.</p>
   }
   return (
     <div className="table-wrap" style={{ marginTop: 18 }}>
@@ -5507,16 +5887,18 @@ function RelatedFareSamples({ data }: { data: OperatorFareMatrix }) {
         <thead>
           <tr>
             <th>Distance</th>
-            <th>Motorcycle</th>
-            <th>Tricycle</th>
+            {sampleSlots.map((slot) => (
+              <th key={slot.key}>{slot.label}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {samples.map((sample) => (
             <tr key={sample.distanceKm}>
               <td>{sample.distanceKm.toFixed(0)} km</td>
-              <td>{sampleFare(data.motorcycle, sample.distanceKm)}</td>
-              <td>{sampleFare(data.tricycle, sample.distanceKm)}</td>
+              {sampleSlots.map((slot) => (
+                <td key={`${slot.key}-${sample.distanceKm}`}>{sampleFare(slot.rates, sample.distanceKm)}</td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -5560,6 +5942,18 @@ function BillRecordsList({ bills, onOpen }: { bills: OperatorBill[]; onOpen: (id
   )
 }
 
+function billVehicleLines(bill: OperatorBill): BillingVehicleLine[] {
+  if (bill.vehicleLines?.length) return bill.vehicleLines
+  const legacy: BillingVehicleLine[] = []
+  if (bill.motorcycleAmount > 0) {
+    legacy.push({ vehicleCode: 'motorcycle', vehicleName: 'Motorcycle', amount: bill.motorcycleAmount })
+  }
+  if (bill.tricycleAmount > 0) {
+    legacy.push({ vehicleCode: 'tricycle', vehicleName: 'Tricycle', amount: bill.tricycleAmount })
+  }
+  return legacy
+}
+
 function BillRecordDetail({
   bill,
   onBack,
@@ -5569,6 +5963,7 @@ function BillRecordDetail({
   onBack: () => void
   backLabel?: string
 }) {
+  const vehicleLines = billVehicleLines(bill)
   return (
     <div className="card">
       <div className="panel-head">
@@ -5578,6 +5973,11 @@ function BillRecordDetail({
           <p className="muted">
             {bill.tripCount} trip{bill.tripCount === 1 ? '' : 's'} · {phDateTime(bill.periodFromUtc)} – {phDateTime(bill.periodToUtc)}
           </p>
+          {vehicleLines.length > 0 ? (
+            <p className="muted" style={{ marginTop: 6 }}>
+              {vehicleLines.map((line) => `${line.vehicleName} ${peso(line.amount)}`).join(' · ')}
+            </p>
+          ) : null}
         </div>
         <div className="tag-row" style={{ marginTop: 0 }}>
           <BillStatusTag status={bill.status} />
@@ -5698,12 +6098,14 @@ function BillingListPage({ onOpen }: { onOpen: (id: string) => void }) {
                     </div>
                   </div>
                 </td>
-                <td>{commissionRates(row.motorcycleCommissionPercent, row.tricycleCommissionPercent)}</td>
+                <td>{commissionRates(row.motorcycleCommissionPercent, row.tricycleCommissionPercent, null, row.pendingVehicleLines)}</td>
                 <td>{row.pendingTripCount}</td>
                 <td>
                   <strong>{peso(row.pendingCommission)}</strong>
                   <div className="muted">
-                    Motorcycle {peso(row.pendingMotorcycle)} · Tricycle {peso(row.pendingTricycle)}
+                    {row.pendingVehicleLines?.length
+                      ? row.pendingVehicleLines.map((line) => `${line.vehicleName} ${peso(line.amount)}`).join(' · ')
+                      : `Motorcycle ${peso(row.pendingMotorcycle)} · Tricycle ${peso(row.pendingTricycle)}`}
                   </div>
                 </td>
               </tr>
@@ -5785,8 +6187,16 @@ function BillingDetailPage({ operatorId, onBack }: { operatorId: string; onBack:
             <p>{data.contactName} · {data.contactPhone}</p>
             <div className="tag-row" style={{ marginTop: 8 }}>
               <StatusTag active={data.isActive} />
-              <VehicleTag type="Motorcycle" />
-              <VehicleTag type="Tricycle" />
+              {data.pendingVehicleLines?.length
+                ? data.pendingVehicleLines.map((line) => (
+                    <VehicleTag key={line.vehicleCode} type={line.vehicleCode} label={line.vehicleName} />
+                  ))
+                : (
+                  <>
+                    <VehicleTag type="Motorcycle" />
+                    <VehicleTag type="Tricycle" />
+                  </>
+                )}
             </div>
           </div>
         </div>
@@ -5805,8 +6215,16 @@ function BillingDetailPage({ operatorId, onBack }: { operatorId: string; onBack:
         </div>
         <div className="detail-card">
           <span>By vehicle</span>
-          <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
-          <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
+          {data.pendingVehicleLines?.length ? (
+            data.pendingVehicleLines.map((line) => (
+              <p key={line.vehicleCode} className="muted" style={{ marginTop: 10 }}>{line.vehicleName} · {peso(line.amount)}</p>
+            ))
+          ) : (
+            <>
+              <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
+              <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
+            </>
+          )}
           <p className="muted">{data.riderCount} rider{data.riderCount === 1 ? '' : 's'}</p>
         </div>
       </div>
@@ -6126,8 +6544,10 @@ function SettingsPage({
             <h2>Vehicle types</h2>
             <p>Locked for this product. Operators will assign one of these when they create a rider.</p>
             <div className="chips" style={{ marginTop: 12 }}>
-              <button type="button" className="on">Motorcycle</button>
-              <button type="button" className="on">Tricycle</button>
+              {PLATFORM_VEHICLE_TYPES.map((type) => (
+                <button key={type} type="button" className="on">{vehicleTypeLabel(type)}</button>
+              ))}
+              <button type="button" className="on">Custom</button>
             </div>
           </div>
           <div className="card">
@@ -7287,6 +7707,7 @@ function OperatorShell({
         {page === 'customers' && <OperatorCustomersPage />}
         {page === 'fleet' && <OperatorFleetPage theme={theme} />}
         {page === 'fares' && <OperatorFaresPage />}
+        {page === 'offering-log' && <VehicleOfferingLogPage mode="operator" />}
         {page === 'derive-fares' && <OperatorDeriveFaresPage />}
         {page === 'surcharges' && <OperatorSurchargesPage />}
         {page === 'support' && <OperatorSupportPage />}
@@ -9055,6 +9476,7 @@ function OperatorFleetPage({ theme }: { theme: Theme }) {
   const [error, setError] = useState('')
   const [vehicle, setVehicle] = useState<VehicleType | ''>('')
   const [focusId, setFocusId] = useState<string | null>(null)
+  const filterTypes = useMemo(() => fleetFilterTypes(data?.vehicleCounts), [data?.vehicleCounts])
 
   useEffect(() => {
     function load() {
@@ -9077,16 +9499,31 @@ function OperatorFleetPage({ theme }: { theme: Theme }) {
       <div className="stats">
         <Stat label="Active riders" value={data?.active ?? 0} hint="Accounts that can take trips" />
         <Stat label="On the map" value={data?.onMap ?? 0} hint="Active riders with a live location" />
-        <Stat label="Motorcycle" value={data?.motorcycle ?? 0} />
-        <Stat label="Tricycle" value={data?.tricycle ?? 0} />
+        {(data?.vehicleCounts?.length
+          ? data.vehicleCounts
+          : [
+              { code: 'motorcycle', name: 'Motorcycle', vehicleType: 'Motorcycle' as VehicleType, count: data?.motorcycle ?? 0 },
+              { code: 'tricycle', name: 'Tricycle', vehicleType: 'Tricycle' as VehicleType, count: data?.tricycle ?? 0 },
+            ]
+        ).map((item) => (
+          <Stat key={item.code} label={item.name} value={item.count} />
+        ))}
       </div>
       {error ? <p className="error">{error}</p> : null}
       <div className="fleet-layout">
         <div className="card fleet-list">
           <div className="chips" style={{ marginBottom: 12 }}>
             <button type="button" className={vehicle === '' ? 'on' : ''} onClick={() => { setVehicle(''); setFocusId(null) }}>All</button>
-            <button type="button" className={vehicle === 'Motorcycle' ? 'on' : ''} onClick={() => { setVehicle('Motorcycle'); setFocusId(null) }}>Motorcycle</button>
-            <button type="button" className={vehicle === 'Tricycle' ? 'on' : ''} onClick={() => { setVehicle('Tricycle'); setFocusId(null) }}>Tricycle</button>
+            {filterTypes.map((type) => (
+              <button
+                key={type}
+                type="button"
+                className={vehicle === type ? 'on' : ''}
+                onClick={() => { setVehicle(type); setFocusId(null) }}
+              >
+                {vehicleTypeLabel(type)}
+              </button>
+            ))}
           </div>
           <p className="muted" style={{ marginTop: 0 }}>Tap a rider to center the map. Status colors match the map pins below.</p>
           {riders.length === 0 ? (
@@ -9468,7 +9905,7 @@ function OperatorRiderList({
                   </div>
                 </td>
                 <td>{row.phoneNumber}</td>
-                <td><VehicleTag type={row.vehicleType} /></td>
+                <td><VehicleTag type={row.vehicleType} label={riderVehicleTagLabel(row)} /></td>
                 <td>{row.plateNumber}</td>
                 <td><StatusTag active={row.isActive} /></td>
               </tr>
@@ -9688,7 +10125,7 @@ function OperatorRiderApplicationsPage({
               <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
                 <td><strong>{row.fullName}</strong></td>
                 <td>{row.phoneNumber}</td>
-                <td><VehicleTag type={row.vehicleType} /></td>
+                <td><VehicleTag type={row.vehicleType} label={riderVehicleTagLabel(row)} /></td>
                 <td>{row.plateNumber}</td>
                 <td>{row.status}</td>
                 <td>{new Date(row.createdAtUtc).toLocaleString()}</td>
@@ -9768,7 +10205,7 @@ function OperatorRiderApplicationDetail({
       </div>
       {error ? <p className="error">{error}</p> : null}
       <div className="detail-grid">
-        <div><span className="muted">Vehicle</span><p><VehicleTag type={row.vehicleType} /> {row.plateNumber}</p></div>
+        <div><span className="muted">Vehicle</span><p><VehicleTag type={row.vehicleType} label={riderVehicleTagLabel(row)} /> {row.plateNumber}</p></div>
         <div><span className="muted">Franchise no.</span><p>{row.vehicleFranchiseNumber || '—'}</p></div>
         <div><span className="muted">Model</span><p>{realVehicleModel(row.vehicleModel, row.vehicleType) || '—'}</p></div>
         <div><span className="muted">License</span><p>{row.licenseType} · {row.licenseNumber}</p></div>
@@ -9827,6 +10264,8 @@ function PublicRiderJoinPage({
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [vehicleType, setVehicleType] = useState<VehicleType>('Motorcycle')
+  const [vehicleCategoryId, setVehicleCategoryId] = useState('')
+  const [vehicleOptions, setVehicleOptions] = useState<RiderInviteVehicleOption[]>([])
   const [plateNumber, setPlateNumber] = useState('')
   const [vehicleFranchiseNumber, setVehicleFranchiseNumber] = useState('')
   const [vehicleModel, setVehicleModel] = useState('')
@@ -9852,6 +10291,11 @@ function PublicRiderJoinPage({
       .then((info) => {
         setCompanyName(info.companyName)
         setStatusPath(info.statusPath)
+        const options = info.vehicles ?? []
+        setVehicleOptions(options)
+        if (options.length > 0) {
+          applyVehicleOfferSelection(options[0], setVehicleCategoryId, setVehicleType)
+        }
         setError('')
       })
       .catch((err: Error) => setError(err.message))
@@ -9871,6 +10315,10 @@ function PublicRiderJoinPage({
       setError('Enter the vehicle franchise number.')
       return
     }
+    if (vehicleOptions.length > 0 && !vehicleCategoryId) {
+      setError('Choose a vehicle.')
+      return
+    }
     if (password.trim().length < 6) {
       setError('Set a password of at least 6 characters.')
       return
@@ -9887,6 +10335,7 @@ function PublicRiderJoinPage({
       data.append('phone', phone)
       data.append('password', password.trim())
       data.append('vehicleType', vehicleType)
+      if (vehicleCategoryId) data.append('vehicleCategoryId', vehicleCategoryId)
       data.append('plateNumber', plateNumber)
       data.append('vehicleFranchiseNumber', vehicleFranchiseNumber.trim())
       data.append('vehicleModel', realVehicleModel(vehicleModel, vehicleType) ?? '')
@@ -9958,8 +10407,34 @@ function PublicRiderJoinPage({
           <div className="field wide">
             <span>Vehicle</span>
             <div className="chips" style={{ marginTop: 8 }}>
-              <button type="button" className={vehicleType === 'Motorcycle' ? 'on' : ''} onClick={() => setVehicleType('Motorcycle')}>Motorcycle</button>
-              <button type="button" className={vehicleType === 'Tricycle' ? 'on' : ''} onClick={() => setVehicleType('Tricycle')}>Tricycle</button>
+              {(vehicleOptions.length > 0 ? vehicleOptions : PLATFORM_VEHICLE_TYPES.map((type) => ({
+                vehicleCategoryId: type,
+                code: type.toLowerCase(),
+                name: vehicleTypeLabel(type),
+                vehicleType: type,
+                isCustom: false,
+              }))).map((option) => {
+                const selected = vehicleOptions.length > 0
+                  ? vehicleCategoryId === option.vehicleCategoryId
+                  : vehicleType === option.vehicleType
+                return (
+                  <button
+                    key={option.vehicleCategoryId}
+                    type="button"
+                    className={selected ? 'on' : ''}
+                    onClick={() => {
+                      if (vehicleOptions.length > 0) {
+                        applyVehicleOfferSelection(option, setVehicleCategoryId, setVehicleType)
+                      } else {
+                        setVehicleType(normalizeVehicleType(option.vehicleType) ?? 'Motorcycle')
+                        setVehicleCategoryId('')
+                      }
+                    }}
+                  >
+                    {option.name || vehicleTypeLabel(option.vehicleType)}
+                  </button>
+                )
+              })}
             </div>
           </div>
         </div>
@@ -10057,6 +10532,8 @@ function OperatorRiderForm({
   const [fullName, setFullName] = useState('')
   const [phone, setPhone] = useState('')
   const [vehicleType, setVehicleType] = useState<VehicleType>('Motorcycle')
+  const [vehicleCategoryId, setVehicleCategoryId] = useState('')
+  const [vehicleOffers, setVehicleOffers] = useState<OperatorVehicleOffer[]>([])
   const [plateNumber, setPlateNumber] = useState('')
   const [vehicleFranchiseNumber, setVehicleFranchiseNumber] = useState('')
   const [vehicleModel, setVehicleModel] = useState('')
@@ -10078,12 +10555,25 @@ function OperatorRiderForm({
   ]
 
   useEffect(() => {
+    api.operatorVehicleOffers()
+      .then((rows) => {
+        const enabled = rows.filter((row) => row.isEnabled)
+        setVehicleOffers(enabled)
+        if (!riderId && enabled.length > 0) {
+          applyVehicleOfferSelection(enabled[0], setVehicleCategoryId, setVehicleType)
+        }
+      })
+      .catch(() => setVehicleOffers([]))
+  }, [riderId])
+
+  useEffect(() => {
     if (!riderId) return
     api.opRider(riderId).then((row) => {
       setExisting(row)
       setFullName(row.fullName)
       setPhone(row.phoneNumber)
       setVehicleType(row.vehicleType)
+      setVehicleCategoryId(row.vehicleCategoryId ?? '')
       setPlateNumber(row.plateNumber)
       setVehicleFranchiseNumber(row.vehicleFranchiseNumber ?? '')
       setVehicleModel(realVehicleModel(row.vehicleModel, row.vehicleType) ?? '')
@@ -10105,6 +10595,32 @@ function OperatorRiderForm({
     }).catch((err: Error) => setError(err.message))
   }, [riderId])
 
+  const selectableOffers = useMemo(() => {
+    if (vehicleOffers.length === 0) return vehicleOffers
+    if (!vehicleCategoryId || vehicleOffers.some((o) => o.vehicleCategoryId === vehicleCategoryId)) {
+      return vehicleOffers
+    }
+    if (!existing?.vehicleCategoryId) return vehicleOffers
+    return [
+      {
+        id: existing.vehicleCategoryId,
+        vehicleCategoryId: existing.vehicleCategoryId,
+        code: existing.vehicleCategoryCode ?? 'current',
+        name: existing.vehicleCategoryName ?? vehicleTypeLabel(existing.vehicleType),
+        iconKey: 'generic',
+        maxPassengers: 1,
+        isCargo: false,
+        isEnabled: true,
+        commissionPercent: 0,
+        displayName: existing.vehicleCategoryName ?? null,
+        maxPassengersOverride: null,
+        isCustom: existing.vehicleType === 'Custom',
+        vehicleType: existing.vehicleType,
+      },
+      ...vehicleOffers,
+    ]
+  }, [vehicleOffers, vehicleCategoryId, existing])
+
   async function save(e: FormEvent) {
     e.preventDefault()
     if (!address.barangay) {
@@ -10117,6 +10633,10 @@ function OperatorRiderForm({
     }
     if (!vehicleFranchiseNumber.trim()) {
       setError('Enter the vehicle franchise number.')
+      return
+    }
+    if (selectableOffers.length > 0 && !vehicleCategoryId) {
+      setError('Choose a vehicle.')
       return
     }
     if (!riderId && password.trim().length < 6) {
@@ -10139,6 +10659,7 @@ function OperatorRiderForm({
       data.append('phone', phone)
       if (password.trim()) data.append('password', password.trim())
       data.append('vehicleType', vehicleType)
+      if (vehicleCategoryId) data.append('vehicleCategoryId', vehicleCategoryId)
       data.append('plateNumber', plateNumber)
       data.append('vehicleFranchiseNumber', vehicleFranchiseNumber.trim())
       data.append('vehicleModel', realVehicleModel(vehicleModel, vehicleType) ?? '')
@@ -10198,8 +10719,42 @@ function OperatorRiderForm({
         <div className="field wide">
           <span>Vehicle</span>
           <div className="chips" style={{ marginTop: 8 }}>
-            <button type="button" className={vehicleType === 'Motorcycle' ? 'on' : ''} onClick={() => setVehicleType('Motorcycle')}>Motorcycle</button>
-            <button type="button" className={vehicleType === 'Tricycle' ? 'on' : ''} onClick={() => setVehicleType('Tricycle')}>Tricycle</button>
+            {(selectableOffers.length > 0 ? selectableOffers : PLATFORM_VEHICLE_TYPES.map((type) => ({
+              id: type,
+              vehicleCategoryId: type,
+              code: type.toLowerCase(),
+              name: vehicleTypeLabel(type),
+              iconKey: type.toLowerCase(),
+              maxPassengers: 1,
+              isCargo: false,
+              isEnabled: true,
+              commissionPercent: 0,
+              displayName: null,
+              maxPassengersOverride: null,
+              isCustom: false,
+              vehicleType: type,
+            }))).map((offer) => {
+              const selected = selectableOffers.length > 0
+                ? vehicleCategoryId === offer.vehicleCategoryId
+                : vehicleType === offer.vehicleType
+              return (
+                <button
+                  key={offer.vehicleCategoryId}
+                  type="button"
+                  className={selected ? 'on' : ''}
+                  onClick={() => {
+                    if (selectableOffers.length > 0) {
+                      applyVehicleOfferSelection(offer, setVehicleCategoryId, setVehicleType)
+                    } else {
+                      setVehicleType(normalizeVehicleType(offer.vehicleType) ?? 'Motorcycle')
+                      setVehicleCategoryId('')
+                    }
+                  }}
+                >
+                  {offer.displayName?.trim() || offer.name || vehicleTypeLabel(offer.vehicleType)}
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>
@@ -10305,11 +10860,11 @@ function OperatorRiderDetail({ riderId, onBack, onEdit }: { riderId: string; onB
             <h2 style={{ marginTop: 12 }}>{rider.fullName}</h2>
             <p>{rider.phoneNumber}</p>
             <p>{rider.fullAddress || 'No address yet'}</p>
-            <p>{rider.vehicleType} · {rider.plateNumber}</p>
+            <p>{rider.vehicleCategoryName || rider.vehicleType} · {rider.plateNumber}</p>
             <p>Franchise: {rider.vehicleFranchiseNumber || '—'}</p>
             <p>Credibility: {rider.credibilityScore ?? 100}{rider.riderCancelCount ? ` · ${rider.riderCancelCount} cancel${rider.riderCancelCount === 1 ? '' : 's'}` : ''}</p>
             <div className="tag-row" style={{ marginTop: 10 }}>
-              <VehicleTag type={rider.vehicleType} />
+              <VehicleTag type={rider.vehicleType} label={riderVehicleTagLabel(rider)} />
               <StatusTag active={rider.isActive} />
               {rider.acceptsPabili ? <span className="tag kind">Pabili</span> : null}
               {rider.acceptedPaymentMethods.map((method) => {
@@ -10395,6 +10950,16 @@ function OperatorDeriveFaresPage() {
   const [polygon, setPolygon] = useState<DeriveFareLatLng[]>([])
   const [motorcycle, setMotorcycle] = useState<FareDraft>(fareDraft(null, 10, true))
   const [tricycle, setTricycle] = useState<FareDraft>(fareDraft(null, 5, false))
+  const [extraDrafts, setExtraDrafts] = useState<Record<string, FareDraft>>({})
+  const [extraSlots, setExtraSlots] = useState<Array<{
+    vehicleType: VehicleType
+    code: string
+    name: string
+    isCargo: boolean
+    maxPassengers: number
+    systemCommissionPercent: number
+  }>>([])
+  const [enabledVehicles, setEnabledVehicles] = useState<OperatorFareVehicleSlot[]>([])
   const [linked, setLinked] = useState(true)
   const [systemMc, setSystemMc] = useState(10)
   const [systemTrike, setSystemTrike] = useState(5)
@@ -10424,6 +10989,37 @@ function OperatorDeriveFaresPage() {
     refreshList().catch((err: Error) => setError(err.message))
   }, [])
 
+  function loadExtraFromDetail(detail?: DeriveFareZoneDetail | null) {
+    const slots = (detail?.vehicles ?? []).filter((s) => s.vehicleType !== 'Motorcycle' && s.vehicleType !== 'Tricycle')
+    setEnabledVehicles((detail?.vehicles ?? []).map((s) => ({
+      vehicleType: s.vehicleType,
+      vehicleCategoryId: s.code,
+      code: s.code,
+      name: s.name,
+      isCargo: s.isCargo,
+      maxPassengers: s.maxPassengers,
+      systemCommissionPercent: s.systemCommissionPercent,
+      rates: null,
+    })))
+    setExtraSlots(slots.map((s) => ({
+      vehicleType: s.vehicleType,
+      code: s.code,
+      name: s.name,
+      isCargo: s.isCargo,
+      maxPassengers: s.maxPassengers,
+      systemCommissionPercent: s.systemCommissionPercent,
+    })))
+    const drafts: Record<string, FareDraft> = {}
+    for (const s of slots) {
+      drafts[s.code] = fareDraft(
+        deriveRatesAsFare(s.rates),
+        s.systemCommissionPercent,
+        s.isCargo || s.maxPassengers <= 1 || usesSinglePassengerFare(s.vehicleType),
+      )
+    }
+    setExtraDrafts(drafts)
+  }
+
   function resetEditor(detail?: DeriveFareZoneDetail | null) {
     if (!detail) {
       setName('')
@@ -10434,6 +11030,7 @@ function OperatorDeriveFaresPage() {
       setMotorcycle(fareDraft(null, systemMc, true))
       setTricycle(fareDraft(null, systemTrike, false))
       setLinked(true)
+      loadExtraFromDetail(null)
       return
     }
     setName(detail.name)
@@ -10448,6 +11045,7 @@ function OperatorDeriveFaresPage() {
     setMotorcycle(mc)
     setTricycle(trike)
     setLinked(sameDraft(mc, trike) || !detail.tricycle)
+    loadExtraFromDetail(detail)
   }
 
   async function openCreate() {
@@ -10462,6 +11060,21 @@ function OperatorDeriveFaresPage() {
       resetEditor(null)
       setMotorcycle(fareDraft(null, fares.motorcycleCommissionPercent, true))
       setTricycle(fareDraft(null, fares.tricycleCommissionPercent, false))
+      setEnabledVehicles(fares.vehicles ?? [])
+      const slots = (fares.vehicles ?? []).filter((s) => s.vehicleType !== 'Motorcycle' && s.vehicleType !== 'Tricycle')
+      setExtraSlots(slots.map((s) => ({
+        vehicleType: s.vehicleType,
+        code: s.code,
+        name: s.name,
+        isCargo: s.isCargo,
+        maxPassengers: s.maxPassengers,
+        systemCommissionPercent: s.systemCommissionPercent,
+      })))
+      const drafts: Record<string, FareDraft> = {}
+      for (const s of slots) {
+        drafts[s.code] = fareDraft(null, s.systemCommissionPercent, s.isCargo || s.maxPassengers <= 1 || usesSinglePassengerFare(s.vehicleType))
+      }
+      setExtraDrafts(drafts)
     } catch {
       resetEditor(null)
     }
@@ -10535,6 +11148,14 @@ function OperatorDeriveFaresPage() {
       setError('System, operator, and driver commission must add up to 100% for each vehicle.')
       return
     }
+    for (const slot of extraSlots) {
+      const draft = extraDrafts[slot.code]
+      if (!draft) continue
+      if (commissionSum(slot.systemCommissionPercent, draft) !== 100) {
+        setError(`${slot.name}: system, operator, and driver commission must add up to 100%.`)
+        return
+      }
+    }
     setBusy(true)
     setError('')
     try {
@@ -10546,6 +11167,13 @@ function OperatorDeriveFaresPage() {
         polygon,
         motorcycle: parseDraft(motorcycle, true),
         tricycle: parseDraft(trikeDraft, false),
+        vehicles: extraSlots.map((slot) => ({
+          vehicleType: slot.vehicleType,
+          rates: parseDraft(
+            extraDrafts[slot.code] ?? fareDraft(null, slot.systemCommissionPercent, slot.isCargo || slot.maxPassengers <= 1),
+            slot.isCargo || slot.maxPassengers <= 1 || usesSinglePassengerFare(slot.vehicleType),
+          ),
+        })),
       }
       const saved = editingId
         ? await api.updateDeriveFareZone(editingId, body)
@@ -10621,13 +11249,49 @@ function OperatorDeriveFaresPage() {
         <DeriveZoneMap points={polygon} onChange={setPolygon} />
         <h3>Fare rates</h3>
         <RelatedFareRatesTable
-          data={{ ...matrixStub, motorcycleCommissionPercent: systemMc, tricycleCommissionPercent: systemTrike }}
+          data={{
+            ...matrixStub,
+            motorcycleCommissionPercent: systemMc,
+            tricycleCommissionPercent: systemTrike,
+            vehicles: enabledVehicles,
+          }}
           motorcycle={motorcycle}
           tricycle={tricycle}
           linked={linked}
           onLinked={setLinked}
           onChange={changeRates}
         />
+        {extraSlots.length > 0 ? (
+          <div className="fare-vehicle-panels" style={{ marginTop: 18 }}>
+            {extraSlots.map((slot) => {
+              const draft = extraDrafts[slot.code] ?? fareDraft(null, slot.systemCommissionPercent, slot.isCargo || slot.maxPassengers <= 1)
+              return (
+                <ExtraVehicleFareEditor
+                  key={slot.code}
+                  vehicle={slot.vehicleType}
+                  name={slot.name}
+                  systemPercent={slot.systemCommissionPercent}
+                  draft={draft}
+                  rates={null}
+                  single={slot.isCargo || slot.maxPassengers <= 1 || usesSinglePassengerFare(slot.vehicleType)}
+                  onChange={(patch) => {
+                    setExtraDrafts((current) => {
+                      const base = current[slot.code] ?? draft
+                      const next = { ...base, ...patch }
+                      if (patch.operatorCommissionPercent != null && patch.driverCommissionPercent == null) {
+                        next.driverCommissionPercent = remainderPercent(slot.systemCommissionPercent, next.operatorCommissionPercent)
+                      }
+                      if (patch.driverCommissionPercent != null && patch.operatorCommissionPercent == null) {
+                        next.operatorCommissionPercent = remainderPercent(slot.systemCommissionPercent, next.driverCommissionPercent)
+                      }
+                      return { ...current, [slot.code]: next }
+                    })
+                  }}
+                />
+              )
+            })}
+          </div>
+        ) : null}
         <div className="modal-actions">
           <button className="btn" type="button" disabled={busy} onClick={() => void save()}>
             {busy ? 'Saving…' : editingId ? 'Save changes' : 'Create zone'}
@@ -10694,24 +11358,161 @@ function OperatorDeriveFaresPage() {
   )
 }
 
+function VehicleOfferingLogPage({ mode }: { mode: 'admin' | 'operator' }) {
+  const [rows, setRows] = useState<VehicleOfferingLogItem[] | null>(null)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [q, setQ] = useState('')
+  const [error, setError] = useState('')
+  const pageSize = 20
+
+  async function load(nextPage = page, nextQ = q) {
+    setError('')
+    try {
+      const res = mode === 'admin'
+        ? await api.adminVehicleOfferingLogs(nextQ, undefined, nextPage, pageSize)
+        : await api.operatorVehicleOfferingLogs(nextPage, pageSize)
+      setRows(res.items)
+      setTotal(res.total)
+      setPage(res.page)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load offering log.')
+    }
+  }
+
+  useEffect(() => {
+    void load(1, q)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
+
+  if (!rows && !error) return <p>Loading offering log…</p>
+
+  const pages = Math.max(1, Math.ceil(total / pageSize))
+
+  return (
+    <div className="card">
+      <div className="toolbar">
+        <div>
+          <h2 style={{ margin: 0 }}>Vehicle offering log</h2>
+          <p className="muted" style={{ margin: '6px 0 0', maxWidth: 560 }}>
+            Every Offered / Not offered change on the fare matrix is recorded with date and time. Multiple rows are kept when toggled repeatedly.
+          </p>
+        </div>
+        {mode === 'admin' ? (
+          <form
+            className="row gap"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void load(1, q)
+            }}
+          >
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search operator or vehicle" />
+            <button className="btn" type="submit">Search</button>
+          </form>
+        ) : (
+          <button className="btn" type="button" onClick={() => void load(page, q)}>Refresh</button>
+        )}
+      </div>
+      {error ? <p className="error">{error}</p> : null}
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {mode === 'admin' ? <th>Operator</th> : null}
+              <th>When (UTC)</th>
+              <th>Vehicle</th>
+              <th>Municipality</th>
+              <th>Action</th>
+              <th>By</th>
+              <th>Terms</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(rows ?? []).length === 0 ? (
+              <tr><td colSpan={mode === 'admin' ? 7 : 6}>No offering changes yet.</td></tr>
+            ) : (rows ?? []).map((row) => (
+              <tr key={row.id}>
+                {mode === 'admin' ? <td>{row.operatorName}</td> : null}
+                <td>{new Date(row.atUtc).toLocaleString()}</td>
+                <td><strong>{row.vehicleName}</strong><div className="muted tiny">{row.vehicleCode}</div></td>
+                <td>{row.municipalityName || '—'}</td>
+                <td>
+                  <span className={`tag status ${row.isOffered ? 'active' : 'inactive'}`}>
+                    {row.isOffered ? 'Offered' : 'Not offered'}
+                  </span>
+                </td>
+                <td>{row.actorName}<div className="muted tiny">{row.actorRole}</div></td>
+                <td>{row.acceptedTerms ? (row.termsVersion || 'Accepted') : '—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {pages > 1 ? (
+        <div className="row end gap" style={{ marginTop: 12 }}>
+          <button className="btn tiny" type="button" disabled={page <= 1} onClick={() => void load(page - 1, q)}>Prev</button>
+          <span className="muted">Page {page} / {pages}</span>
+          <button className="btn tiny" type="button" disabled={page >= pages} onClick={() => void load(page + 1, q)}>Next</button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 function OperatorFaresPage() {
   const [data, setData] = useState<OperatorFareMatrix | null>(null)
-  const [motorcycle, setMotorcycle] = useState<FareDraft>(fareDraft(null))
-  const [tricycle, setTricycle] = useState<FareDraft>(fareDraft(null))
+  const [motorcycle, setMotorcycle] = useState<FareDraft>(fareDraft(null, 10, true, true))
+  const [tricycle, setTricycle] = useState<FareDraft>(fareDraft(null, 5, false, true))
+  const [extraDrafts, setExtraDrafts] = useState<Record<string, FareDraft>>({})
   const [linked, setLinked] = useState(true)
   const [municipalityId, setMunicipalityId] = useState<string>('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const [termsText, setTermsText] = useState('')
+  const [offerPrompt, setOfferPrompt] = useState<{ key: string; name: string; apply: () => void } | null>(null)
+  const [acceptedOfferKeys, setAcceptedOfferKeys] = useState<Set<string>>(new Set())
+
+  function slotSingle(slot: { vehicleType: VehicleType; isCargo: boolean; maxPassengers: number }) {
+    return slot.isCargo || slot.maxPassengers <= 1 || usesSinglePassengerFare(slot.vehicleType)
+  }
+
+  function requestOffer(key: string, name: string, vehicle: VehicleType, apply: () => void) {
+    if (!requiresVehicleOfferTerms(vehicle)) {
+      apply()
+      return
+    }
+    const show = () => setOfferPrompt({ key, name, apply: () => {
+      setAcceptedOfferKeys((prev) => new Set(prev).add(key))
+      apply()
+      setOfferPrompt(null)
+    } })
+    if (termsText) {
+      show()
+      return
+    }
+    api.vehicleOfferingTerms()
+      .then((info) => {
+        setTermsText(info.text)
+        show()
+      })
+      .catch((err: Error) => setError(err.message))
+  }
 
   function loadMatrix(next: OperatorFareMatrix) {
-    const mc = fareDraft(next.motorcycle, next.motorcycleCommissionPercent, true)
-    const trike = fareDraft(next.tricycle, next.tricycleCommissionPercent, false)
+    const mc = fareDraft(next.motorcycle, next.motorcycleCommissionPercent, true, true)
+    const trike = fareDraft(next.tricycle, next.tricycleCommissionPercent, false, true)
     setData(next)
     setMunicipalityId(next.municipalityId ?? next.municipalities[0]?.id ?? '')
     setMotorcycle(mc)
     setTricycle(trike)
     setLinked(sameDraft(mc, trike) || !next.tricycle)
+    const extras: Record<string, FareDraft> = {}
+    for (const slot of next.vehicles ?? []) {
+      if (slot.vehicleType === 'Motorcycle' || slot.vehicleType === 'Tricycle') continue
+      extras[slot.code] = fareDraft(slot.rates, slot.systemCommissionPercent, slotSingle(slot), false)
+    }
+    setExtraDrafts(extras)
   }
 
   useEffect(() => {
@@ -10742,16 +11543,30 @@ function OperatorFaresPage() {
 
   function changeRates(vehicle: VehicleType, patch: Partial<FareDraft>) {
     const commissionPatch = patch.operatorCommissionPercent != null || patch.driverCommissionPercent != null
-    if (linked && !commissionPatch) {
-      setMotorcycle((current) => ({ ...current, ...patch }))
-      setTricycle((current) => ({ ...current, ...patch }))
-      return
+    if (vehicle === 'Motorcycle' || vehicle === 'Tricycle') {
+      if (linked && !commissionPatch) {
+        setMotorcycle((current) => ({ ...current, ...patch }))
+        setTricycle((current) => ({ ...current, ...patch }))
+        return
+      }
+      if (vehicle === 'Motorcycle') {
+        setMotorcycle((current) => applyCommission(current, data?.motorcycleCommissionPercent ?? 0, patch))
+      } else {
+        setTricycle((current) => applyCommission(current, data?.tricycleCommissionPercent ?? 0, patch))
+      }
     }
-    if (vehicle === 'Motorcycle') {
-      setMotorcycle((current) => applyCommission(current, data?.motorcycleCommissionPercent ?? 0, patch))
-    } else {
-      setTricycle((current) => applyCommission(current, data?.tricycleCommissionPercent ?? 0, patch))
-    }
+  }
+
+  function changeExtra(slot: OperatorFareVehicleSlot, patch: Partial<FareDraft>) {
+    const system = slot.systemCommissionPercent
+    setExtraDrafts((current) => ({
+      ...current,
+      [slot.code]: applyCommission(
+        current[slot.code] ?? fareDraft(slot.rates, system, slotSingle(slot)),
+        system,
+        patch,
+      ),
+    }))
   }
 
   async function saveRates() {
@@ -10760,11 +11575,34 @@ function OperatorFaresPage() {
       setNotice('')
       return
     }
-    const mcTotal = commissionSum(data?.motorcycleCommissionPercent ?? 0, motorcycle)
-    const trikeDraft = linked ? { ...motorcycle, operatorCommissionPercent: tricycle.operatorCommissionPercent, driverCommissionPercent: tricycle.driverCommissionPercent } : tricycle
-    const trikeTotal = commissionSum(data?.tricycleCommissionPercent ?? 0, trikeDraft)
-    if (mcTotal !== 100 || trikeTotal !== 100) {
-      setError('System, operator, and driver commission must add up to 100% for each vehicle.')
+    const enabled = data?.vehicles ?? []
+    const hasMc = enabled.some((s) => s.vehicleType === 'Motorcycle' || s.code === 'motorcycle')
+    const hasTrike = enabled.some((s) => s.vehicleType === 'Tricycle' || s.code === 'tricycle')
+    const trikeDraft = linked
+      ? { ...motorcycle, operatorCommissionPercent: tricycle.operatorCommissionPercent, driverCommissionPercent: tricycle.driverCommissionPercent }
+      : tricycle
+    if (hasMc && commissionSum(data?.motorcycleCommissionPercent ?? 0, motorcycle) !== 100) {
+      setError('Motorcycle: system, operator, and driver commission must add up to 100%.')
+      setNotice('')
+      return
+    }
+    if (hasTrike && commissionSum(data?.tricycleCommissionPercent ?? 0, trikeDraft) !== 100) {
+      setError('Tricycle: system, operator, and driver commission must add up to 100%.')
+      setNotice('')
+      return
+    }
+    const extraSlots = enabled.filter((s) => s.vehicleType !== 'Motorcycle' && s.vehicleType !== 'Tricycle')
+    for (const slot of extraSlots) {
+      const draft = extraDrafts[slot.code]
+      if (!draft) continue
+      if (commissionSum(slot.systemCommissionPercent, draft) !== 100) {
+        setError(`${slot.name}: system, operator, and driver commission must add up to 100%.`)
+        setNotice('')
+        return
+      }
+    }
+    if (!hasMc && !hasTrike && extraSlots.length === 0) {
+      setError('No vehicle types are enabled for this operator.')
       setNotice('')
       return
     }
@@ -10772,12 +11610,56 @@ function OperatorFaresPage() {
     setError('')
     setNotice('')
     try {
-      loadMatrix(await api.saveOperatorFareMatrix({
-        municipalityId,
-        motorcycle: parseDraft(motorcycle, true),
-        tricycle: parseDraft(trikeDraft, false),
-      }))
-      setNotice(linked ? 'Motorcycle and tricycle rates saved together.' : 'Fare matrix saved.')
+      let next = data!
+      if (hasMc && hasTrike) {
+        next = await api.saveOperatorFareMatrix({
+          municipalityId,
+          motorcycle: {
+            ...parseDraft(motorcycle, true),
+            acceptedOfferTerms: acceptedOfferKeys.has('motorcycle') || !requiresVehicleOfferTerms('Motorcycle'),
+          },
+          tricycle: {
+            ...parseDraft(trikeDraft, false),
+            acceptedOfferTerms: acceptedOfferKeys.has('tricycle') || !requiresVehicleOfferTerms('Tricycle'),
+          },
+        })
+      } else {
+        if (hasMc) {
+          const body = parseDraft(motorcycle, true)
+          next = await api.saveOperatorFares({
+            vehicleType: 'Motorcycle',
+            vehicleCategoryId: enabled.find((s) => s.vehicleType === 'Motorcycle' || s.code === 'motorcycle')?.vehicleCategoryId,
+            municipalityId,
+            ...body,
+            acceptedOfferTerms: acceptedOfferKeys.has('motorcycle') || !requiresVehicleOfferTerms('Motorcycle'),
+          })
+        }
+        if (hasTrike) {
+          const body = parseDraft(trikeDraft, false)
+          next = await api.saveOperatorFares({
+            vehicleType: 'Tricycle',
+            vehicleCategoryId: enabled.find((s) => s.vehicleType === 'Tricycle' || s.code === 'tricycle')?.vehicleCategoryId,
+            municipalityId,
+            ...body,
+            acceptedOfferTerms: acceptedOfferKeys.has('tricycle') || !requiresVehicleOfferTerms('Tricycle'),
+          })
+        }
+      }
+      for (const slot of extraSlots) {
+        const draft = extraDrafts[slot.code]
+        if (!draft) continue
+        const body = parseDraft(draft, slotSingle(slot))
+        next = await api.saveOperatorFares({
+          vehicleType: slot.vehicleType,
+          vehicleCategoryId: slot.vehicleCategoryId,
+          municipalityId,
+          ...body,
+          acceptedOfferTerms: acceptedOfferKeys.has(slot.code) || !requiresVehicleOfferTerms(slot.vehicleType),
+        })
+      }
+      loadMatrix(next)
+      setAcceptedOfferKeys(new Set())
+      setNotice('Fare matrix saved for enabled vehicle types on this municipality.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save fares.')
     } finally {
@@ -10786,6 +11668,8 @@ function OperatorFaresPage() {
   }
 
   if (!data) return error ? <p className="error">{error}</p> : <p>Loading fare matrix…</p>
+
+  const extraSlots = (data.vehicles ?? []).filter((s) => s.vehicleType !== 'Motorcycle' && s.vehicleType !== 'Tricycle')
 
   return (
     <div className="form-sections">
@@ -10796,8 +11680,8 @@ function OperatorFaresPage() {
           <div>
             <h2 style={{ margin: 0 }}>{data.operatorName}</h2>
             <p className="muted" style={{ margin: '6px 0 0', maxWidth: 560 }}>
-              Set motorcycle and tricycle rates for each municipality you serve. Quotes use the pickup city.
-              Use <strong style={{ color: 'var(--text)' }}>Offered / Not offered</strong> per vehicle to control which types customers can book there.
+              Set rates per vehicle type for each municipality. Super Admin enables which types appear here.
+              Use <strong style={{ color: 'var(--text)' }}>Offered / Not offered</strong> to control which enabled types customers can book.
             </p>
           </div>
         </div>
@@ -10834,7 +11718,30 @@ function OperatorFaresPage() {
             }
           }}
           onChange={changeRates}
+          onRequestOffer={(vehicle, name, apply) =>
+            requestOffer(vehicle === 'Motorcycle' ? 'motorcycle' : vehicle === 'Tricycle' ? 'tricycle' : String(vehicle).toLowerCase(), name, vehicle, apply)
+          }
         />
+        {extraSlots.length > 0 ? (
+          <div className="fare-vehicle-panels" style={{ marginTop: 18 }}>
+            {extraSlots.map((slot) => {
+              const draft = extraDrafts[slot.code] ?? fareDraft(slot.rates, slot.systemCommissionPercent, slotSingle(slot), false)
+              return (
+                <ExtraVehicleFareEditor
+                  key={slot.code}
+                  vehicle={slot.vehicleType}
+                  name={slot.name}
+                  systemPercent={slot.systemCommissionPercent}
+                  draft={draft}
+                  rates={slot.rates}
+                  single={slotSingle(slot)}
+                  onChange={(patch) => changeExtra(slot, patch)}
+                  onRequestOffer={(apply) => requestOffer(slot.code, slot.name, slot.vehicleType, apply)}
+                />
+              )
+            })}
+          </div>
+        ) : null}
         <button className="btn" type="button" disabled={busy || !municipalityId} style={{ maxWidth: 240, marginTop: 14 }} onClick={() => void saveRates()}>
           Save fare matrix
         </button>
@@ -10843,7 +11750,137 @@ function OperatorFaresPage() {
         <h2 style={{ marginTop: 0 }}>Distance samples</h2>
         <RelatedFareSamples data={data} />
       </div>
+      <VehicleOfferTermsModal
+        open={!!offerPrompt}
+        vehicleName={offerPrompt?.name ?? ''}
+        termsText={termsText}
+        onCancel={() => setOfferPrompt(null)}
+        onAccept={() => offerPrompt?.apply()}
+      />
     </div>
+  )
+}
+
+function ExtraVehicleFareEditor({
+  vehicle,
+  name,
+  systemPercent,
+  draft,
+  rates,
+  single: singleMode,
+  onChange,
+  onRequestOffer,
+}: {
+  vehicle: VehicleType
+  name: string
+  systemPercent: number
+  draft: FareDraft
+  rates: FareRates | null
+  single?: boolean
+  onChange: (patch: Partial<FareDraft>) => void
+  onRequestOffer?: (apply: () => void) => void
+}) {
+  const total = commissionSum(systemPercent, draft)
+  const single = singleMode ?? usesSinglePassengerFare(vehicle)
+  const tier = draft.passengerTiers[0] ?? defaultTierDraft()
+
+  function patchTier(tiers: FareTierDraft[]) {
+    onChange({ passengerTiers: tiers })
+  }
+
+  return (
+    <section className="fare-vehicle-panel">
+      <header className="fare-vehicle-panel-head">
+        <h3>{name || vehicleTypeLabel(vehicle)}</h3>
+        <div className="chips">
+          <button
+            type="button"
+            className={draft.isActive ? 'on' : ''}
+            onClick={() => {
+              if (draft.isActive) return
+              const apply = () => onChange({ isActive: true })
+              if (onRequestOffer) onRequestOffer(apply)
+              else apply()
+            }}
+          >
+            Offered
+          </button>
+          <button type="button" className={!draft.isActive ? 'on' : ''} onClick={() => onChange({ isActive: false })}>Not offered</button>
+        </div>
+      </header>
+      <div className="fare-vehicle-block">
+        <div className="fare-vehicle-label">{single ? 'Rates' : 'Passenger tiers'}</div>
+        {single ? (
+          <div className="fare-tier-editor">
+            <table className="fare-tier-table">
+              <thead>
+                <tr><th>Base</th><th>Incl. km</th><th>Per km</th><th>Min</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><input value={tier.baseFare} onChange={(e) => patchTier([{ ...tier, passengerCount: '1', baseFare: e.target.value }])} /></td>
+                  <td><input value={tier.includedKm} onChange={(e) => patchTier([{ ...tier, passengerCount: '1', includedKm: e.target.value }])} /></td>
+                  <td><input value={tier.perKm} onChange={(e) => patchTier([{ ...tier, passengerCount: '1', perKm: e.target.value }])} /></td>
+                  <td><input value={tier.minimumFare} onChange={(e) => patchTier([{ ...tier, passengerCount: '1', minimumFare: e.target.value }])} /></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="fare-tier-editor">
+            <table className="fare-tier-table">
+              <thead>
+                <tr><th>Pax</th><th>Base</th><th>Incl. km</th><th>Per km</th><th>Min</th><th /></tr>
+              </thead>
+              <tbody>
+                {draft.passengerTiers.map((row, index) => (
+                  <tr key={index}>
+                    <td><input value={row.passengerCount} onChange={(e) => patchTier(draft.passengerTiers.map((t, i) => i === index ? { ...t, passengerCount: e.target.value } : t))} /></td>
+                    <td><input value={row.baseFare} onChange={(e) => patchTier(draft.passengerTiers.map((t, i) => i === index ? { ...t, baseFare: e.target.value } : t))} /></td>
+                    <td><input value={row.includedKm} onChange={(e) => patchTier(draft.passengerTiers.map((t, i) => i === index ? { ...t, includedKm: e.target.value } : t))} /></td>
+                    <td><input value={row.perKm} onChange={(e) => patchTier(draft.passengerTiers.map((t, i) => i === index ? { ...t, perKm: e.target.value } : t))} /></td>
+                    <td><input value={row.minimumFare} onChange={(e) => patchTier(draft.passengerTiers.map((t, i) => i === index ? { ...t, minimumFare: e.target.value } : t))} /></td>
+                    <td>
+                      <button type="button" className="btn tiny danger" disabled={draft.passengerTiers.length <= 1} onClick={() => patchTier(draft.passengerTiers.filter((_, i) => i !== index))}>×</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button
+              type="button"
+              className="btn tiny"
+              style={{ marginTop: 8 }}
+              onClick={() => {
+                const used = new Set(draft.passengerTiers.map((t) => Number(t.passengerCount) || 0))
+                let nextCount = 1
+                while (used.has(nextCount)) nextCount += 1
+                const last = draft.passengerTiers[draft.passengerTiers.length - 1] ?? defaultTierDraft()
+                patchTier([...draft.passengerTiers, { ...last, passengerCount: String(nextCount) }])
+              }}
+            >
+              Add tier
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="fare-vehicle-block">
+        <div className="fare-vehicle-label">Commission</div>
+        <div className="fare-commission-grid">
+          <div><small>System</small><strong>{percent(systemPercent)}</strong></div>
+          <div>
+            <small>Operator</small>
+            <input value={draft.operatorCommissionPercent} onChange={(e) => onChange({ operatorCommissionPercent: e.target.value })} />
+          </div>
+          <div>
+            <small>Driver</small>
+            <input value={draft.driverCommissionPercent} onChange={(e) => onChange({ driverCommissionPercent: e.target.value })} />
+          </div>
+          <div><small>Total</small><strong className={total === 100 ? '' : 'error'}>{percent(total)}</strong></div>
+        </div>
+        {rates ? <p className="muted tiny" style={{ marginTop: 8 }}>Saved rates exist for this municipality.</p> : <p className="muted tiny" style={{ marginTop: 8 }}>No matrix yet — save to create one.</p>}
+      </div>
+    </section>
   )
 }
 
@@ -10995,7 +12032,7 @@ function OperatorSurchargesPage() {
         loadMatrix(await api.updateOperatorSurcharge(editing.id, body))
         setNotice(`${trimmedName} updated.`)
       } else {
-        const vehicleTypes: VehicleType[] = applyTo === 'Both' ? ['Motorcycle', 'Tricycle'] : [applyTo]
+        const vehicleTypes: VehicleType[] = applyTo === 'Both' ? [...PLATFORM_VEHICLE_TYPES] : [applyTo]
         loadMatrix(await api.addOperatorSurcharges({
           municipalityId,
           municipalityIds: applyMunicipalityIds,
@@ -11131,9 +12168,12 @@ function OperatorSurchargesPage() {
                   <div className="field wide">
                     <span>Applies to</span>
                     <div className="chips" style={{ marginTop: 8 }}>
-                      <button type="button" className={applyTo === 'Both' ? 'on' : ''} onClick={() => setApplyTo('Both')}>Both vehicles</button>
-                      <button type="button" className={applyTo === 'Motorcycle' ? 'on' : ''} onClick={() => setApplyTo('Motorcycle')}>Motorcycle</button>
-                      <button type="button" className={applyTo === 'Tricycle' ? 'on' : ''} onClick={() => setApplyTo('Tricycle')}>Tricycle</button>
+                      <button type="button" className={applyTo === 'Both' ? 'on' : ''} onClick={() => setApplyTo('Both')}>All platform types</button>
+                      {PLATFORM_VEHICLE_TYPES.map((type) => (
+                        <button key={type} type="button" className={applyTo === type ? 'on' : ''} onClick={() => setApplyTo(type)}>
+                          {vehicleTypeLabel(type)}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </>
@@ -11494,8 +12534,16 @@ function OperatorBillingPage() {
         </div>
         <div className="detail-card">
           <span>By vehicle</span>
-          <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
-          <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
+          {data.pendingVehicleLines?.length ? (
+            data.pendingVehicleLines.map((line) => (
+              <p key={line.vehicleCode} className="muted" style={{ marginTop: 10 }}>{line.vehicleName} · {peso(line.amount)}</p>
+            ))
+          ) : (
+            <>
+              <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
+              <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
+            </>
+          )}
         </div>
       </div>
       <div className="toolbar" style={{ marginTop: 18 }}>
@@ -11892,8 +12940,9 @@ function OperatorCompanyPage() {
             <p>{data.fullAddress}</p>
             <div className="tag-row" style={{ marginTop: 10 }}>
               <StatusTag active={data.isActive} />
-              <VehicleTag type="Motorcycle" count={data.ridersMotorcycle} />
-              <VehicleTag type="Tricycle" count={data.ridersTricycle} />
+              {vehicleCountsOrLegacy(data.riderVehicleCounts, data.ridersMotorcycle, data.ridersTricycle).map((item) => (
+                <VehicleTag key={item.code} type={item.vehicleType} count={item.count} label={item.name} />
+              ))}
             </div>
           </div>
         </div>
@@ -11905,8 +12954,8 @@ function OperatorCompanyPage() {
       <div className="detail-grid">
         <DetailItem label="Government ID" value={`${data.governmentIdType} · ${data.governmentId}`} />
         <DetailItem label="Area of operation" value={data.areaOfOperation} />
-        <DetailItem label="System Comm moto" value={percent(data.motorcycleCommissionPercent)} />
-        <DetailItem label="System Comm tri" value={percent(data.tricycleCommissionPercent)} />
+        <DetailItem label="System default (moto)" value={percent(data.motorcycleCommissionPercent)} />
+        <DetailItem label="System default (tri)" value={percent(data.tricycleCommissionPercent)} />
       </div>
       <h3>Booking dispatch</h3>
       <p className="muted" style={{ marginTop: 0 }}>

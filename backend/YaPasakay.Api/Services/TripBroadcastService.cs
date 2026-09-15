@@ -101,7 +101,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             includePreferredEvenIfIneligible: customerPick,
             cancellationToken,
             enforceRadius: true,
-            radiusKm: radiusKm);
+            radiusKm: radiusKm,
+            vehicleCategoryId: trip.VehicleCategoryId);
 
         var existing = await db.TripOffers
             .Where(x => x.TripId == trip.Id)
@@ -183,8 +184,14 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         bool includePreferredEvenIfIneligible,
         CancellationToken cancellationToken,
         bool enforceRadius = true,
-        double? radiusKm = null)
+        double? radiusKm = null,
+        Guid? vehicleCategoryId = null)
     {
+        if (vehicleType == VehicleType.Custom && vehicleCategoryId is not Guid)
+        {
+            return [];
+        }
+
         var effectiveRadius = ClampRadius(radiusKm ?? await ResolveBroadcastRadiusKmAsync(operatorId, cancellationToken));
 
         var outsideCoverage = await OperatorAreaSync.CoverageErrorAsync(
@@ -221,6 +228,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
                 && x.AppUser.IsActive)
             .ToListAsync(cancellationToken);
 
+        riders = FilterRidersByVehicle(riders, vehicleType, vehicleCategoryId);
+
         var ranked = new List<(RiderProfile Rider, double? Distance, bool Preferred)>();
         foreach (var rider in riders)
         {
@@ -231,11 +240,6 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             }
 
             if ((busy.Contains(rider.Id) || hailed.Contains(rider.Id)) && !preferred)
-            {
-                continue;
-            }
-
-            if (rider.VehicleType != vehicleType)
             {
                 continue;
             }
@@ -304,7 +308,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         double pickupLat,
         double pickupLng,
         Guid? pickupBarangayId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? vehicleCategoryId = null)
     {
         var ranked = await RankEligibleRidersAsync(
             operatorId,
@@ -316,7 +321,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             preferredRiderId: null,
             includePreferredEvenIfIneligible: false,
             cancellationToken,
-            enforceRadius: false);
+            enforceRadius: false,
+            vehicleCategoryId: vehicleCategoryId);
 
         return ranked
             .Take(MaxRiders)
@@ -622,6 +628,36 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
 
     public static double ClampRadius(double km) =>
         Math.Clamp(km, MinBroadcastRadiusKm, MaxBroadcastRadiusKm);
+
+    private static List<RiderProfile> FilterRidersByVehicle(
+        List<RiderProfile> riders,
+        VehicleType vehicleType,
+        Guid? vehicleCategoryId)
+    {
+        if (vehicleType == VehicleType.Custom)
+        {
+            if (vehicleCategoryId is not Guid categoryId)
+            {
+                return [];
+            }
+
+            return riders
+                .Where(x => x.VehicleType == VehicleType.Custom && x.VehicleCategoryId == categoryId)
+                .ToList();
+        }
+
+        riders = riders.Where(x => x.VehicleType == vehicleType).ToList();
+        if (vehicleCategoryId is Guid preferredCategoryId)
+        {
+            var matched = riders.Where(x => x.VehicleCategoryId == preferredCategoryId).ToList();
+            if (matched.Count > 0)
+            {
+                riders = matched;
+            }
+        }
+
+        return riders;
+    }
 
     async Task<double> ResolveBroadcastRadiusKmAsync(Guid operatorId, CancellationToken cancellationToken)
     {

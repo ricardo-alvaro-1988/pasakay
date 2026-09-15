@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, NO_OPERATOR_EMAIL, NO_OPERATOR_FACEBOOK_URL, NO_OPERATOR_NOTICE_DELAY_MS, Stop } from './api'
+import { api, NO_OPERATOR_EMAIL, NO_OPERATOR_FACEBOOK_URL, NO_OPERATOR_NOTICE_DELAY_MS, Stop, VehicleOffer, VehicleType } from './api'
 
 export function useNoOperatorNotice(
   pickup: Stop | null,
@@ -11,12 +11,14 @@ export function useNoOperatorNotice(
   const [uncovered, setUncovered] = useState(false)
   const [motorcycleAvailable, setMotorcycleAvailable] = useState(true)
   const [tricycleAvailable, setTricycleAvailable] = useState(true)
+  const [vehicles, setVehicles] = useState<VehicleOffer[]>([])
 
   useEffect(() => {
     setSearching(false)
     setUncovered(false)
     setMotorcycleAvailable(true)
     setTricycleAvailable(true)
+    setVehicles([])
     if (!enabled || !pickup || !dropoff) return
 
     let cancelled = false
@@ -42,6 +44,8 @@ export function useNoOperatorNotice(
       if (cancelled) return
       setMotorcycleAvailable(!!result.motorcycleAvailable)
       setTricycleAvailable(!!result.tricycleAvailable)
+      const list = Array.isArray(result.vehicles) ? result.vehicles : []
+      setVehicles(list)
       if (!result.municipalityHasOperator) startWait()
     }).catch(() => {
       if (cancelled) return
@@ -65,7 +69,22 @@ export function useNoOperatorNotice(
     dropoff?.lng,
   ])
 
-  return { searching, uncovered, motorcycleAvailable, tricycleAvailable }
+  const availableTypes = vehicles.length
+    ? vehicles.filter((v) => v.available).map((v) => v.vehicleType)
+    : ([
+        motorcycleAvailable ? 'Motorcycle' : null,
+        tricycleAvailable ? 'Tricycle' : null,
+      ].filter(Boolean) as VehicleType[])
+
+  return {
+    searching,
+    uncovered,
+    motorcycleAvailable,
+    tricycleAvailable,
+    vehicles,
+    availableTypes,
+    isTypeAvailable: (type: VehicleType) => availableTypes.includes(type),
+  }
 }
 
 export function NoOperatorNotice({ show }: { show: boolean }) {

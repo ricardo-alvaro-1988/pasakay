@@ -22,7 +22,10 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             return StatusCode(status, new { message });
         }
 
-        var riders = await db.RiderProfiles.Where(x => x.OperatorId == op!.Id).ToListAsync(cancellationToken);
+        var riders = await db.RiderProfiles
+            .Include(x => x.VehicleCategory)
+            .Where(x => x.OperatorId == op!.Id)
+            .ToListAsync(cancellationToken);
         var tripsToday = await db.Trips.CountAsync(
             x => x.OperatorId == op.Id && x.Status == TripStatus.Completed && x.CompletedAtUtc >= DateTime.UtcNow.Date,
             cancellationToken);
@@ -93,7 +96,8 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             pendingNow,
             ongoingNow,
             completeToday,
-            series));
+            series,
+            VehicleCountMaps.FromRiders(riders)));
     }
 
     [HttpGet("alerts")]
@@ -136,6 +140,7 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
         await broadcast.ExpireStaleOnlineRidersAsync(cancellationToken);
         var riders = await db.RiderProfiles
             .Include(x => x.AppUser)
+            .Include(x => x.VehicleCategory)
             .Where(x => x.OperatorId == op!.Id && x.IsActive && x.AppUser.IsActive)
             .OrderBy(x => x.AppUser.FullName)
             .ToListAsync(cancellationToken);
@@ -169,7 +174,8 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             onMap.Count,
             onMap.Count(x => x.VehicleType == VehicleType.Motorcycle),
             onMap.Count(x => x.VehicleType == VehicleType.Tricycle),
-            onMap));
+            onMap,
+            VehicleCountMaps.FromRiders(riders)));
     }
 
     [HttpGet("company")]
@@ -191,6 +197,8 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             .ThenInclude(x => x.Province)
             .Include(x => x.Riders)
             .ThenInclude(x => x.AppUser)
+            .Include(x => x.Riders)
+            .ThenInclude(x => x.VehicleCategory)
             .FirstAsync(x => x.Id == op!.Id, cancellationToken);
 
         var riders = loaded.Riders.OrderBy(x => x.AppUser.FullName).Select(OperatorMaps.Rider).ToList();
@@ -221,7 +229,8 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             loaded.CreatedAtUtc,
             YaPasakay.Infrastructure.Persistence.OperatorAddressSync.Map(loaded),
             YaPasakay.Infrastructure.Persistence.OperatorAreaSync.Map(loaded.Areas),
-            riders));
+            riders,
+            YaPasakay.Application.Admin.VehicleCountMaps.FromRiders(loaded.Riders)));
     }
 
     [HttpPut("dispatch")]

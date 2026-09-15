@@ -29,7 +29,8 @@ public record CustomerBookRequest(
     bool HailQr,
     int PassengerCount = 1,
     string? PromoCode = null,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    Guid? VehicleCategoryId = null);
 
 public record CustomerHailRider(
     Guid RiderId,
@@ -76,7 +77,18 @@ public record CustomerServiceCheckResponse(
     bool MunicipalityHasOperator,
     string? MunicipalityName,
     bool MotorcycleAvailable = false,
-    bool TricycleAvailable = false);
+    bool TricycleAvailable = false,
+    IReadOnlyList<CustomerVehicleOfferDto>? Vehicles = null);
+
+public record CustomerVehicleOfferDto(
+    Guid Id,
+    string Code,
+    string Name,
+    string IconKey,
+    int MaxPassengers,
+    bool IsCargo,
+    bool Available,
+    string VehicleType);
 
 public record CustomerTripItem(
     Guid Id,

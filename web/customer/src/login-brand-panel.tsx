@@ -174,6 +174,13 @@ export function LoginVehicleCards() {
           <span>Local routes · more space</span>
         </div>
       </div>
+      <div className="login-vehicle-card">
+        <img src={VEHICLE_ART.Sedan} alt="" />
+        <div>
+          <strong>Sedan & more</strong>
+          <span>Cars, vans, and cargo when offered</span>
+        </div>
+      </div>
     </div>
   )
 }

@@ -76,6 +76,7 @@ public class OperatorPabiliRidersController(AppDbContext db) : ControllerBase
         var rider = await db.RiderProfiles
             .Include(x => x.AppUser)
             .Include(x => x.PaymentMethods)
+            .Include(x => x.VehicleCategory)
             .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op.Id, cancellationToken);
         if (rider is null)
         {
@@ -104,6 +105,7 @@ public class OperatorPabiliRidersController(AppDbContext db) : ControllerBase
         var rider = await db.RiderProfiles
             .Include(x => x.AppUser)
             .Include(x => x.PaymentMethods)
+            .Include(x => x.VehicleCategory)
             .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op.Id, cancellationToken);
         if (rider is null)
         {
@@ -126,6 +128,7 @@ public class OperatorPabiliRidersController(AppDbContext db) : ControllerBase
             .AsNoTracking()
             .Include(x => x.AppUser)
             .Include(x => x.PaymentMethods)
+            .Include(x => x.VehicleCategory)
             .Where(x => x.OperatorId == operatorId && x.AcceptsPabili);
 
         return ApplySearch(query, q);
@@ -137,6 +140,7 @@ public class OperatorPabiliRidersController(AppDbContext db) : ControllerBase
             .AsNoTracking()
             .Include(x => x.AppUser)
             .Include(x => x.PaymentMethods)
+            .Include(x => x.VehicleCategory)
             .Where(x => x.OperatorId == operatorId && !x.AcceptsPabili);
 
         return ApplySearch(query, q);

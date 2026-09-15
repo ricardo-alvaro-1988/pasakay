@@ -11,10 +11,18 @@ public record RiderInviteLinksResponse(
     RiderInviteLinkResponse Rotating,
     RiderInviteLinkResponse Permanent);
 
+public record RiderInviteVehicleOption(
+    Guid VehicleCategoryId,
+    string Code,
+    string Name,
+    string VehicleType,
+    bool IsCustom);
+
 public record RiderInvitePublicInfo(
     string Token,
     string CompanyName,
-    string StatusPath);
+    string StatusPath,
+    IReadOnlyList<RiderInviteVehicleOption>? Vehicles = null);
 
 public record RiderApplicationListItem(
     Guid Id,
@@ -23,7 +31,10 @@ public record RiderApplicationListItem(
     string VehicleType,
     string PlateNumber,
     string Status,
-    DateTime CreatedAtUtc);
+    DateTime CreatedAtUtc,
+    Guid? VehicleCategoryId = null,
+    string? VehicleCategoryCode = null,
+    string? VehicleCategoryName = null);
 
 public record RiderApplicationDetailResponse(
     Guid Id,
@@ -44,7 +55,10 @@ public record RiderApplicationDetailResponse(
     string? ReviewNote,
     DateTime CreatedAtUtc,
     DateTime? ReviewedAtUtc,
-    Guid? RiderProfileId);
+    Guid? RiderProfileId,
+    Guid? VehicleCategoryId = null,
+    string? VehicleCategoryCode = null,
+    string? VehicleCategoryName = null);
 
 public record RiderApplicationStatusResponse(
     string Status,

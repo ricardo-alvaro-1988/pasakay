@@ -317,7 +317,13 @@ export function stopDragIcon(maps: MapsApi) {
 }
 
 export function riderIcon(maps: MapsApi, vehicle = 'Motorcycle') {
-  const trike = String(vehicle).toLowerCase().includes('tricycle') || vehicle === '2'
+  const key = String(vehicle).toLowerCase()
+  const trike = key.includes('tricycle') || vehicle === '2' || vehicle === 'Tricycle'
+  const car = !trike && (
+    key.includes('sedan') || key.includes('mpv') || key.includes('suv') || key.includes('van')
+    || key.includes('pickup') || key.includes('cargo') || vehicle === '3' || vehicle === '4'
+    || vehicle === '5' || vehicle === '6' || vehicle === '7' || vehicle === '8'
+  )
   if (trike) {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="46" viewBox="0 0 36 46">
       <defs>
@@ -331,6 +337,28 @@ export function riderIcon(maps: MapsApi, vehicle = 'Motorcycle') {
         <path fill="#e30613" d="M10.9 18.8a1.75 1.75 0 1 1 0-3.5 1.75 1.75 0 0 1 0 3.5Zm10.5 0a1.75 1.75 0 1 1 0-3.5 1.75 1.75 0 0 1 0 3.5Z"/>
         <path fill="#e30613" d="M13.2 17.3h4.7l1-2.3 2.4-1 1.1 1-1.4 2.3h2.7l-.7 1.6H12.5l.7-1.6Z"/>
         <path fill="#1f2329" d="M15.6 12.6H19v1.5h-3.4Zm6.2.8 1.8-.7.4.9-1.4.7Z"/>
+      </g>
+    </svg>`
+    return {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+      scaledSize: new maps.Size(36, 46),
+      anchor: new maps.Point(18, 39),
+    }
+  }
+  if (car) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="46" viewBox="0 0 36 46">
+      <defs>
+        <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2.2" flood-color="rgba(18,22,28,.22)"/>
+        </filter>
+      </defs>
+      <g filter="url(#shadow)">
+        <path fill="#e30613" d="M18 2C10.27 2 4 8.27 4 16c0 10.55 10.85 21.74 13.01 23.84a1.4 1.4 0 0 0 1.98 0C21.15 37.74 32 26.55 32 16 32 8.27 25.73 2 18 2Z"/>
+        <circle cx="18" cy="16" r="9.25" fill="#fff"/>
+        <path fill="#e30613" d="M11.2 18.2h13.6l-1.1-3.2c-.3-.9-1.1-1.5-2-1.5h-7.4c-.9 0-1.7.6-2 1.5l-1.1 3.2Z"/>
+        <circle cx="13.4" cy="19.1" r="1.55" fill="#1f2329"/>
+        <circle cx="22.6" cy="19.1" r="1.55" fill="#1f2329"/>
+        <path fill="#1f2329" d="M14.2 13.8h7.6v1.1h-7.6z" opacity=".35"/>
       </g>
     </svg>`
     return {

@@ -12,7 +12,15 @@ public enum UserRole
 public enum VehicleType
 {
     Motorcycle = 1,
-    Tricycle = 2
+    Tricycle = 2,
+    Sedan = 3,
+    Mpv = 4,
+    Suv = 5,
+    Van = 6,
+    PickupL300 = 7,
+    PickupCargo = 8,
+    /// <summary>Operator-owned custom category; fare/rider rows key off VehicleCategoryId.</summary>
+    Custom = 100
 }
 
 public enum TripStatus

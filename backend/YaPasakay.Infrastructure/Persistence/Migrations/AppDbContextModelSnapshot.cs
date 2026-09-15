@@ -419,10 +419,15 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("VehicleCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("VehicleType")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("VehicleCategoryId");
 
                     b.HasIndex("DeriveFareZoneId", "VehicleType")
                         .IsUnique();
@@ -585,6 +590,9 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("VehicleCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("VehicleType")
                         .HasColumnType("int");
 
@@ -592,8 +600,13 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("MunicipalityId");
 
-                    b.HasIndex("OperatorId", "VehicleType", "MunicipalityId")
-                        .IsUnique();
+                    b.HasIndex("VehicleCategoryId");
+
+                    b.HasIndex("VehicleType");
+
+                    b.HasIndex("OperatorId", "MunicipalityId", "VehicleCategoryId")
+                        .IsUnique()
+                        .HasFilter("[VehicleCategoryId] IS NOT NULL");
 
                     b.ToTable("FareMatrices");
                 });
@@ -1299,6 +1312,46 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.ToTable("OperatorBills");
                 });
 
+            modelBuilder.Entity("YaPasakay.Domain.Entities.OperatorBillVehicleLine", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("OperatorBillId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("VehicleCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("VehicleCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("VehicleName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OperatorBillId");
+
+                    b.HasIndex("VehicleCategoryId");
+
+                    b.ToTable("OperatorBillVehicleLines");
+                });
+
             modelBuilder.Entity("YaPasakay.Domain.Entities.OperatorCashInBankAccount", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1476,6 +1529,47 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("OperatorPromos");
+                });
+
+            modelBuilder.Entity("YaPasakay.Domain.Entities.OperatorVehicleOffer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal>("CommissionPercent")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DisplayName")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<bool>("IsEnabled")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("MaxPassengers")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("OperatorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid>("VehicleCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VehicleCategoryId");
+
+                    b.HasIndex("OperatorId", "VehicleCategoryId")
+                        .IsUnique();
+
+                    b.ToTable("OperatorVehicleOffers");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.PabiliMatrix", b =>
@@ -2198,6 +2292,9 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("VehicleCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("VehicleFranchiseNumber")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -2219,6 +2316,8 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.HasIndex("OperatorId");
 
                     b.HasIndex("PhoneNumber");
+
+                    b.HasIndex("VehicleCategoryId");
 
                     b.HasIndex("OperatorId", "Status");
 
@@ -2379,6 +2478,9 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("VehicleCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("VehicleFranchiseNumber")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -2398,6 +2500,8 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.HasIndex("AppUserId");
 
                     b.HasIndex("OperatorId");
+
+                    b.HasIndex("VehicleCategoryId");
 
                     b.ToTable("RiderProfiles");
                 });
@@ -2726,6 +2830,9 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<Guid?>("VehicleCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("VehicleType")
                         .HasColumnType("int");
 
@@ -2746,6 +2853,8 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.HasIndex("PromoId");
 
                     b.HasIndex("ScheduledAtUtc");
+
+                    b.HasIndex("VehicleCategoryId");
 
                     b.HasIndex("RiderId", "RequestedAtUtc");
 
@@ -2833,6 +2942,139 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.HasIndex("RiderId", "Status", "ExpiresAtUtc");
 
                     b.ToTable("TripOffers");
+                });
+
+            modelBuilder.Entity("YaPasakay.Domain.Entities.VehicleCategory", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("IconKey")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsCargo")
+                        .HasColumnType("bit");
+
+                    b.Property<int?>("LegacyEnumValue")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxPassengers")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<Guid?>("OperatorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasFilter("[OperatorId] IS NULL");
+
+                    b.HasIndex("OperatorId", "Code")
+                        .IsUnique()
+                        .HasFilter("[OperatorId] IS NOT NULL");
+
+                    b.ToTable("VehicleCategories");
+                });
+
+            modelBuilder.Entity("YaPasakay.Domain.Entities.VehicleOfferingLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("AcceptedTerms")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ActorName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("ActorRole")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTime>("AtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsOffered")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("MunicipalityId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("OperatorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("TermsVersion")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<Guid?>("VehicleCategoryId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("VehicleCode")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("VehicleName")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<int>("VehicleType")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActorUserId");
+
+                    b.HasIndex("AtUtc");
+
+                    b.HasIndex("MunicipalityId");
+
+                    b.HasIndex("VehicleCategoryId");
+
+                    b.HasIndex("OperatorId", "AtUtc");
+
+                    b.ToTable("VehicleOfferingLogs");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.AccessGroup", b =>
@@ -2938,6 +3180,13 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("YaPasakay.Domain.Entities.VehicleCategory", "VehicleCategory")
+                        .WithMany()
+                        .HasForeignKey("VehicleCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("VehicleCategory");
+
                     b.Navigation("Zone");
                 });
 
@@ -2988,9 +3237,16 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("YaPasakay.Domain.Entities.VehicleCategory", "VehicleCategory")
+                        .WithMany()
+                        .HasForeignKey("VehicleCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Municipality");
 
                     b.Navigation("Operator");
+
+                    b.Navigation("VehicleCategory");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.FarePassengerTier", b =>
@@ -3176,6 +3432,24 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Navigation("Operator");
                 });
 
+            modelBuilder.Entity("YaPasakay.Domain.Entities.OperatorBillVehicleLine", b =>
+                {
+                    b.HasOne("YaPasakay.Domain.Entities.OperatorBill", "OperatorBill")
+                        .WithMany("VehicleLines")
+                        .HasForeignKey("OperatorBillId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("YaPasakay.Domain.Entities.VehicleCategory", "VehicleCategory")
+                        .WithMany()
+                        .HasForeignKey("VehicleCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("OperatorBill");
+
+                    b.Navigation("VehicleCategory");
+                });
+
             modelBuilder.Entity("YaPasakay.Domain.Entities.OperatorCashInBankAccount", b =>
                 {
                     b.HasOne("YaPasakay.Domain.Entities.Operator", "Operator")
@@ -3225,6 +3499,25 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Operator");
+                });
+
+            modelBuilder.Entity("YaPasakay.Domain.Entities.OperatorVehicleOffer", b =>
+                {
+                    b.HasOne("YaPasakay.Domain.Entities.Operator", "Operator")
+                        .WithMany("VehicleOffers")
+                        .HasForeignKey("OperatorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("YaPasakay.Domain.Entities.VehicleCategory", "VehicleCategory")
+                        .WithMany("Offers")
+                        .HasForeignKey("VehicleCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Operator");
+
+                    b.Navigation("VehicleCategory");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.PabiliMatrix", b =>
@@ -3411,11 +3704,18 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("YaPasakay.Domain.Entities.VehicleCategory", "VehicleCategory")
+                        .WithMany()
+                        .HasForeignKey("VehicleCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AddressBarangay");
 
                     b.Navigation("InviteLink");
 
                     b.Navigation("Operator");
+
+                    b.Navigation("VehicleCategory");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.RiderInviteLink", b =>
@@ -3459,11 +3759,18 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("YaPasakay.Domain.Entities.VehicleCategory", "VehicleCategory")
+                        .WithMany()
+                        .HasForeignKey("VehicleCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("AddressBarangay");
 
                     b.Navigation("AppUser");
 
                     b.Navigation("Operator");
+
+                    b.Navigation("VehicleCategory");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.RiderWallet", b =>
@@ -3593,6 +3900,11 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("YaPasakay.Domain.Entities.VehicleCategory", "VehicleCategory")
+                        .WithMany()
+                        .HasForeignKey("VehicleCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Bill");
 
                     b.Navigation("Customer");
@@ -3608,6 +3920,8 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Navigation("Promo");
 
                     b.Navigation("Rider");
+
+                    b.Navigation("VehicleCategory");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.TripChatMessage", b =>
@@ -3638,6 +3952,48 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Navigation("Rider");
 
                     b.Navigation("Trip");
+                });
+
+            modelBuilder.Entity("YaPasakay.Domain.Entities.VehicleCategory", b =>
+                {
+                    b.HasOne("YaPasakay.Domain.Entities.Operator", "Operator")
+                        .WithMany("CustomVehicleCategories")
+                        .HasForeignKey("OperatorId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.Navigation("Operator");
+                });
+
+            modelBuilder.Entity("YaPasakay.Domain.Entities.VehicleOfferingLog", b =>
+                {
+                    b.HasOne("YaPasakay.Domain.Entities.AppUser", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("YaPasakay.Domain.Entities.Municipality", "Municipality")
+                        .WithMany()
+                        .HasForeignKey("MunicipalityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("YaPasakay.Domain.Entities.Operator", "Operator")
+                        .WithMany()
+                        .HasForeignKey("OperatorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("YaPasakay.Domain.Entities.VehicleCategory", "VehicleCategory")
+                        .WithMany()
+                        .HasForeignKey("VehicleCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Actor");
+
+                    b.Navigation("Municipality");
+
+                    b.Navigation("Operator");
+
+                    b.Navigation("VehicleCategory");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.AccessGroup", b =>
@@ -3721,6 +4077,8 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
 
                     b.Navigation("CashInBankAccounts");
 
+                    b.Navigation("CustomVehicleCategories");
+
                     b.Navigation("DeriveFareZones");
 
                     b.Navigation("FareMatrices");
@@ -3738,11 +4096,15 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Navigation("Riders");
 
                     b.Navigation("Users");
+
+                    b.Navigation("VehicleOffers");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.OperatorBill", b =>
                 {
                     b.Navigation("Trips");
+
+                    b.Navigation("VehicleLines");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.OperatorPromo", b =>
@@ -3797,6 +4159,11 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("ChatMessages");
 
+                    b.Navigation("Offers");
+                });
+
+            modelBuilder.Entity("YaPasakay.Domain.Entities.VehicleCategory", b =>
+                {
                     b.Navigation("Offers");
                 });
 #pragma warning restore 612, 618

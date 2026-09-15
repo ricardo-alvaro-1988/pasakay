@@ -81,11 +81,9 @@ public class RiderDeskController(
             decimal total = 0;
             foreach (var trip in rows)
             {
-                FareMatrix? fare = null;
-                if (trip.PickupBarangay is not null)
-                {
-                    fares.TryGetValue((trip.OperatorId, trip.VehicleType, trip.PickupBarangay.MunicipalityId), out fare);
-                }
+                FareMatrix? fare = trip.PickupBarangay is not null
+                    ? fares.Resolve(trip, trip.PickupBarangay.MunicipalityId)
+                    : null;
 
                 var breakdown = RideCommissionCalculator.ForTrip(trip, fare);
                 if (breakdown is not null)
@@ -174,11 +172,9 @@ public class RiderDeskController(
         var fares = await OperatorMaps.LoadFareMatrixLookupAsync(db, tripRows, cancellationToken);
         var trips = tripRows.Select(x =>
         {
-            FareMatrix? fare = null;
-            if (x.PickupBarangay is not null)
-            {
-                fares.TryGetValue((x.OperatorId, x.VehicleType, x.PickupBarangay.MunicipalityId), out fare);
-            }
+            FareMatrix? fare = x.PickupBarangay is not null
+                ? fares.Resolve(x, x.PickupBarangay.MunicipalityId)
+                : null;
 
             return new RideListItem(
                 x.Id,

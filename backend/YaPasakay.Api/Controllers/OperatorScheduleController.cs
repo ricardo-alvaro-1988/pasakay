@@ -131,9 +131,7 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
         }
 
         var distance = request.DistanceKm <= 0 ? 4m : Math.Round(request.DistanceKm, 1, MidpointRounding.AwayFromZero);
-        var passengers = rider.VehicleType == VehicleType.Motorcycle
-            ? 1
-            : Math.Clamp(request.PassengerCount, 1, 4);
+        var passengers = VehicleTypeRules.ClampPassengers(rider.VehicleType, request.PassengerCount);
         var fare = await QuoteAsync(op.Id, rider.VehicleType, distance, passengers, pickup.MunicipalityId, cancellationToken);
         if (fare is null)
         {
@@ -240,6 +238,7 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
             operatorId,
             vehicleType,
             municipalityId,
+            null,
             cancellationToken);
         if (fare is null)
         {

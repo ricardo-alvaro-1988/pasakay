@@ -6,6 +6,7 @@ using YaPasakay.Api.Models;
 using YaPasakay.Api.Services;
 using YaPasakay.Application.Admin;
 using YaPasakay.Application.Common;
+using YaPasakay.Domain;
 using YaPasakay.Domain.Entities;
 using YaPasakay.Domain.Enums;
 using YaPasakay.Infrastructure.Auth;
@@ -30,7 +31,17 @@ public class PublicRiderInviteController(AppDbContext db, UploadStore uploads) :
             return NotFound(new { message = "This invite link is invalid or no longer active." });
         }
 
-        return Ok(new RiderInvitePublicInfo(invite.Token, invite.Operator.CompanyName, StatusPath));
+        var vehicles = await RiderVehicleResolve.EnabledOffersAsync(db, invite.OperatorId, cancellationToken);
+        return Ok(new RiderInvitePublicInfo(
+            invite.Token,
+            invite.Operator.CompanyName,
+            StatusPath,
+            vehicles.Select(v => new RiderInviteVehicleOption(
+                v.CategoryId,
+                v.Code,
+                v.Name,
+                v.VehicleType,
+                v.IsCustom)).ToList()));
     }
 
     [HttpPost("{token}/apply")]
@@ -48,7 +59,14 @@ public class PublicRiderInviteController(AppDbContext db, UploadStore uploads) :
             return BadRequest(new { message = "Set a password of at least 6 characters." });
         }
 
-        var parsed = await ParseAsync(form, cancellationToken);
+        var vehicle = await RiderVehicleResolve.ResolveAsync(
+            db, invite.OperatorId, form.VehicleCategoryId, form.VehicleType, cancellationToken);
+        if (vehicle.Error is not null)
+        {
+            return BadRequest(new { message = vehicle.Error });
+        }
+
+        var parsed = await ParseAsync(form, vehicle.Type, cancellationToken);
         if (parsed.Error is not null)
         {
             return BadRequest(new { message = parsed.Error });
@@ -90,7 +108,8 @@ public class PublicRiderInviteController(AppDbContext db, UploadStore uploads) :
             FullName = parsed.Name,
             PhoneNumber = parsed.Phone,
             PasswordHash = SecretHasher.Hash(form.Password!.Trim()),
-            VehicleType = form.VehicleType,
+            VehicleType = vehicle.Type,
+            VehicleCategoryId = vehicle.CategoryId,
             PlateNumber = parsed.Plate,
             VehicleFranchiseNumber = parsed.Franchise,
             VehicleModel = parsed.Model,
@@ -211,6 +230,7 @@ public class PublicRiderInviteController(AppDbContext db, UploadStore uploads) :
 
     private async Task<(string Name, string Phone, string Plate, string Franchise, string? Model, string LicenseType, string LicenseNumber, string? Error)> ParseAsync(
         CreateRiderForm form,
+        VehicleType vehicleType,
         CancellationToken cancellationToken)
     {
         var name = (form.FullName ?? string.Empty).Trim();
@@ -224,11 +244,6 @@ public class PublicRiderInviteController(AppDbContext db, UploadStore uploads) :
             return ("", "", "", "", null, "", "", "Name, phone, plate, vehicle franchise number, license type, and license number are required.");
         }
 
-        if (form.VehicleType is not VehicleType.Motorcycle and not VehicleType.Tricycle)
-        {
-            return ("", "", "", "", null, "", "", "Choose Motorcycle or Tricycle.");
-        }
-
         var taken = await db.Users.AnyAsync(x => x.PhoneNumber == phone, cancellationToken);
         if (taken)
         {
@@ -236,7 +251,7 @@ public class PublicRiderInviteController(AppDbContext db, UploadStore uploads) :
         }
 
         var model = string.IsNullOrWhiteSpace(form.VehicleModel) ? null : form.VehicleModel.Trim();
-        if (model is not null && LooksLikeVehicleTypeLabel(model, form.VehicleType))
+        if (model is not null && LooksLikeVehicleTypeLabel(model, vehicleType))
         {
             model = null;
         }
@@ -333,7 +348,9 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
 
         page = Math.Max(1, page);
         pageSize = Math.Clamp(pageSize, 1, 50);
-        var query = db.RiderApplications.Where(x => x.OperatorId == op!.Id);
+        var query = db.RiderApplications
+            .Include(x => x.VehicleCategory)
+            .Where(x => x.OperatorId == op!.Id);
         if (!string.IsNullOrWhiteSpace(status)
             && Enum.TryParse<RiderApplicationStatus>(status.Trim(), true, out var parsedStatus))
         {
@@ -365,7 +382,10 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
                 x.VehicleType.ToString(),
                 x.PlateNumber,
                 x.Status.ToString(),
-                x.CreatedAtUtc)).ToList(),
+                x.CreatedAtUtc,
+                x.VehicleCategoryId,
+                x.VehicleCategory?.Code,
+                x.VehicleCategory?.Name)).ToList(),
             page,
             pageSize,
             total));
@@ -433,6 +453,10 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
             AppUser = user,
             OperatorId = op.Id,
             VehicleType = application.VehicleType,
+            VehicleCategoryId = application.VehicleCategoryId
+                ?? (VehicleTypeRules.IsKnown(application.VehicleType)
+                    ? VehicleCatalog.IdFor(application.VehicleType)
+                    : null),
             PlateNumber = application.PlateNumber,
             VehicleFranchiseNumber = application.VehicleFranchiseNumber,
             VehicleModel = application.VehicleModel,
@@ -555,6 +579,7 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
     private async Task<RiderApplication?> LoadApplicationAsync(Guid operatorId, Guid id, CancellationToken cancellationToken) =>
         await db.RiderApplications
             .AsNoTracking()
+            .Include(x => x.VehicleCategory)
             .Include(x => x.AddressBarangay)
                 .ThenInclude(x => x!.Municipality)
                     .ThenInclude(x => x.Province)
@@ -599,7 +624,10 @@ public class OperatorRiderInviteController(AppDbContext db) : ControllerBase
             row.ReviewNote,
             row.CreatedAtUtc,
             row.ReviewedAtUtc,
-            row.RiderProfileId);
+            row.RiderProfileId,
+            row.VehicleCategoryId,
+            row.VehicleCategory?.Code,
+            row.VehicleCategory?.Name);
     }
 
     private static List<PaymentMethod> ParsePaymentMethods(string raw)
