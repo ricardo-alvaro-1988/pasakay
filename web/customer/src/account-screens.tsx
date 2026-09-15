@@ -343,6 +343,14 @@ export function ScheduleScreen({
   const [coverageHint, setCoverageHint] = useState(false)
   const noOperator = useNoOperatorNotice(pickup, dropoff, true, coverageHint)
 
+  const selectedOffer = noOperator.listedVehicles.find((v) => v.id === vehicleCategoryId)
+    ?? noOperator.listedVehicles.find((v) => v.vehicleType === vehicle && v.available)
+    ?? noOperator.availableVehicles.find((v) => v.vehicleType === vehicle)
+    ?? null
+  const selectedMaxPassengers = vehicleMaxPassengers(vehicle, selectedOffer?.maxPassengers)
+  const selectedIsCargo = vehicleIsCargo(vehicle, selectedOffer?.isCargo)
+  const showPassengerPicker = !!pickup && !selectedIsCargo && selectedMaxPassengers > 1
+
   useEffect(() => {
     if (!pickup || !dropoff) {
       setQuote(null)
@@ -354,7 +362,7 @@ export function ScheduleScreen({
     async function load() {
       setQuoting(true)
       try {
-        const next = await api.quote(bookBody(vehicle, pickup!, dropoff!, payment, paymentRef, passengers, vehicleCategoryId))
+        const next = await api.quote(bookBody(vehicle, pickup!, dropoff!, payment, paymentRef, passengers, vehicleCategoryId, selectedMaxPassengers, selectedIsCargo))
         if (ignore) return
         setQuote(next)
         setCoverageHint(false)
@@ -375,7 +383,7 @@ export function ScheduleScreen({
     }
     void load()
     return () => { ignore = true }
-  }, [pickup, dropoff, vehicle, vehicleCategoryId, payment, paymentRef, passengers])
+  }, [pickup, dropoff, vehicle, vehicleCategoryId, payment, paymentRef, passengers, selectedMaxPassengers, selectedIsCargo])
 
   useEffect(() => {
     if (noOperator.useOffers) {
@@ -396,6 +404,14 @@ export function ScheduleScreen({
       return current
     })
   }, [noOperator.availableTypes, noOperator.availableVehicles, noOperator.useOffers, vehicleCategoryId])
+
+  useEffect(() => {
+    if (!showPassengerPicker) {
+      setPassengers(1)
+      return
+    }
+    setPassengers((n) => Math.min(selectedMaxPassengers, Math.max(1, n)))
+  }, [showPassengerPicker, selectedMaxPassengers, vehicle, vehicleCategoryId])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -421,7 +437,7 @@ export function ScheduleScreen({
     setNote('')
     try {
       onDesk(await api.book({
-        ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, passengers, vehicleCategoryId),
+        ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, passengers, vehicleCategoryId, selectedMaxPassengers, selectedIsCargo),
         scheduledAtUtc,
       }))
       setNote('Scheduled. Riders are notified about an hour before pickup.')
@@ -482,10 +498,12 @@ export function ScheduleScreen({
           </button>
         </div>
       </div>
+      {pickup && (
+        <>
       <p className="section-title">Vehicle</p>
       <div className="vehicles">
         {(noOperator.useOffers
-          ? noOperator.listedVehicles
+          ? noOperator.availableVehicles
           : noOperator.availableTypes.map((t) => ({
               id: t,
               vehicleType: t,
@@ -531,9 +549,17 @@ export function ScheduleScreen({
           )
         })}
       </div>
-      {!vehicleIsCargo(vehicle) && vehicleMaxPassengers(vehicle) > 1 && (
+      {!noOperator.vehiclesReady && (
+        <p className="muted">Checking available vehicles…</p>
+      )}
+      {noOperator.vehiclesReady && noOperator.availableTypes.length === 0 && (
+        <p className="muted">No vehicle types are offered for bookings in this municipality yet.</p>
+      )}
+        </>
+      )}
+      {showPassengerPicker && (
         <div className="passenger-picker" role="group" aria-label="Number of passengers">
-          <span className="passenger-label">Passengers</span>
+          <span className="passenger-label">Passengers (max {selectedMaxPassengers})</span>
           <div className="passenger-controls">
             <button
               type="button"
@@ -548,25 +574,24 @@ export function ScheduleScreen({
               className="passenger-input"
               type="number"
               min={1}
-              max={vehicleMaxPassengers(vehicle)}
+              max={selectedMaxPassengers}
               inputMode="numeric"
               value={passengers}
               onChange={(e) => {
-                const max = vehicleMaxPassengers(vehicle)
                 const next = Math.floor(Number(e.target.value))
                 if (!Number.isFinite(next) || next < 1) {
                   setPassengers(1)
                   return
                 }
-                setPassengers(Math.min(max, next))
+                setPassengers(Math.min(selectedMaxPassengers, next))
               }}
               aria-label="Passenger count"
             />
             <button
               type="button"
               className="passenger-btn"
-              disabled={passengers >= vehicleMaxPassengers(vehicle)}
-              onClick={() => setPassengers((n) => Math.min(vehicleMaxPassengers(vehicle), n + 1))}
+              disabled={passengers >= selectedMaxPassengers}
+              onClick={() => setPassengers((n) => Math.min(selectedMaxPassengers, n + 1))}
               aria-label="More passengers"
             >
               +
@@ -628,8 +653,9 @@ export function ScheduleScreen({
   )
 }
 
-function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', passengerCount = 1, categoryId?: string | null): BookBody {
-  const max = vehicleMaxPassengers(vehicle)
+function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', passengerCount = 1, categoryId?: string | null, maxPassengers?: number, isCargo?: boolean): BookBody {
+  const max = vehicleMaxPassengers(vehicle, maxPassengers)
+  const cargo = vehicleIsCargo(vehicle, isCargo)
   return {
     vehicleType: vehicle,
     vehicleCategoryId: categoryId ?? undefined,
@@ -643,7 +669,7 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     dropoffLng: dropoff.lng,
     paymentMethod: payment,
     paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
-    passengerCount: vehicleIsCargo(vehicle) || max <= 1 ? 1 : Math.min(max, Math.max(1, passengerCount)),
+    passengerCount: cargo || max <= 1 ? 1 : Math.min(max, Math.max(1, passengerCount)),
   }
 }
 

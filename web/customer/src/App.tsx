@@ -575,7 +575,7 @@ function Home({
         const count = cargo || max <= 1 ? 1 : passengers
         return {
           key,
-          quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, count, promoCode, 0, categoryId)),
+          quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, count, promoCode, 0, categoryId, max, cargo)),
           error: '',
         }
       } catch (err) {
@@ -658,6 +658,24 @@ function Home({
 
   const selectedQuoteKey = quoteKey(vehicle, vehicleCategoryId)
   const selectedQuote = quotes[selectedQuoteKey] ?? quotes[vehicle] ?? null
+  const selectedOffer = hail
+    ? null
+    : (noOperator.listedVehicles.find((v) => v.id === vehicleCategoryId)
+      ?? noOperator.listedVehicles.find((v) => v.vehicleType === vehicle && v.available)
+      ?? noOperator.availableVehicles.find((v) => v.vehicleType === vehicle)
+      ?? null)
+  const selectedMaxPassengers = vehicleMaxPassengers(vehicle, selectedOffer?.maxPassengers)
+  const selectedIsCargo = vehicleIsCargo(vehicle, selectedOffer?.isCargo)
+  const showPassengerPicker = !!pickup && !selectedIsCargo && selectedMaxPassengers > 1
+
+  useEffect(() => {
+    if (!showPassengerPicker) {
+      setPassengers(1)
+      return
+    }
+    setPassengers((n) => Math.min(selectedMaxPassengers, Math.max(1, n)))
+  }, [showPassengerPicker, selectedMaxPassengers, vehicle, vehicleCategoryId])
+
   const dispatchMode = selectedQuote?.bookingDispatchMode ?? 'Broadcast'
   const needsRiderPick = !hail && (dispatchMode === 'Selection' || (dispatchMode === 'Both' && dispatchChoice === 'pick'))
 
@@ -966,7 +984,7 @@ function Home({
     setError('')
     try {
       const riderId = hail?.riderId ?? (needsRiderPick ? selectedRiderId ?? undefined : undefined)
-      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, passengers, promoCode, boostAmount, vehicleCategoryId)))
+      onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, passengers, promoCode, boostAmount, vehicleCategoryId, selectedMaxPassengers, selectedIsCargo)))
       setDraftBoost(0)
       setBoostCustom('')
     } catch (err) {
@@ -1088,11 +1106,12 @@ function Home({
                     </button>
                   </div>
                 </div>
+                {(hail || pickup) && (
                 <div className="vehicles">
                   {(hail
                     ? [{ id: hail.vehicleType, vehicleType: hail.vehicleType, name: vehicleLabel(hail.vehicleType), available: true } as const]
                     : (noOperator.useOffers
-                        ? noOperator.listedVehicles
+                        ? noOperator.availableVehicles
                         : noOperator.availableTypes.map((t) => ({
                             id: t,
                             vehicleType: t,
@@ -1140,12 +1159,16 @@ function Home({
                     )
                   })}
                 </div>
-                {!hail && pickup && dropoff && noOperator.availableTypes.length === 0 && (
+                )}
+                {!hail && pickup && !noOperator.vehiclesReady && (
+                  <p className="muted" style={{ margin: '8px 0 0' }}>Checking available vehicles…</p>
+                )}
+                {!hail && pickup && noOperator.vehiclesReady && noOperator.availableTypes.length === 0 && (
                   <p className="muted" style={{ margin: '8px 0 0' }}>No vehicle types are offered for bookings in this municipality yet.</p>
                 )}
-                {!vehicleIsCargo(vehicle) && vehicleMaxPassengers(vehicle) > 1 && (
+                {showPassengerPicker && (
                   <div className="passenger-picker" role="group" aria-label="Number of passengers">
-                    <span className="passenger-label">Passengers</span>
+                    <span className="passenger-label">Passengers (max {selectedMaxPassengers})</span>
                     <div className="passenger-controls">
                       <button
                         type="button"
@@ -1160,25 +1183,24 @@ function Home({
                         className="passenger-input"
                         type="number"
                         min={1}
-                        max={vehicleMaxPassengers(vehicle)}
+                        max={selectedMaxPassengers}
                         inputMode="numeric"
                         value={passengers}
                         onChange={(e) => {
-                          const max = vehicleMaxPassengers(vehicle)
                           const next = Math.floor(Number(e.target.value))
                           if (!Number.isFinite(next) || next < 1) {
                             setPassengers(1)
                             return
                           }
-                          setPassengers(Math.min(max, next))
+                          setPassengers(Math.min(selectedMaxPassengers, next))
                         }}
                         aria-label="Passenger count"
                       />
                       <button
                         type="button"
                         className="passenger-btn"
-                        disabled={passengers >= vehicleMaxPassengers(vehicle)}
-                        onClick={() => setPassengers((n) => Math.min(vehicleMaxPassengers(vehicle), n + 1))}
+                        disabled={passengers >= selectedMaxPassengers}
+                        onClick={() => setPassengers((n) => Math.min(selectedMaxPassengers, n + 1))}
                         aria-label="More passengers"
                       >
                         +
@@ -1590,10 +1612,12 @@ function quoteKey(vehicle: VehicleType, categoryId?: string | null) {
   return categoryId ?? vehicle
 }
 
-function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', riderId?: string, passengerCount = 1, promoCode = '', customerBoostAmount = 0, categoryId?: string | null): BookBody {
+function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', riderId?: string, passengerCount = 1, promoCode = '', customerBoostAmount = 0, categoryId?: string | null, maxPassengers?: number, isCargo?: boolean): BookBody {
   const code = promoCode.trim()
   const looksComplete = /^save([1-9]|[1-9]\d|100)$/i.test(code)
   const boost = Math.min(500, Math.max(0, Math.floor(customerBoostAmount || 0)))
+  const max = vehicleMaxPassengers(vehicle, maxPassengers)
+  const cargo = vehicleIsCargo(vehicle, isCargo)
   return {
     vehicleType: vehicle,
     vehicleCategoryId: categoryId ?? undefined,
@@ -1608,11 +1632,7 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     paymentMethod: payment,
     paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
     riderId,
-    passengerCount: (() => {
-      const max = vehicleMaxPassengers(vehicle)
-      if (vehicleIsCargo(vehicle) || max <= 1) return 1
-      return Math.min(max, Math.max(1, passengerCount))
-    })(),
+    passengerCount: cargo || max <= 1 ? 1 : Math.min(max, Math.max(1, passengerCount)),
     promoCode: looksComplete ? code : undefined,
     customerBoostAmount: boost > 0 ? boost : undefined,
   }
