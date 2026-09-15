@@ -485,18 +485,20 @@ export function ScheduleScreen({
       <p className="section-title">Vehicle</p>
       <div className="vehicles">
         {(noOperator.useOffers
-          ? noOperator.availableVehicles
+          ? noOperator.listedVehicles
           : noOperator.availableTypes.map((t) => ({
               id: t,
               vehicleType: t,
               name: vehicleLabel(t),
+              available: true,
               maxPassengers: vehicleMaxPassengers(t),
               isCargo: vehicleIsCargo(t),
             }))
         ).map((item) => {
           const type = item.vehicleType as VehicleType
           const categoryId = 'id' in item && item.id !== type ? item.id : null
-          const selected = categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId
+          const canSelect = !('available' in item) || item.available !== false
+          const selected = canSelect && (categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId)
           const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
             ? item.maxPassengers
             : vehicleMaxPassengers(type)
@@ -508,8 +510,11 @@ export function ScheduleScreen({
             <button
               key={categoryId ?? type}
               type="button"
-              className={`vehicle ${selected ? 'on' : ''}`}
+              disabled={!canSelect}
+              className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
+              title={!canSelect ? 'Not offered for bookings in this area yet' : undefined}
               onClick={() => {
+                if (!canSelect) return
                 setVehicle(type)
                 setVehicleCategoryId(categoryId)
                 setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))

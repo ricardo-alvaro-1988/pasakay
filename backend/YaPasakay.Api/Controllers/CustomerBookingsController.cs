@@ -351,25 +351,35 @@ public class CustomerBookingsController(
             municipalityName = municipality?.Name;
         }
 
-        // Plus Codes / sparse labels often have no city name — reverse-geocode lat/lng and retry.
-        if (municipalityId is null
-            && request.PickupLat is double plat
+        // Prefer GPS reverse-geocode when coordinates exist (Plus Codes / sparse labels hide the city).
+        if (request.PickupLat is double plat
             && request.PickupLng is double plng
             && plat != 0
             && plng != 0)
         {
-            var geoAddress = await driving.ReverseGeocodeAsync(plat, plng, cancellationToken);
-            if (!string.IsNullOrWhiteSpace(geoAddress))
+            var looksSparse = pickupDetails.Contains('+')
+                || pickupDetails.Count(c => c == ',') < 1
+                || pickupDetails.Equals("Current location", StringComparison.OrdinalIgnoreCase);
+            if (municipalityId is null || looksSparse)
             {
-                pickupDetails = geoAddress.Trim();
-                pickup ??= await ResolveBarangayAsync(null, pickupDetails, cancellationToken);
-                municipalityId = pickup?.MunicipalityId;
-                municipalityName = pickup?.Municipality?.Name;
-                if (municipalityId is null)
+                var geoAddress = await driving.ReverseGeocodeAsync(plat, plng, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(geoAddress))
                 {
-                    var municipality = await TerritoryLookup.MatchMunicipalityFromAddressAsync(db, pickupDetails, cancellationToken);
-                    municipalityId = municipality?.Id;
-                    municipalityName = municipality?.Name;
+                    pickupDetails = geoAddress.Trim();
+                    var geoBarangay = await ResolveBarangayAsync(null, pickupDetails, cancellationToken);
+                    if (geoBarangay is not null)
+                    {
+                        pickup = geoBarangay;
+                        municipalityId = geoBarangay.MunicipalityId;
+                        municipalityName = geoBarangay.Municipality?.Name;
+                    }
+
+                    if (municipalityId is null)
+                    {
+                        var municipality = await TerritoryLookup.MatchMunicipalityFromAddressAsync(db, pickupDetails, cancellationToken);
+                        municipalityId = municipality?.Id;
+                        municipalityName = municipality?.Name;
+                    }
                 }
             }
         }
@@ -443,7 +453,15 @@ public class CustomerBookingsController(
                 var hasFare = type == VehicleType.Custom
                     ? offeredCategories.Contains(cat.Id)
                     : offeredCategories.Contains(cat.Id) || offeredTypes.Contains(type);
-                var available = o.IsEnabled && hasFare;
+
+                // Only Admin-enabled types appear in the customer picker.
+                // available=false means enabled but not Offered for this municipality.
+                if (!o.IsEnabled)
+                {
+                    continue;
+                }
+
+                var available = hasFare;
 
                 if (vehiclesByCategory.TryGetValue(cat.Id, out var existing))
                 {
@@ -490,9 +508,10 @@ public class CustomerBookingsController(
             }
         }
 
-        // Kill switch / empty bookable list: empty vehicles forces customer UI back to moto/trike bools.
-        if (!config.GetValue("VehicleCatalog:UseOffersForCustomerUi", true)
-            || vehicles.All(v => !v.Available))
+        // Kill switch: empty vehicles forces customer UI back to moto/trike bools.
+        // Keep the list when at least one Admin-enabled type exists (even if not yet Offered),
+        // so Sedan/etc. remain visible instead of disappearing into the legacy 2-type UI.
+        if (!config.GetValue("VehicleCatalog:UseOffersForCustomerUi", true))
         {
             vehicles.Clear();
         }

@@ -73,11 +73,12 @@ export function useNoOperatorNotice(
 
   // Memoize so quote effects that depend on these do not re-run every render
   // (new [] identity would keep "Getting fare…" stuck in a loop).
+  const listedVehicles = useMemo(() => vehicles, [vehicles])
   const availableVehicles = useMemo(
     () => vehicles.filter((v) => v.available),
     [vehicles],
   )
-  const useOffers = availableVehicles.length > 0
+  const useOffers = listedVehicles.length > 0
   const availableTypes = useMemo(
     () => (useOffers
       ? availableVehicles.map((v) => v.vehicleType as VehicleType)
@@ -94,6 +95,7 @@ export function useNoOperatorNotice(
     motorcycleAvailable,
     tricycleAvailable,
     vehicles,
+    listedVehicles,
     availableVehicles,
     useOffers,
     availableTypes,

@@ -125,7 +125,6 @@ public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingD
         var url =
             "https://maps.googleapis.com/maps/api/geocode/json"
             + $"?latlng={Uri.EscapeDataString(latlng)}"
-            + "&result_type=street_address|route|neighborhood|locality|administrative_area_level_2|sublocality"
             + $"&key={Uri.EscapeDataString(apiKey)}";
 
         try

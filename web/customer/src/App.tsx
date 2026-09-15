@@ -649,7 +649,7 @@ function Home({
       if (noOperator.isTypeAvailable(current)) return current
       return noOperator.availableTypes[0] ?? current
     })
-  }, [hail, noOperator.availableTypes, noOperator.availableVehicles, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.useOffers, vehicleCategoryId])
+  }, [hail, noOperator.availableTypes, noOperator.availableVehicles, noOperator.listedVehicles, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.useOffers, vehicleCategoryId])
 
   useEffect(() => {
     const available = Object.values(quotes).some((q) => q?.hasActivePromos)
@@ -1092,7 +1092,7 @@ function Home({
                   {(hail
                     ? [{ id: hail.vehicleType, vehicleType: hail.vehicleType, name: vehicleLabel(hail.vehicleType), available: true } as const]
                     : (noOperator.useOffers
-                        ? noOperator.availableVehicles
+                        ? noOperator.listedVehicles
                         : noOperator.availableTypes.map((t) => ({
                             id: t,
                             vehicleType: t,
@@ -1105,7 +1105,8 @@ function Home({
                     const type = item.vehicleType as VehicleType
                     const categoryId = 'id' in item && item.id !== type ? item.id : null
                     const itemKey = quoteKey(type, categoryId)
-                    const selected = categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId
+                    const canSelect = !('available' in item) || item.available !== false
+                    const selected = canSelect && (categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId)
                     const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
                       ? item.maxPassengers
                       : vehicleMaxPassengers(type)
@@ -1117,9 +1118,11 @@ function Home({
                       <button
                         key={itemKey}
                         type="button"
-                        disabled={!!hail && hail.vehicleType !== type}
-                        className={`vehicle ${selected ? 'on' : ''}`}
+                        disabled={(!!hail && hail.vehicleType !== type) || !canSelect}
+                        className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
+                        title={!canSelect ? 'Not offered for bookings in this area yet' : undefined}
                         onClick={() => {
+                          if (!canSelect) return
                           setVehicle(type)
                           setVehicleCategoryId(categoryId)
                           setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))
@@ -1130,7 +1133,7 @@ function Home({
                         </span>
                         <span className="copy">
                           <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
-                          <b className="price">{quotes[itemKey] ? quotePriceLabel(quotes[itemKey]!) : '—'}</b>
+                          <b className="price">{!canSelect ? 'Not offered' : quotes[itemKey] ? quotePriceLabel(quotes[itemKey]!) : '—'}</b>
                           {cargo ? <small className="muted">Cargo</small> : null}
                         </span>
                       </button>
