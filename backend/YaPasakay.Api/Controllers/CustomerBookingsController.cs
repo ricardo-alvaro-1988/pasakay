@@ -351,6 +351,29 @@ public class CustomerBookingsController(
             municipalityName = municipality?.Name;
         }
 
+        // Plus Codes / sparse labels often have no city name — reverse-geocode lat/lng and retry.
+        if (municipalityId is null
+            && request.PickupLat is double plat
+            && request.PickupLng is double plng
+            && plat != 0
+            && plng != 0)
+        {
+            var geoAddress = await driving.ReverseGeocodeAsync(plat, plng, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(geoAddress))
+            {
+                pickupDetails = geoAddress.Trim();
+                pickup ??= await ResolveBarangayAsync(null, pickupDetails, cancellationToken);
+                municipalityId = pickup?.MunicipalityId;
+                municipalityName = pickup?.Municipality?.Name;
+                if (municipalityId is null)
+                {
+                    var municipality = await TerritoryLookup.MatchMunicipalityFromAddressAsync(db, pickupDetails, cancellationToken);
+                    municipalityId = municipality?.Id;
+                    municipalityName = municipality?.Name;
+                }
+            }
+        }
+
         if (municipalityId is null)
         {
             return Ok(new CustomerServiceCheckResponse(false, municipalityName));

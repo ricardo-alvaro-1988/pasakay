@@ -109,4 +109,81 @@ public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingD
             return (fallbackKm, fallbackEta);
         }
     }
+
+    /// <summary>
+    /// Best-effort reverse geocode for Plus Code / pin pickups so municipality matching can run.
+    /// </summary>
+    public async Task<string?> ReverseGeocodeAsync(double lat, double lng, CancellationToken cancellationToken = default)
+    {
+        var apiKey = config["Maps:GoogleApiKey"] ?? config["Maps:BrowserApiKey"];
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return null;
+        }
+
+        var latlng = string.Create(CultureInfo.InvariantCulture, $"{lat},{lng}");
+        var url =
+            "https://maps.googleapis.com/maps/api/geocode/json"
+            + $"?latlng={Uri.EscapeDataString(latlng)}"
+            + "&result_type=street_address|route|neighborhood|locality|administrative_area_level_2|sublocality"
+            + $"&key={Uri.EscapeDataString(apiKey)}";
+
+        try
+        {
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+            using var response = await client.GetAsync(url, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            var root = doc.RootElement;
+            var status = root.TryGetProperty("status", out var statusEl) ? statusEl.GetString() : null;
+            if (!string.Equals(status, "OK", StringComparison.OrdinalIgnoreCase)
+                || !root.TryGetProperty("results", out var results)
+                || results.GetArrayLength() == 0)
+            {
+                return null;
+            }
+
+            string? best = null;
+            var bestScore = -1;
+            foreach (var item in results.EnumerateArray())
+            {
+                var addr = item.TryGetProperty("formatted_address", out var addrEl) ? addrEl.GetString() : null;
+                if (string.IsNullOrWhiteSpace(addr))
+                {
+                    continue;
+                }
+
+                var score = addr.Length;
+                if (item.TryGetProperty("types", out var types))
+                {
+                    foreach (var t in types.EnumerateArray())
+                    {
+                        var type = t.GetString() ?? "";
+                        if (type is "street_address" or "premise" or "route") score += 80;
+                        if (type is "locality" or "administrative_area_level_2") score += 50;
+                        if (type is "neighborhood" or "sublocality" or "sublocality_level_1") score += 40;
+                        if (type == "plus_code") score -= addr.Contains(',') ? 10 : 120;
+                    }
+                }
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = addr;
+                }
+            }
+
+            return best;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Reverse geocode failed for {Lat},{Lng}", lat, lng);
+            return null;
+        }
+    }
 }
