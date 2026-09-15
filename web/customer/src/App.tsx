@@ -628,8 +628,8 @@ function Home({
     }
     void load()
     return () => { ignore = true }
-    // Intentionally omit vehicle / vehicleCategoryId so tapping a vehicle does not re-quote all types.
-  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers, noOperator.availableTypes, noOperator.availableVehicles, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.useOffers])
+    // Depend on stable offer ids / types strings — not fresh array identities — so quoting can finish.
+  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers, noOperator.useOffers, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.availableTypes.join('|'), noOperator.availableVehicles.map((v) => `${v.id}:${v.available}:${v.maxPassengers}`).join('|')])
 
   useEffect(() => {
     if (hail) return

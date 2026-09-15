@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, NO_OPERATOR_EMAIL, NO_OPERATOR_FACEBOOK_URL, NO_OPERATOR_NOTICE_DELAY_MS, Stop, VehicleOffer, VehicleType } from './api'
 
 export function useNoOperatorNotice(
@@ -69,16 +69,22 @@ export function useNoOperatorNotice(
     dropoff?.lng,
   ])
 
-  // Only enter catalog/offers mode when at least one offer is bookable.
-  // Seeded-but-disabled types must not hide legacy motorcycle/tricycle flags.
-  const availableVehicles = vehicles.filter((v) => v.available)
+  // Memoize so quote effects that depend on these do not re-run every render
+  // (new [] identity would keep "Getting fare…" stuck in a loop).
+  const availableVehicles = useMemo(
+    () => vehicles.filter((v) => v.available),
+    [vehicles],
+  )
   const useOffers = availableVehicles.length > 0
-  const availableTypes = useOffers
-    ? availableVehicles.map((v) => v.vehicleType as VehicleType)
-    : ([
-        motorcycleAvailable ? 'Motorcycle' : null,
-        tricycleAvailable ? 'Tricycle' : null,
-      ].filter(Boolean) as VehicleType[])
+  const availableTypes = useMemo(
+    () => (useOffers
+      ? availableVehicles.map((v) => v.vehicleType as VehicleType)
+      : ([
+          motorcycleAvailable ? 'Motorcycle' : null,
+          tricycleAvailable ? 'Tricycle' : null,
+        ].filter(Boolean) as VehicleType[])),
+    [availableVehicles, motorcycleAvailable, tricycleAvailable, useOffers],
+  )
 
   return {
     searching,
