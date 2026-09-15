@@ -356,71 +356,103 @@ public class CustomerBookingsController(
             return Ok(new CustomerServiceCheckResponse(false, municipalityName));
         }
 
-        var op = await db.Operators
+        var coveringOps = await db.Operators
+            .AsNoTracking()
+            .Include(x => x.VehicleOffers!)
+            .ThenInclude(o => o.VehicleCategory)
             .Where(x => x.IsActive && (
                 x.Areas.Any(a => a.Barangay.MunicipalityId == municipalityId)))
             .OrderBy(x => x.CompanyName)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (op is null)
+            .ToListAsync(cancellationToken);
+        if (coveringOps.Count == 0)
         {
             return Ok(new CustomerServiceCheckResponse(false, municipalityName));
         }
 
+        var opIds = coveringOps.Select(x => x.Id).ToList();
         var offeredRows = await db.FareMatrices
             .AsNoTracking()
-            .Where(x => x.OperatorId == op.Id
+            .Where(x => opIds.Contains(x.OperatorId)
                 && x.MunicipalityId == municipalityId
                 && x.IsActive)
-            .Select(x => new { x.VehicleType, x.VehicleCategoryId })
+            .Select(x => new { x.OperatorId, x.VehicleType, x.VehicleCategoryId })
             .ToListAsync(cancellationToken);
-        var offeredSet = offeredRows.Select(x => x.VehicleType).ToHashSet();
-        var offeredCategoryIds = offeredRows
-            .Where(x => x.VehicleCategoryId is not null)
-            .Select(x => x.VehicleCategoryId!.Value)
-            .ToHashSet();
+        var offeredByOp = offeredRows
+            .GroupBy(x => x.OperatorId)
+            .ToDictionary(
+                g => g.Key,
+                g => (
+                    Types: g.Select(x => x.VehicleType).ToHashSet(),
+                    Categories: g.Where(x => x.VehicleCategoryId is not null)
+                        .Select(x => x.VehicleCategoryId!.Value)
+                        .ToHashSet()));
 
-        var offers = await db.OperatorVehicleOffers
-            .AsNoTracking()
-            .Include(x => x.VehicleCategory)
-            .Where(x => x.OperatorId == op.Id && x.VehicleCategory != null && x.VehicleCategory.IsActive)
-            .OrderBy(x => x.VehicleCategory!.SortOrder)
-            .ThenBy(x => x.VehicleCategory!.Name)
-            .ToListAsync(cancellationToken);
-
-        var vehicles = offers.Select(o =>
+        // Union catalog rows across covering operators so Sedan offered by any of them is visible.
+        var vehiclesByCategory = new Dictionary<Guid, CustomerVehicleOfferDto>();
+        foreach (var op in coveringOps)
         {
-            var cat = o.VehicleCategory!;
-            VehicleType type;
-            if (cat.LegacyEnumValue is int v && Enum.IsDefined(typeof(VehicleType), v))
-            {
-                type = (VehicleType)v;
-            }
-            else if (VehicleCatalog.TypeFor(cat.Id) is VehicleType platformType)
-            {
-                type = platformType;
-            }
-            else
-            {
-                type = VehicleType.Custom;
-            }
+            offeredByOp.TryGetValue(op.Id, out var offered);
+            var offeredTypes = offered.Types ?? [];
+            var offeredCategories = offered.Categories ?? [];
 
-            var available = type == VehicleType.Custom
-                ? o.IsEnabled && offeredCategoryIds.Contains(cat.Id)
-                : o.IsEnabled && (offeredCategoryIds.Contains(cat.Id) || offeredSet.Contains(type));
-            return new CustomerVehicleOfferDto(
-                cat.Id,
-                cat.Code,
-                o.DisplayName ?? cat.Name,
-                cat.IconKey,
-                o.MaxPassengers ?? cat.MaxPassengers,
-                cat.IsCargo,
-                available,
-                VehicleCatalog.ApiName(type));
-        }).ToList();
+            foreach (var o in op.VehicleOffers ?? [])
+            {
+                var cat = o.VehicleCategory;
+                if (cat is null || !cat.IsActive)
+                {
+                    continue;
+                }
+
+                VehicleType type;
+                if (cat.LegacyEnumValue is int v && Enum.IsDefined(typeof(VehicleType), v))
+                {
+                    type = (VehicleType)v;
+                }
+                else if (VehicleCatalog.TypeFor(cat.Id) is VehicleType platformType)
+                {
+                    type = platformType;
+                }
+                else
+                {
+                    type = VehicleType.Custom;
+                }
+
+                var hasFare = type == VehicleType.Custom
+                    ? offeredCategories.Contains(cat.Id)
+                    : offeredCategories.Contains(cat.Id) || offeredTypes.Contains(type);
+                var available = o.IsEnabled && hasFare;
+
+                if (vehiclesByCategory.TryGetValue(cat.Id, out var existing))
+                {
+                    if (!existing.Available && available)
+                    {
+                        vehiclesByCategory[cat.Id] = existing with { Available = true };
+                    }
+
+                    continue;
+                }
+
+                vehiclesByCategory[cat.Id] = new CustomerVehicleOfferDto(
+                    cat.Id,
+                    cat.Code,
+                    o.DisplayName ?? cat.Name,
+                    cat.IconKey,
+                    o.MaxPassengers ?? cat.MaxPassengers,
+                    cat.IsCargo,
+                    available,
+                    VehicleCatalog.ApiName(type));
+            }
+        }
+
+        var vehicles = vehiclesByCategory.Values
+            .OrderBy(v => VehicleCatalog.PresetFor(v.Id)?.SortOrder ?? 500)
+            .ThenBy(v => v.Name)
+            .ToList();
 
         // Legacy operators before offer seed: fall back to fare matrices only.
         if (vehicles.Count == 0)
         {
+            var offeredSet = offeredRows.Select(x => x.VehicleType).ToHashSet();
             foreach (var preset in VehicleCatalog.PlatformPresets.Where(p => p.DefaultEnabled))
             {
                 vehicles.Add(new CustomerVehicleOfferDto(
@@ -442,11 +474,12 @@ public class CustomerBookingsController(
             vehicles.Clear();
         }
 
+        var anyOfferedTypes = offeredRows.Select(x => x.VehicleType).ToHashSet();
         return Ok(new CustomerServiceCheckResponse(
             true,
             municipalityName,
-            offeredSet.Contains(VehicleType.Motorcycle),
-            offeredSet.Contains(VehicleType.Tricycle),
+            anyOfferedTypes.Contains(VehicleType.Motorcycle),
+            anyOfferedTypes.Contains(VehicleType.Tricycle),
             vehicles));
     }
 
@@ -813,12 +846,15 @@ public class CustomerBookingsController(
         }
 
         var op = hail.Rider?.Operator;
-        op ??= await db.Operators
-            .Where(x => x.IsActive && (
-                x.Areas.Any(a => a.BarangayId == pickup.Id)
-                || x.Areas.Any(a => a.Barangay.MunicipalityId == pickup.MunicipalityId)))
-            .OrderBy(x => x.CompanyName)
-            .FirstOrDefaultAsync(cancellationToken);
+        if (op is null)
+        {
+            op = await ResolveCoveringOperatorForVehicleAsync(
+                pickup,
+                vehicle,
+                vehicleCategoryId,
+                cancellationToken);
+        }
+
         if (op is null)
         {
             return new PreparedBooking { Error = "No operator covers this pickup area yet." };
@@ -830,9 +866,14 @@ public class CustomerBookingsController(
                 .AsNoTracking()
                 .Include(x => x.VehicleCategory)
                 .FirstOrDefaultAsync(
-                    x => x.OperatorId == op.Id && x.VehicleCategoryId == resolvedCategoryId,
+                    x => x.OperatorId == op.Id && x.VehicleCategoryId == resolvedCategoryId && x.IsEnabled,
                     cancellationToken);
-            if (offer?.VehicleCategory is not null)
+            if (offer is null)
+            {
+                return new PreparedBooking { Error = "That vehicle type is not available." };
+            }
+
+            if (offer.VehicleCategory is not null)
             {
                 maxPassengers = offer.MaxPassengers ?? offer.VehicleCategory.MaxPassengers;
                 isCargo = offer.VehicleCategory.IsCargo;
@@ -1060,6 +1101,56 @@ public class CustomerBookingsController(
         }
 
         return request;
+    }
+
+    /// <summary>
+    /// Prefer a covering operator that has this vehicle enabled and an active fare in the pickup municipality.
+    /// Falls back to the first covering operator (legacy behavior).
+    /// </summary>
+    private async Task<Operator?> ResolveCoveringOperatorForVehicleAsync(
+        Barangay pickup,
+        VehicleType vehicle,
+        Guid? vehicleCategoryId,
+        CancellationToken cancellationToken)
+    {
+        var candidates = await db.Operators
+            .Where(x => x.IsActive && (
+                x.Areas.Any(a => a.BarangayId == pickup.Id)
+                || x.Areas.Any(a => a.Barangay.MunicipalityId == pickup.MunicipalityId)))
+            .OrderBy(x => x.CompanyName)
+            .ToListAsync(cancellationToken);
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (vehicleCategoryId is Guid categoryId)
+            {
+                var enabled = await db.OperatorVehicleOffers.AsNoTracking().AnyAsync(
+                    x => x.OperatorId == candidate.Id && x.VehicleCategoryId == categoryId && x.IsEnabled,
+                    cancellationToken);
+                if (!enabled)
+                {
+                    continue;
+                }
+            }
+
+            var fare = await OperatorMaps.LoadFareMatrixAsync(
+                db,
+                candidate.Id,
+                vehicle,
+                pickup.MunicipalityId,
+                vehicleCategoryId,
+                cancellationToken);
+            if (fare is not null)
+            {
+                return candidate;
+            }
+        }
+
+        return candidates[0];
     }
 
     private async Task<(RiderProfile? Rider, string? Error)> ResolveHailRiderAsync(Guid? riderId, CancellationToken cancellationToken)

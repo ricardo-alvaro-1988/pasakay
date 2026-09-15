@@ -885,6 +885,20 @@ public class OperatorFaresController(AppDbContext db) : ControllerBase
                 return byCategory;
             }
 
+            // Adopt legacy VehicleType-only row instead of creating a duplicate Sedan (etc.) matrix.
+            var byType = await db.FareMatrices
+                .FirstOrDefaultAsync(
+                    x => x.OperatorId == operatorId
+                        && x.MunicipalityId == municipalityId
+                        && x.VehicleType == vehicleType
+                        && x.VehicleCategoryId == null,
+                    cancellationToken);
+            if (byType is not null)
+            {
+                byType.VehicleCategoryId = categoryId;
+                return byType;
+            }
+
             var created = new FareMatrix
             {
                 OperatorId = operatorId,
