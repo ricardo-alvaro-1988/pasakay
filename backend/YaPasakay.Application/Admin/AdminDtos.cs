@@ -1050,6 +1050,25 @@ public record SaveOperatorPabiliPaymentMethodRequest(
 
 public record OperatorPabiliPaymentMethodListResponse(IReadOnlyList<OperatorPabiliPaymentMethodItem> Items);
 
+public record OperatorPabiliBrowseCategoryItem(
+    Guid Id,
+    string Name,
+    bool IsActive,
+    int SortOrder,
+    DateTime CreatedAtUtc);
+
+public record SaveOperatorPabiliBrowseCategoryRequest(
+    string Name,
+    bool IsActive,
+    int SortOrder);
+
+public record OperatorPabiliBrowseCategoryListResponse(IReadOnlyList<OperatorPabiliBrowseCategoryItem> Items);
+
+public record CustomerPabiliBrowseCategoryCard(
+    Guid Id,
+    string Name,
+    int SortOrder);
+
 public record CustomerPabiliPaymentMethodCard(
     PaymentMethod Method,
     string Label,

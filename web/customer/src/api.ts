@@ -469,9 +469,18 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
       ? 'This action is not available yet. Restart the API and try again.'
       : 'Request failed.'
     try {
-      const body = (await res.json()) as { message?: string; title?: string; detail?: string }
+      const body = (await res.json()) as {
+        message?: string
+        title?: string
+        detail?: string
+        errors?: Record<string, string[] | string>
+      }
       if (body.message) message = body.message
       else if (body.detail) message = body.detail
+      else if (body.errors) {
+        const first = Object.values(body.errors).flatMap((v) => (Array.isArray(v) ? v : [v])).find(Boolean)
+        if (typeof first === 'string' && first.trim()) message = first
+      }
       else if (body.title && res.status !== 404) message = body.title
     } catch {
       /* ignore */
@@ -639,6 +648,18 @@ export const api = {
       imageUrl: string | null
       redirectUrl: string
     }>>(`/api/customer/pabili/ads?${params}`)
+  },
+  pabiliBrowseCategories: (opts: { lat: number; lng: number; barangayId?: string }) => {
+    const params = new URLSearchParams({
+      lat: String(opts.lat),
+      lng: String(opts.lng),
+    })
+    if (opts.barangayId) params.set('barangayId', opts.barangayId)
+    return request<Array<{
+      id: string
+      name: string
+      sortOrder: number
+    }>>(`/api/customer/pabili/browse-categories?${params}`)
   },
   pabiliPaymentMethods: (opts: { lat: number; lng: number; barangayId?: string }) => {
     const params = new URLSearchParams({

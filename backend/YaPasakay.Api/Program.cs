@@ -181,6 +181,7 @@ using (var scope = app.Services.CreateScope())
         await MerchantCatalogBootstrap.EnsurePabiliMatrixAsync(db);
         await MerchantCatalogBootstrap.EnsurePabiliRiderFlagsAsync(db);
         await MerchantCatalogBootstrap.EnsurePabiliOrdersAsync(db);
+        await MerchantCatalogBootstrap.EnsurePabiliBrowseCategoriesAsync(db);
         await VehicleCatalogBootstrap.EnsureAsync(db);
         migrateLogger.LogInformation("Vehicle catalog categories and offers are ready.");
     }

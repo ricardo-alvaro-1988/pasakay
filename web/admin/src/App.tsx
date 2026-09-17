@@ -136,6 +136,7 @@ import { DeriveZoneMap } from './DeriveZoneMap'
 import { OperatorMerchantsPage } from './OperatorMerchantsPage'
 import { OperatorAdsPage } from './OperatorAdsPage'
 import { OperatorPabiliPaymentsPage } from './OperatorPabiliPaymentsPage'
+import { OperatorPabiliBrowseCategoriesPage } from './OperatorPabiliBrowseCategoriesPage'
 import { OperatorPabiliMatrixPage } from './OperatorPabiliMatrixPage'
 import { OperatorPabiliOrdersPage } from './OperatorPabiliOrdersPage'
 import { OperatorPabiliRidersPage } from './OperatorPabiliRidersPage'
@@ -7723,6 +7724,7 @@ function OperatorShell({
         {page === 'merchants' && <OperatorMerchantsPage />}
         {page === 'pabili-ads' && <OperatorAdsPage />}
         {page === 'pabili-payments' && <OperatorPabiliPaymentsPage />}
+        {page === 'pabili-browse-categories' && <OperatorPabiliBrowseCategoriesPage />}
         {page === 'product-categories' && <OperatorProductCategoriesPage />}
         {page === 'pabili-orders' && <OperatorPabiliOrdersPage />}
         {page === 'pabili-matrix' && <OperatorPabiliMatrixPage />}

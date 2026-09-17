@@ -24,6 +24,7 @@ public static class OperatorAccessCatalog
         new("product-categories", "Product categories"),
         new("pabili-ads", "Exclusive offers"),
         new("pabili-payments", "Payment methods"),
+        new("pabili-browse-categories", "Browse categories"),
         new("pabili-orders", "Pabili orders"),
         new("pabili-matrix", "Pabili matrix"),
         new("pabili-riders", "Pabili riders"),

@@ -41,6 +41,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<OperatorPromo> OperatorPromos => Set<OperatorPromo>();
     public DbSet<OperatorAd> OperatorAds => Set<OperatorAd>();
     public DbSet<OperatorPabiliPaymentMethod> OperatorPabiliPaymentMethods => Set<OperatorPabiliPaymentMethod>();
+    public DbSet<OperatorPabiliBrowseCategory> OperatorPabiliBrowseCategories => Set<OperatorPabiliBrowseCategory>();
     public DbSet<PromoRedemption> PromoRedemptions => Set<PromoRedemption>();
     public DbSet<DeriveFareZone> DeriveFareZones => Set<DeriveFareZone>();
     public DbSet<DeriveFareMatrix> DeriveFareMatrices => Set<DeriveFareMatrix>();
@@ -728,6 +729,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.QrImagePath).HasMaxLength(500);
             entity.HasOne(x => x.Operator)
                 .WithMany(x => x.PabiliPaymentMethods)
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OperatorPabiliBrowseCategory>(entity =>
+        {
+            entity.HasIndex(x => new { x.OperatorId, x.Name }).IsUnique();
+            entity.HasIndex(x => new { x.OperatorId, x.SortOrder });
+            entity.Property(x => x.Name).HasMaxLength(40).IsRequired();
+            entity.HasOne(x => x.Operator)
+                .WithMany(x => x.PabiliBrowseCategories)
                 .HasForeignKey(x => x.OperatorId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

@@ -49,6 +49,7 @@ public class Operator : BaseEntity
     public ICollection<OperatorPromo> Promos { get; set; } = new List<OperatorPromo>();
     public ICollection<OperatorAd> Ads { get; set; } = new List<OperatorAd>();
     public ICollection<OperatorPabiliPaymentMethod> PabiliPaymentMethods { get; set; } = new List<OperatorPabiliPaymentMethod>();
+    public ICollection<OperatorPabiliBrowseCategory> PabiliBrowseCategories { get; set; } = new List<OperatorPabiliBrowseCategory>();
     public ICollection<DeriveFareZone> DeriveFareZones { get; set; } = new List<DeriveFareZone>();
     public ICollection<Merchant> Merchants { get; set; } = new List<Merchant>();
     public ICollection<OperatorVehicleOffer> VehicleOffers { get; set; } = new List<OperatorVehicleOffer>();

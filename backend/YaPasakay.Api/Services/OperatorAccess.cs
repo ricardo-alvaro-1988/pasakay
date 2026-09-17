@@ -113,6 +113,11 @@ public static class OperatorAccess
             return "pabili-payments";
         }
 
+        if (value.StartsWith("/api/operator/pabili-browse-categories"))
+        {
+            return "pabili-browse-categories";
+        }
+
         if (value.Contains("/categories", StringComparison.Ordinal))
         {
             return "product-categories";

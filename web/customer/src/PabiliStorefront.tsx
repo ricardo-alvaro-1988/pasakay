@@ -91,7 +91,6 @@ function lineTotal(line: CartLine) {
 
 const FALLBACK_LAT = 14.5995
 const FALLBACK_LNG = 120.9842
-const HOME_CATEGORIES = ['Food', 'Groceries', 'Gadgets', 'Drinks', 'Pharmacy', 'Pets'] as const
 const PABILI_CART_KEY = 'yapasakay-pabili-cart'
 
 const ORDER_STATUS_GROUPS: Array<{ key: string; title: string; statuses: string[] }> = [
@@ -203,6 +202,7 @@ export function PabiliStorefront({
     merchantOpen: boolean
   }>>([])
   const [ads, setAds] = useState<AdCard[]>([])
+  const [browseCategories, setBrowseCategories] = useState<Array<{ id: string; name: string; sortOrder: number }>>([])
   const [payMethods, setPayMethods] = useState<PayMethodCard[]>([{ method: 'Cash', label: 'Cash', qrImageUrl: null, sortOrder: 0 }])
   const [suggestMerchants, setSuggestMerchants] = useState<SuggestMerchant[]>([])
   const [suggestProducts, setSuggestProducts] = useState<SuggestProduct[]>([])
@@ -526,17 +526,23 @@ export function PabiliStorefront({
   }
 
   async function loadMerchants(term = search) {
+    if (view !== 'home' && view !== 'store') {
+      // Delivery pin changes on checkout must not reload home feeds or overwrite quote errors.
+      return
+    }
     setError('')
     try {
-      const [rows, popular, exclusive, payments] = await Promise.all([
+      const [rows, popular, exclusive, payments, categories] = await Promise.all([
         api.pabiliMerchants({ lat, lng, q: term }),
         api.pabiliPopularProducts({ lat, lng, q: term }),
         api.pabiliAds({ lat, lng }),
         api.pabiliPaymentMethods({ lat, lng }),
+        api.pabiliBrowseCategories({ lat, lng }),
       ])
       setMerchants(rows)
       setPopularProducts(popular)
       setAds(shuffleAds(exclusive))
+      setBrowseCategories(categories)
       const nextPay = payments.length
         ? payments
         : [{ method: 'Cash' as PaymentMethod, label: 'Cash', qrImageUrl: null, sortOrder: 0 }]
@@ -545,7 +551,9 @@ export function PabiliStorefront({
         setPayment(nextPay[0].method)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load stores.')
+      if (view === 'home') {
+        setError(e instanceof Error ? e.message : 'Could not load stores.')
+      }
     }
   }
 
@@ -585,9 +593,10 @@ export function PabiliStorefront({
   }
 
   useEffect(() => {
+    if (view !== 'home') return
     void loadMerchants('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lat, lng])
+  }, [lat, lng, view])
 
   async function openStore(id: string, focusProductId?: string) {
     setBusy(true)
@@ -672,6 +681,11 @@ export function PabiliStorefront({
   async function refreshQuote() {
     if (!store || !cart.length) {
       setQuote(null)
+      return
+    }
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+      setQuote(null)
+      setError('Set a delivery pin on the map first.')
       return
     }
     setBusy(true)
@@ -962,14 +976,14 @@ export function PabiliStorefront({
             ) : null}
           </div>
           <nav className="pb-quick-cats" aria-label="Shop categories">
-            {HOME_CATEGORIES.map((label) => (
+            {browseCategories.map((cat) => (
               <button
-                key={label}
+                key={cat.id}
                 type="button"
-                className={`pb-quick-cat${search.trim().toLowerCase() === label.toLowerCase() ? ' on' : ''}`}
-                onClick={() => applySearch(label)}
+                className={`pb-quick-cat${search.trim().toLowerCase() === cat.name.toLowerCase() ? ' on' : ''}`}
+                onClick={() => applySearch(cat.name)}
               >
-                {label}
+                {cat.name}
               </button>
             ))}
           </nav>

@@ -70,6 +70,7 @@ export type PageId =
   | 'product-categories'
   | 'pabili-ads'
   | 'pabili-payments'
+  | 'pabili-browse-categories'
   | 'pabili-orders'
   | 'pabili-matrix'
   | 'pabili-riders'
@@ -469,6 +470,20 @@ export type OperatorPabiliPaymentMethodItem = {
 export type SaveOperatorPabiliPaymentMethodBody = {
   method: PaymentMethod
   label?: string
+  isActive: boolean
+  sortOrder: number
+}
+
+export type OperatorPabiliBrowseCategoryItem = {
+  id: string
+  name: string
+  isActive: boolean
+  sortOrder: number
+  createdAtUtc: string
+}
+
+export type SaveOperatorPabiliBrowseCategoryBody = {
+  name: string
   isActive: boolean
   sortOrder: number
 }
@@ -2288,6 +2303,24 @@ export const api = {
       body: data,
     })
   },
+  operatorPabiliBrowseCategories: () =>
+    request<{ items: OperatorPabiliBrowseCategoryItem[] }>('/api/operator/pabili-browse-categories'),
+  createOperatorPabiliBrowseCategory: (body: SaveOperatorPabiliBrowseCategoryBody) =>
+    request<OperatorPabiliBrowseCategoryItem>('/api/operator/pabili-browse-categories', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateOperatorPabiliBrowseCategory: (id: string, body: SaveOperatorPabiliBrowseCategoryBody) =>
+    request<OperatorPabiliBrowseCategoryItem>(`/api/operator/pabili-browse-categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  toggleOperatorPabiliBrowseCategory: (id: string) =>
+    request<OperatorPabiliBrowseCategoryItem>(`/api/operator/pabili-browse-categories/${id}/toggle`, {
+      method: 'POST',
+    }),
+  deleteOperatorPabiliBrowseCategory: (id: string) =>
+    request<void>(`/api/operator/pabili-browse-categories/${id}`, { method: 'DELETE' }),
   operatorMerchants: () => request<{ items: MerchantListItem[] }>('/api/operator/merchants'),
   operatorMerchant: (id: string) => request<MerchantDetailItem>(`/api/operator/merchants/${id}`),
   createOperatorMerchant: (body: SaveMerchantBody) =>

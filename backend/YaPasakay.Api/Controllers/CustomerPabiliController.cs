@@ -234,6 +234,38 @@ public class CustomerPabiliController(
             x.RedirectUrl)).ToList());
     }
 
+    [HttpGet("browse-categories")]
+    public async Task<ActionResult<IReadOnlyList<CustomerPabiliBrowseCategoryCard>>> BrowseCategories(
+        [FromQuery] double lat,
+        [FromQuery] double lng,
+        [FromQuery] Guid? barangayId,
+        CancellationToken cancellationToken)
+    {
+        var (customer, status, message) = await CustomerContext.RequireAsync(db, User, cancellationToken);
+        if (customer is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var op = await ResolveOperatorAsync(barangayId, lat, lng, cancellationToken);
+        if (op is null)
+        {
+            return Ok(Array.Empty<CustomerPabiliBrowseCategoryCard>());
+        }
+
+        var rows = await db.OperatorPabiliBrowseCategories
+            .AsNoTracking()
+            .Where(x => x.OperatorId == op.Id && x.IsActive)
+            .OrderBy(x => x.SortOrder)
+            .ThenBy(x => x.Name)
+            .ToListAsync(cancellationToken);
+
+        return Ok(rows.Select(x => new CustomerPabiliBrowseCategoryCard(
+            x.Id,
+            x.Name,
+            x.SortOrder)).ToList());
+    }
+
     [HttpGet("search/suggest")]
     public async Task<ActionResult<CustomerPabiliSuggestResponse>> Suggest(
         [FromQuery] double lat,
@@ -378,30 +410,51 @@ public class CustomerPabiliController(
             return BadRequest(new { message = built.Error });
         }
 
-        var delivery = await pricing.QuoteDeliveryAsync(
-            built.Merchant!.OperatorId,
-            built.Merchant.Latitude,
-            built.Merchant.Longitude,
-            request.DropoffLat,
-            request.DropoffLng,
-            cancellationToken);
-        if (delivery.Error is not null)
+        if (built.Merchant is null
+            || (built.Merchant.Latitude == 0 && built.Merchant.Longitude == 0))
         {
-            return BadRequest(new { message = delivery.Error });
+            return BadRequest(new { message = "This store has no map pin yet. Ask the operator to set the store location." });
         }
 
-        var total = PabiliPricingService.CustomerTotal(built.GoodsSelling, delivery.DeliveryFee, 0);
-        return Ok(new CustomerPabiliQuoteResponse(
-            built.Merchant.Id,
-            built.Merchant.BusinessName,
-            built.GoodsSelling,
-            delivery.DeliveryFee,
-            delivery.SurchargeTotal,
-            delivery.DistanceKm,
-            0,
-            string.Empty,
-            total,
-            built.Lines));
+        if (request.DropoffLat == 0 && request.DropoffLng == 0)
+        {
+            return BadRequest(new { message = "Set a delivery location on the map." });
+        }
+
+        try
+        {
+            var delivery = await pricing.QuoteDeliveryAsync(
+                built.Merchant.OperatorId,
+                built.Merchant.Latitude,
+                built.Merchant.Longitude,
+                request.DropoffLat,
+                request.DropoffLng,
+                cancellationToken);
+            if (delivery.Error is not null)
+            {
+                return BadRequest(new { message = delivery.Error });
+            }
+
+            var total = PabiliPricingService.CustomerTotal(built.GoodsSelling, delivery.DeliveryFee, 0);
+            return Ok(new CustomerPabiliQuoteResponse(
+                built.Merchant.Id,
+                built.Merchant.BusinessName,
+                built.GoodsSelling,
+                delivery.DeliveryFee,
+                delivery.SurchargeTotal,
+                delivery.DistanceKm,
+                0,
+                string.Empty,
+                total,
+                built.Lines));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                message = $"Could not quote delivery. {ex.GetBaseException().Message}",
+            });
+        }
     }
 
     [HttpPost("orders")]

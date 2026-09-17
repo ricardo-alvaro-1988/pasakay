@@ -631,6 +631,58 @@ public static class MerchantCatalogBootstrap
             """, cancellationToken);
     }
 
+    public static async Task EnsurePabiliBrowseCategoriesAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            IF OBJECT_ID(N'[OperatorPabiliBrowseCategories]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [OperatorPabiliBrowseCategories] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [OperatorId] uniqueidentifier NOT NULL,
+                    [Name] nvarchar(40) NOT NULL,
+                    [IsActive] bit NOT NULL,
+                    [SortOrder] int NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_OperatorPabiliBrowseCategories] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_OperatorPabiliBrowseCategories_Operators_OperatorId]
+                        FOREIGN KEY ([OperatorId]) REFERENCES [Operators] ([Id]) ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX [IX_OperatorPabiliBrowseCategories_OperatorId_Name]
+                    ON [OperatorPabiliBrowseCategories] ([OperatorId], [Name]);
+                CREATE INDEX [IX_OperatorPabiliBrowseCategories_OperatorId_SortOrder]
+                    ON [OperatorPabiliBrowseCategories] ([OperatorId], [SortOrder]);
+            END
+
+            IF OBJECT_ID(N'[OperatorPabiliBrowseCategories]', N'U') IS NOT NULL
+               AND OBJECT_ID(N'[Operators]', N'U') IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM [OperatorPabiliBrowseCategories])
+            BEGIN
+                DECLARE @now datetime2 = SYSUTCDATETIME();
+                INSERT INTO [OperatorPabiliBrowseCategories]
+                    ([Id], [OperatorId], [Name], [IsActive], [SortOrder], [CreatedAtUtc], [UpdatedAtUtc])
+                SELECT NEWID(), o.[Id], v.[Name], 1, v.[SortOrder], @now, NULL
+                FROM [Operators] o
+                CROSS JOIN (VALUES
+                    (N'Food', 0),
+                    (N'Groceries', 1),
+                    (N'Gadgets', 2),
+                    (N'Drinks', 3),
+                    (N'Pharmacy', 4),
+                    (N'Pets', 5)
+                ) AS v([Name], [SortOrder]);
+            END
+
+            IF NOT EXISTS (
+                SELECT 1 FROM [__EFMigrationsHistory]
+                WHERE [MigrationId] = N'20260917090717_OperatorPabiliBrowseCategories'
+            )
+                INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+                VALUES (N'20260917090717_OperatorPabiliBrowseCategories', N'9.0.8');
+            """, cancellationToken);
+    }
+
     public static async Task<bool> HasMerchantsTableAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
         var conn = db.Database.GetDbConnection();
