@@ -1409,35 +1409,43 @@ export function PabiliStorefront({
         <div className="pb-sheet" role="dialog" aria-modal="true">
           <div className="pb-sheet-card">
             <button type="button" className="ghost pb-sheet-close" onClick={() => setSheetProduct(null)}>Close</button>
-            <div className="pb-sheet-img">
-              {sheetProduct.imageUrl ? (
-                <img src={mediaUrl(sheetProduct.imageUrl)} alt="" />
-              ) : null}
-            </div>
-            <h3>{sheetProduct.name}</h3>
-            <p className="muted">{sheetProduct.description}</p>
-            <p className="pb-price">{peso(sheetProduct.sellingPrice)}</p>
-            {sheetProduct.addonGroups.map((g) => (
-              <div key={g.id} className="pb-addon-group">
-                <b>{g.name} <span className="muted">({g.minSelect}-{g.maxSelect})</span></b>
-                {g.options.map((o) => {
-                  const on = (sheetPicks[g.id] ?? []).includes(o.id)
-                  return (
-                    <label key={o.id} className={`pb-addon ${on ? 'on' : ''}`}>
-                      <input type="checkbox" checked={on} onChange={() => togglePick(g, o.id)} />
-                      <span>{o.name}</span>
-                      <span>{peso(o.sellingPrice)}</span>
-                    </label>
-                  )
-                })}
+            <div className="pb-sheet-scroll">
+              <div className="pb-sheet-img">
+                {sheetProduct.imageUrl ? (
+                  <img src={mediaUrl(sheetProduct.imageUrl)} alt="" />
+                ) : (
+                  <div className="pb-sheet-img-fallback" aria-hidden="true">{sheetProduct.name.slice(0, 1)}</div>
+                )}
               </div>
-            ))}
-            <div className="pb-qty">
-              <button type="button" onClick={() => setSheetQty((q) => Math.max(1, q - 1))}>−</button>
-              <span>{sheetQty}</span>
-              <button type="button" onClick={() => setSheetQty((q) => q + 1)}>+</button>
+              <div className="pb-sheet-meta">
+                <h3>{sheetProduct.name}</h3>
+                {sheetProduct.description ? <p className="muted">{sheetProduct.description}</p> : null}
+                <p className="pb-price">{peso(sheetProduct.sellingPrice)}</p>
+              </div>
+              {sheetProduct.addonGroups.map((g) => (
+                <div key={g.id} className="pb-addon-group">
+                  <b>{g.name} <span className="muted">({g.minSelect}-{g.maxSelect})</span></b>
+                  {g.options.map((o) => {
+                    const on = (sheetPicks[g.id] ?? []).includes(o.id)
+                    return (
+                      <label key={o.id} className={`pb-addon ${on ? 'on' : ''}`}>
+                        <input type="checkbox" checked={on} onChange={() => togglePick(g, o.id)} />
+                        <span>{o.name}</span>
+                        <span>{peso(o.sellingPrice)}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
-            <button type="button" className="primary pb-primary" onClick={addSheetToCart}>Add to cart</button>
+            <div className="pb-sheet-footer">
+              <div className="pb-qty">
+                <button type="button" onClick={() => setSheetQty((q) => Math.max(1, q - 1))}>−</button>
+                <span>{sheetQty}</span>
+                <button type="button" onClick={() => setSheetQty((q) => q + 1)}>+</button>
+              </div>
+              <button type="button" className="primary pb-primary" onClick={addSheetToCart}>Add to cart</button>
+            </div>
           </div>
         </div>
       ) : null}
