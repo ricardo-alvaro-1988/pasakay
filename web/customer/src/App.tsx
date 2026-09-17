@@ -234,21 +234,41 @@ function RideApp({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [desk.mapLat, desk.mapLng])
 
-  if (serviceMode === 'pabili' && pabiliEnabled) {
+  if (pabiliEnabled) {
+    const showPabili = serviceMode === 'pabili'
     return (
-      <div className="app app-pabili">
-        <PabiliStorefront
-          brandName={brandName}
-          brandLogo={brandLogo}
-          desk={desk}
-          places={desk.places}
-          mapLat={desk.mapLat}
-          mapLng={desk.mapLng}
-          onSwitchToPasakay={() => onServiceMode('pasakay')}
-          onDesk={(next) => onDesk(next)}
-          onLogout={logout}
-        />
-      </div>
+      <>
+        <div className={`app app-pabili${showPabili ? '' : ' is-dormant'}`} aria-hidden={!showPabili}>
+          <PabiliStorefront
+            brandName={brandName}
+            brandLogo={brandLogo}
+            desk={desk}
+            places={desk.places}
+            mapLat={desk.mapLat}
+            mapLng={desk.mapLng}
+            onSwitchToPasakay={() => onServiceMode('pasakay')}
+            onDesk={(next) => onDesk(next)}
+            onLogout={logout}
+          />
+        </div>
+        {!showPabili ? (
+          <div className="app">
+            <Home
+              desk={desk}
+              tab={tab}
+              onTab={onTab}
+              pabiliEnabled={pabiliEnabled}
+              onSwitchToPabili={() => onServiceMode('pabili')}
+              accountPage={accountPage}
+              onAccountPage={onAccountPage}
+              onDesk={onDesk}
+              brandName={brandName}
+              brandLogo={brandLogo}
+              onLogout={logout}
+            />
+          </div>
+        ) : null}
+      </>
     )
   }
 

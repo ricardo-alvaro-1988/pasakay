@@ -116,13 +116,20 @@ function orderStatusLabel(status: string) {
 
 function readPersistedCart(): { storeId: string | null; lines: CartLine[] } {
   try {
-    const raw = sessionStorage.getItem(PABILI_CART_KEY)
+    const raw = localStorage.getItem(PABILI_CART_KEY) ?? sessionStorage.getItem(PABILI_CART_KEY)
     if (!raw) return { storeId: null, lines: [] }
     const parsed = JSON.parse(raw) as { storeId?: unknown; lines?: unknown }
     if (!Array.isArray(parsed.lines)) return { storeId: null, lines: [] }
+    const lines = (parsed.lines as CartLine[]).filter((line) =>
+      line
+      && typeof line.key === 'string'
+      && typeof line.productId === 'string'
+      && typeof line.name === 'string'
+      && typeof line.quantity === 'number'
+      && line.quantity > 0)
     return {
       storeId: typeof parsed.storeId === 'string' ? parsed.storeId : null,
-      lines: parsed.lines as CartLine[],
+      lines,
     }
   } catch {
     return { storeId: null, lines: [] }
@@ -131,11 +138,12 @@ function readPersistedCart(): { storeId: string | null; lines: CartLine[] } {
 
 function writePersistedCart(storeId: string | null, lines: CartLine[]) {
   try {
+    sessionStorage.removeItem(PABILI_CART_KEY)
     if (!lines.length) {
-      sessionStorage.removeItem(PABILI_CART_KEY)
+      localStorage.removeItem(PABILI_CART_KEY)
       return
     }
-    sessionStorage.setItem(PABILI_CART_KEY, JSON.stringify({ storeId, lines }))
+    localStorage.setItem(PABILI_CART_KEY, JSON.stringify({ storeId, lines }))
   } catch {
     /* ignore quota / private mode */
   }
@@ -244,12 +252,23 @@ export function PabiliStorefront({
   const cartGoods = useMemo(() => cart.reduce((s, x) => s + lineTotal(x), 0), [cart])
   const storeCategories = store?.categories ?? []
 
+  function commitCart(next: CartLine[] | ((prev: CartLine[]) => CartLine[])) {
+    setCart((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next
+      writePersistedCart(store?.id ?? readPersistedCart().storeId, resolved)
+      return resolved
+    })
+  }
+
   useEffect(() => {
     writePersistedCart(store?.id ?? readPersistedCart().storeId, cart)
   }, [cart, store?.id])
 
   useEffect(() => {
     const persisted = readPersistedCart()
+    if (persisted.lines.length && cart.length === 0) {
+      setCart(persisted.lines)
+    }
     if (!persisted.storeId || !persisted.lines.length) return
     let dead = false
     void (async () => {
@@ -263,6 +282,7 @@ export function PabiliStorefront({
     return () => {
       dead = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -627,7 +647,7 @@ export function PabiliStorefront({
       }
     }
     const key = `${sheetProduct.id}:${addons.map((a) => a.optionId).sort().join(',')}`
-    setCart((prev) => {
+    commitCart((prev) => {
       const existing = prev.find((x) => x.key === key)
       if (existing) {
         return prev.map((x) => (x.key === key ? { ...x, quantity: x.quantity + sheetQty } : x))
@@ -707,8 +727,7 @@ export function PabiliStorefront({
       })
       setOrder(row)
       setOrders((prev) => [row, ...prev.filter((x) => x.id !== row.id)])
-      setCart([])
-      writePersistedCart(null, [])
+      commitCart([])
       setPaymentRef('')
       setPaymentRefInvalid(false)
       setView('orders')
@@ -837,7 +856,14 @@ export function PabiliStorefront({
           </button>
         ) : null}
         <div className="pb-mode pb-mode-sm">
-          <button type="button" className="pb-mode-btn" onClick={onSwitchToPasakay}>
+          <button
+            type="button"
+            className="pb-mode-btn"
+            onClick={() => {
+              writePersistedCart(store?.id ?? readPersistedCart().storeId, cart)
+              onSwitchToPasakay()
+            }}
+          >
             Pasakay
           </button>
           <button type="button" className="pb-mode-btn on" aria-current="page">
@@ -1163,7 +1189,7 @@ export function PabiliStorefront({
                       <button
                         type="button"
                         aria-label="Decrease quantity"
-                        onClick={() => setCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))}
+                        onClick={() => commitCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))}
                       >
                         −
                       </button>
@@ -1171,7 +1197,7 @@ export function PabiliStorefront({
                       <button
                         type="button"
                         aria-label="Increase quantity"
-                        onClick={() => setCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: x.quantity + 1 } : x)))}
+                        onClick={() => commitCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: x.quantity + 1 } : x)))}
                       >
                         +
                       </button>
@@ -1182,7 +1208,7 @@ export function PabiliStorefront({
                     <button
                       type="button"
                       className="pb-line-remove"
-                      onClick={() => setCart((c) => c.filter((x) => x.key !== line.key))}
+                      onClick={() => commitCart((c) => c.filter((x) => x.key !== line.key))}
                     >
                       Remove
                     </button>

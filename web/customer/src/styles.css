@@ -2692,6 +2692,10 @@ button.where-toggle .where { pointer-events: none; }
   overscroll-behavior-y: contain;
   background: #f3f5f7;
 }
+.app-pabili.is-dormant {
+  display: none !important;
+  pointer-events: none;
+}
 .pb-shell {
   min-height: 100%;
   display: flex;
