@@ -1,0 +1,14 @@
+# Pasakya production
+- URL: https://pasakya.com (www also supported).
+- Jenkins: Yapasakay, main branch. Staging deploys only yapasakay.com.
+- Service: pasakya.service, loopback port 5011.
+- Site: /var/www/pasakya.
+- Database: PasakyaDb, cloned using a copy-only yapasakaydb backup on September 19, 2026.
+- Credentials: /etc/pasakya/pasakya-api.env, root-only; never commit values.
+- Startup: /etc/pasakya/start-pasakya-api.sh.
+- Persistent uploads: /var/lib/pasakya/uploads, copied from Yapasakay.
+- Logs: /var/log/pasakya and systemd journal.
+- Release metadata: /var/lib/pasakya/release.json.
+- GoogleAuth__ClientId, GoogleAuth__ClientSecret, Maps__BrowserApiKey and Maps__GoogleApiKey are set specifically for Pasakya.
+- Website Logs: Pasakay group; deployment job Yapasakay.
+- The shared deployment retains site-specific appsettings and uses external storage.

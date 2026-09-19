@@ -4,7 +4,7 @@ branch="${1:?branch required}"
 host="${DEPLOY_HOST:?deployment host required}"
 case "$branch" in
     Staging|origin/Staging) sites='yapasakay:5003' ;;
-    main|origin/main) sites='pricebadz:5004 pasakyaman:5005 trygoride:5006' ;;
+    main|origin/main) sites='pricebadz:5004 pasakyaman:5005 trygoride:5006 pasakya:5011' ;;
     *) echo "Branch is not a deployment target" >&2; exit 1 ;;
 esac
 for target in $sites; do

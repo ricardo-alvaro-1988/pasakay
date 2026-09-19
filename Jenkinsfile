@@ -126,7 +126,7 @@ pipeline {
                             remote_package="/tmp/${target_name}-${package}"
                             remote_script="/tmp/${target_name}-deploy-${BUILD_NUMBER}-${GIT_COMMIT}.sh"
                             version_source_file=""
-                            if [ "${target_name}" = "pasakyaman" ] || [ "${target_name}" = "trygoride" ]; then
+                            if [ "${target_name}" = "pasakyaman" ] || [ "${target_name}" = "trygoride" ] || [ "${target_name}" = "pasakya" ]; then
                                 version_source_file="${PRODUCTION_RELEASE_FILE}"
                             fi
 
