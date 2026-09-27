@@ -171,7 +171,10 @@ public static class OperatorMaps
             trip.IsPromoSponsored && trip.DiscountPercent is int pct
                 ? $"Save{pct}"
                 : null,
-            trip.CustomerBoostAmount);
+            trip.CustomerBoostAmount,
+            trip.FareDiscountKind == FareDiscountKind.None
+                ? null
+                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount));
     }
 
     public static async Task<RideDetailResponse> RideDetailAsync(

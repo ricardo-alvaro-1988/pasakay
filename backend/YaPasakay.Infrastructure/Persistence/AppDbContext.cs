@@ -322,6 +322,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.CustomerFare).HasColumnType("decimal(18,2)");
             entity.Property(x => x.CustomerBoostAmount).HasColumnType("decimal(18,2)");
             entity.Property(x => x.PromoDiscountAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.FareDiscountAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.FareDiscountNote).HasMaxLength(80);
             entity.Property(x => x.DistanceKm).HasColumnType("decimal(8,2)");
             entity.HasOne(x => x.Promo)
                 .WithMany()

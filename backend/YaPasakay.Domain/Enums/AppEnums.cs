@@ -125,6 +125,14 @@ public enum AuditAction
     CustomerUnblocked = 7
 }
 
+public enum FareDiscountKind
+{
+    None = 0,
+    SeniorCitizen = 1,
+    Pwd = 2,
+    Other = 3
+}
+
 public enum PaymentMethod
 {
     Cash = 1,

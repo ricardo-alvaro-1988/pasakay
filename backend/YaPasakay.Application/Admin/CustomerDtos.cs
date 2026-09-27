@@ -30,7 +30,9 @@ public record CustomerBookRequest(
     int PassengerCount = 1,
     string? PromoCode = null,
     decimal CustomerBoostAmount = 0,
-    Guid? VehicleCategoryId = null);
+    Guid? VehicleCategoryId = null,
+    string? FareDiscount = null,
+    string? FareDiscountNote = null);
 
 public record CustomerHailRider(
     Guid RiderId,
@@ -77,7 +79,9 @@ public record CustomerQuoteResponse(
     int? DiscountPercent = null,
     string? PromoCode = null,
     bool HasActivePromos = false,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    string? FareDiscountLabel = null,
+    int? FareDiscountPercent = null);
 
 public record CustomerServiceCheckRequest(
     Guid? PickupBarangayId,
@@ -144,7 +148,8 @@ public record CustomerTripItem(
     int? DiscountPercent = null,
     string? PromoCode = null,
     decimal CustomerBoostAmount = 0,
-    Guid? RiderId = null);
+    Guid? RiderId = null,
+    string? FareDiscountLabel = null);
 
 public record CustomerRateRequest(int Rating, string? Comment);
 

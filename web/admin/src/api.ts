@@ -696,6 +696,7 @@ export type RideDetail = {
   discountPercent?: number | null
   promoCode?: string | null
   customerBoostAmount?: number
+  fareDiscountLabel?: string | null
 }
 
 export type ChatSender = 'Customer' | 'Rider'

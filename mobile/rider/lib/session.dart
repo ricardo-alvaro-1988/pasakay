@@ -268,6 +268,12 @@ class RiderSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> applyDiscount(String tripId, String kind, {required String mode, required int value, String? note}) async {
+    desk = await api.applyDiscount(tripId, kind, mode: mode, value: value, note: note);
+    _deskSignature = _signature(desk);
+    notifyListeners();
+  }
+
   Future<void> startTrip(String tripId) async {
     desk = await api.startTrip(tripId);
     _deskSignature = _signature(desk);

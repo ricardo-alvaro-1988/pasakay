@@ -1025,7 +1025,9 @@ class _BookingSection extends StatelessWidget {
         pickup: activeTrip.pickup,
         dropoff: activeTrip.dropoff,
         passengers: passengerLabel(activeTrip.passengerCount),
-        fareLine: '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
+        fareLine: activeTrip.fareDiscountAmount > 0
+            ? '${peso(activeTrip.collectFromCustomer)} · ${activeTrip.fareDiscountLabel ?? 'Discount'} · ${paymentLabel(activeTrip.paymentMethod)}'
+            : '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
         distanceKm: activeTrip.distanceKm,
         tinted: unread > 0,
         detailsLabel: 'Booking details',
@@ -1090,7 +1092,9 @@ class _BookingSection extends StatelessWidget {
         pickup: offer.pickup,
         dropoff: offer.dropoff,
         passengers: passengerLabel(offer.passengerCount),
-        fareLine: '${peso(offer.fare)} · ${paymentLabel(offer.paymentMethod)}',
+        fareLine: offer.fareDiscountAmount > 0
+            ? '${peso(offer.collectFromCustomer)} · ${offer.fareDiscountLabel ?? 'Discount'} · ${paymentLabel(offer.paymentMethod)}'
+            : '${peso(offer.fare)} · ${paymentLabel(offer.paymentMethod)}',
         distanceKm: offer.distanceKm,
         etaMinutes: mins,
         tinted: true,

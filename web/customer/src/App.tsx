@@ -983,7 +983,7 @@ function Home({
     ? 'Choose pickup and drop-off'
     : busy || searchingArea
       ? (lockedRider && busy ? 'Requesting…' : needsRiderPick && busy ? 'Booking…' : 'Finding a ride…')
-      : quoting
+        : quoting
         ? 'Getting fare…'
         : noOperator.uncovered
           ? `Confirm ${vehicle}`
@@ -1614,11 +1614,14 @@ function TripPanel({
             {trip.discountPercent != null ? ` · ${trip.discountPercent}%` : ''}
           </span>
         ) : null}
+        {trip.fareDiscountLabel ? (
+          <span className="promo-tag">{trip.fareDiscountLabel}</span>
+        ) : null}
         {(trip.customerBoostAmount ?? 0) > 0 ? (
           <span className="boost-tag">+₱{Math.floor(trip.customerBoostAmount!)} boost</span>
         ) : null}
         <b>{peso(tripPay(trip))}</b>
-        {trip.isPromoSponsored && trip.fare > tripPay(trip) ? (
+        {(trip.isPromoSponsored || trip.fareDiscountLabel) && trip.fare > tripPay(trip) ? (
           <span className="promo-was"> was {peso(trip.fare)}</span>
         ) : null}
         {kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · {passengerLabel(trip.passengerCount)} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}

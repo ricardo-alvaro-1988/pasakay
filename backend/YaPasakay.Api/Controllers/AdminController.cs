@@ -1582,7 +1582,10 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             trip.IsPromoSponsored,
             trip.DiscountPercent,
             trip.IsPromoSponsored && trip.DiscountPercent is int pct ? $"Save{pct}" : null,
-            trip.CustomerBoostAmount);
+            trip.CustomerBoostAmount,
+            trip.FareDiscountKind == FareDiscountKind.None
+                ? null
+                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount));
     }
 
     private static RideStopItem MapRideStop(string details, string fullAddress, Barangay? barangay)

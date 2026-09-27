@@ -42,6 +42,11 @@ public class Trip : BaseEntity
     public Guid? PromoId { get; set; }
     public OperatorPromo? Promo { get; set; }
     public int? DiscountPercent { get; set; }
+    public FareDiscountKind FareDiscountKind { get; set; } = FareDiscountKind.None;
+    /// <summary>Pesos taken off CustomerFare for a senior, PWD, or other discount.</summary>
+    public decimal FareDiscountAmount { get; set; }
+    public int? FareDiscountPercent { get; set; }
+    public string? FareDiscountNote { get; set; }
     public Guid? DeriveFareZoneId { get; set; }
     public DeriveFareZone? DeriveFareZone { get; set; }
     public decimal DistanceKm { get; set; }

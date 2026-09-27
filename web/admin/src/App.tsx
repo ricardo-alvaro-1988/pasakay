@@ -4351,6 +4351,9 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
             </small>
           </div>
         ) : null}
+        {ride.fareDiscountLabel ? (
+          <DetailItem label="Discount" value={ride.fareDiscountLabel} />
+        ) : null}
         <DetailItem label="Customer" value={ride.customerName} />
         <DetailItem label="Customer phone" value={ride.customerPhone} />
         <div className="detail-item wide">

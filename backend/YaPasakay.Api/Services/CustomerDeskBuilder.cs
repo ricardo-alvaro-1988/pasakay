@@ -200,6 +200,9 @@ public static class CustomerDeskBuilder
                 ? OperatorPromoRules.DisplayCode(pct)
                 : null,
             trip.CustomerBoostAmount,
-            showRider ? rider!.Id : trip.RiderId);
+            showRider ? rider!.Id : trip.RiderId,
+            trip.FareDiscountKind == FareDiscountKind.None
+                ? null
+                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount));
     }
 }

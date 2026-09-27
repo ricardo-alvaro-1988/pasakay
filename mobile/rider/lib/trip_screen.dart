@@ -23,6 +23,21 @@ class TripScreen extends StatelessWidget {
     await launchUrl(Uri(scheme: 'tel', path: cleaned));
   }
 
+  Future<void> _askDiscount(BuildContext context, RiderTrip trip, String kind, String label, {bool askReason = false}) async {
+    final result = await showDialog<({String mode, int value, String? note})>(
+      context: context,
+      builder: (context) => _DiscountDialog(title: label, askReason: askReason),
+    );
+    if (result == null || !context.mounted) return;
+    try {
+      await session.applyDiscount(trip.tripId, kind, mode: result.mode, value: result.value, note: result.note);
+    } catch (err) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$err')));
+      }
+    }
+  }
+
   Future<void> _navigate(RiderTrip trip) async {
     final dest = trip.status == 'Waiting' || trip.canStart
         ? (lat: trip.pickupLat, lng: trip.pickupLng, label: trip.pickup)
@@ -246,6 +261,22 @@ class TripScreen extends StatelessWidget {
                         ),
                       ),
                     ],
+                    if (trip.fareDiscountAmount > 0) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFFCD34D)),
+                        ),
+                        child: Text(
+                          '${trip.fareDiscountLabel ?? 'Discount'}: collect ${peso(trip.collectFromCustomer)} from customer',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                        ),
+                      ),
+                    ],
                     if (trip.isPromoSponsored) ...[
                       const SizedBox(height: 10),
                       Container(
@@ -285,6 +316,29 @@ class TripScreen extends StatelessWidget {
                 FilledButton(
                   onPressed: () => session.startTrip(trip.tripId),
                   child: const Text('Start trip'),
+                ),
+              ],
+              if (trip.canStart || trip.canComplete) ...[
+                const SizedBox(height: 8),
+                const Text('Discount', style: TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton(
+                      onPressed: () => _askDiscount(context, trip, 'SeniorCitizen', 'Senior citizen'),
+                      child: const Text('Senior citizen'),
+                    ),
+                    OutlinedButton(
+                      onPressed: () => _askDiscount(context, trip, 'Pwd', 'PWD'),
+                      child: const Text('PWD'),
+                    ),
+                    OutlinedButton(
+                      onPressed: () => _askDiscount(context, trip, 'Other', 'Others', askReason: true),
+                      child: const Text('Others'),
+                    ),
+                  ],
                 ),
               ],
               if (trip.canComplete) ...[
@@ -470,4 +524,83 @@ String _historyDate(DateTime value) {
 bool _endedStatus(String status) {
   final value = status.toLowerCase();
   return value == 'completed' || value == 'cancelled' || value == '1' || value == '2';
+}
+
+class _DiscountDialog extends StatefulWidget {
+  const _DiscountDialog({required this.title, required this.askReason});
+
+  final String title;
+  final bool askReason;
+
+  @override
+  State<_DiscountDialog> createState() => _DiscountDialogState();
+}
+
+class _DiscountDialogState extends State<_DiscountDialog> {
+  final _amount = TextEditingController();
+  final _reason = TextEditingController();
+  var _percent = true;
+
+  @override
+  void dispose() {
+    _amount.dispose();
+    _reason.dispose();
+    super.dispose();
+  }
+
+  void _apply() {
+    final whole = int.tryParse(_amount.text.trim());
+    if (whole == null || whole < 1 || (_percent && whole > 100)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_percent ? 'Enter a percent from 1 to 100.' : 'Enter a whole peso amount.')),
+      );
+      return;
+    }
+    final reason = _reason.text.trim();
+    if (widget.askReason && reason.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Say what the other discount is for.')),
+      );
+      return;
+    }
+    Navigator.pop(context, (mode: _percent ? 'percent' : 'amount', value: whole, note: widget.askReason ? reason : null));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: true, label: Text('%')),
+              ButtonSegment(value: false, label: Text('₱')),
+            ],
+            selected: {_percent},
+            onSelectionChanged: (next) => setState(() => _percent = next.first),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _amount,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(hintText: _percent ? 'Percent, for example 20' : 'Pesos, for example 50'),
+          ),
+          if (widget.askReason) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reason,
+              maxLength: 80,
+              decoration: const InputDecoration(hintText: 'Student, resident, or other reason'),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: _apply, child: const Text('Apply')),
+      ],
+    );
+  }
 }

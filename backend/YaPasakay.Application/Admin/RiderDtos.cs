@@ -2,6 +2,8 @@ using YaPasakay.Domain.Enums;
 
 namespace YaPasakay.Application.Admin;
 
+public record RiderFareDiscountRequest(string Kind, string? Note, string Mode, decimal Value);
+
 public record RiderHailBody(Guid CustomerId);
 
 public record RiderPendingHail(
@@ -47,7 +49,9 @@ public record RiderOfferItem(
     decimal PromoDiscountAmount = 0,
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    string? FareDiscountLabel = null,
+    decimal FareDiscountAmount = 0);
 
 public record RiderActiveTrip(
     Guid TripId,
@@ -83,7 +87,9 @@ public record RiderActiveTrip(
     decimal PromoDiscountAmount = 0,
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    string? FareDiscountLabel = null,
+    decimal FareDiscountAmount = 0);
 
 public record RiderDeskResponse(
     Guid RiderId,

@@ -575,7 +575,11 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.PromoDiscountAmount,
             trip.IsPromoSponsored,
             trip.DiscountPercent,
-            trip.CustomerBoostAmount);
+            trip.CustomerBoostAmount,
+            trip.FareDiscountKind == FareDiscountKind.None
+                ? null
+                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount),
+            trip.FareDiscountAmount);
 
     public static RiderActiveTrip MapTrip(
         Trip trip,
@@ -617,7 +621,11 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.PromoDiscountAmount,
             trip.IsPromoSponsored,
             trip.DiscountPercent,
-            trip.CustomerBoostAmount);
+            trip.CustomerBoostAmount,
+            trip.FareDiscountKind == FareDiscountKind.None
+                ? null
+                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount),
+            trip.FareDiscountAmount);
 
     public async Task<HashSet<Guid>> LiveHailedRiderIdsAsync(CancellationToken cancellationToken)
     {

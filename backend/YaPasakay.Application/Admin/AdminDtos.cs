@@ -228,7 +228,8 @@ public record RideDetailResponse(
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
     string? PromoCode = null,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    string? FareDiscountLabel = null);
 
 public record RideChatMessageItem(
     Guid Id,

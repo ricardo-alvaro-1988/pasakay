@@ -98,6 +98,7 @@ export type CustomerTrip = {
   promoCode?: string | null
   customerBoostAmount?: number
   riderId?: string | null
+  fareDiscountLabel?: string | null
 }
 
 export type FavoriteRider = {
@@ -152,6 +153,8 @@ export type Quote = {
   promoCode?: string | null
   hasActivePromos?: boolean
   customerBoostAmount?: number
+  fareDiscountLabel?: string | null
+  fareDiscountPercent?: number | null
 }
 
 export type BookingDispatchMode = 'Broadcast' | 'Selection' | 'Both'
@@ -213,6 +216,8 @@ export type BookBody = {
   passengerCount?: number
   promoCode?: string
   customerBoostAmount?: number
+  fareDiscount?: string
+  fareDiscountNote?: string
 }
 
 export type HailRider = {
@@ -288,6 +293,7 @@ export type CustomerTripDetail = {
   discountPercent?: number | null
   promoCode?: string | null
   customerBoostAmount?: number
+  fareDiscountLabel?: string | null
 }
 
 export function chatFromRider(sender: unknown) {

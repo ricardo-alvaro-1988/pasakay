@@ -360,6 +360,8 @@ class JobOffer {
     this.isPromoSponsored = false,
     this.discountPercent,
     this.customerBoostAmount = 0,
+    this.fareDiscountLabel,
+    this.fareDiscountAmount = 0,
   });
 
   final String offerId;
@@ -385,16 +387,24 @@ class JobOffer {
   final bool isPromoSponsored;
   final int? discountPercent;
   final double customerBoostAmount;
+  final String? fareDiscountLabel;
+  final double fareDiscountAmount;
 
   double get collectFromCustomer =>
       customerFare > 0 ? customerFare : fare;
 
   double get collectFromOperator {
-    if (!isPromoSponsored) return 0;
-    if (promoDiscountAmount > 0) return promoDiscountAmount;
-    final diff = fare - collectFromCustomer;
-    if (diff <= 0) return 0;
-    return diff > fare ? fare : diff;
+    var owed = 0.0;
+    if (isPromoSponsored) {
+      if (promoDiscountAmount > 0) {
+        owed += promoDiscountAmount;
+      } else {
+        final diff = fare - collectFromCustomer - fareDiscountAmount;
+        if (diff > 0) owed += diff > fare ? fare : diff;
+      }
+    }
+    if (fareDiscountAmount > 0) owed += fareDiscountAmount;
+    return owed;
   }
 
   factory JobOffer.fromJson(Map<String, dynamic> json) => JobOffer(
@@ -421,6 +431,8 @@ class JobOffer {
         isPromoSponsored: asFlag(json['isPromoSponsored']),
         discountPercent: json['discountPercent'] is num ? (json['discountPercent'] as num).toInt() : null,
         customerBoostAmount: (json['customerBoostAmount'] as num?)?.toDouble() ?? 0,
+        fareDiscountLabel: asTextOrNull(json['fareDiscountLabel']),
+        fareDiscountAmount: (json['fareDiscountAmount'] as num?)?.toDouble() ?? 0,
       );
 }
 
@@ -457,6 +469,8 @@ class RiderTrip {
     this.isPromoSponsored = false,
     this.discountPercent,
     this.customerBoostAmount = 0,
+    this.fareDiscountLabel,
+    this.fareDiscountAmount = 0,
   });
 
   final String tripId;
@@ -490,6 +504,8 @@ class RiderTrip {
   final bool isPromoSponsored;
   final int? discountPercent;
   final double customerBoostAmount;
+  final String? fareDiscountLabel;
+  final double fareDiscountAmount;
 
   bool get isNewCustomer => previousBookingCount == 0;
 
@@ -499,11 +515,17 @@ class RiderTrip {
       customerFare > 0 ? customerFare : fare;
 
   double get collectFromOperator {
-    if (!isPromoSponsored) return 0;
-    if (promoDiscountAmount > 0) return promoDiscountAmount;
-    final diff = fare - collectFromCustomer;
-    if (diff <= 0) return 0;
-    return diff > fare ? fare : diff;
+    var owed = 0.0;
+    if (isPromoSponsored) {
+      if (promoDiscountAmount > 0) {
+        owed += promoDiscountAmount;
+      } else {
+        final diff = fare - collectFromCustomer - fareDiscountAmount;
+        if (diff > 0) owed += diff > fare ? fare : diff;
+      }
+    }
+    if (fareDiscountAmount > 0) owed += fareDiscountAmount;
+    return owed;
   }
 
   factory RiderTrip.fromJson(Map<String, dynamic> json) => RiderTrip(
@@ -542,6 +564,8 @@ class RiderTrip {
         isPromoSponsored: asFlag(json['isPromoSponsored']),
         discountPercent: json['discountPercent'] is num ? (json['discountPercent'] as num).toInt() : null,
         customerBoostAmount: (json['customerBoostAmount'] as num?)?.toDouble() ?? 0,
+        fareDiscountLabel: asTextOrNull(json['fareDiscountLabel']),
+        fareDiscountAmount: (json['fareDiscountAmount'] as num?)?.toDouble() ?? 0,
       );
 }
 

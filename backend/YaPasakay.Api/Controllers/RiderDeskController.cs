@@ -557,6 +557,69 @@ public class RiderDeskController(
         return Ok(await BuildDeskAsync(rider.Id, cancellationToken));
     }
 
+    [HttpPost("trips/{id:guid}/discount")]
+    public async Task<ActionResult<RiderDeskResponse>> ApplyDiscount(
+        Guid id,
+        [FromBody] RiderFareDiscountRequest request,
+        CancellationToken cancellationToken)
+    {
+        var (rider, status, message) = await RiderContext.RequireAsync(db, User, cancellationToken);
+        if (rider is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var trip = await db.Trips.FirstOrDefaultAsync(x => x.Id == id && x.RiderId == rider.Id, cancellationToken);
+        if (trip is null)
+        {
+            return NotFound();
+        }
+
+        if (trip.Status is not (TripStatus.Waiting or TripStatus.Ongoing))
+        {
+            return BadRequest(new { message = "Apply the discount while the trip is with you." });
+        }
+
+        if (!FareDiscountRules.TryParse(request.Kind, out var kind) || kind == FareDiscountKind.None)
+        {
+            return BadRequest(new { message = "Choose Senior citizen, PWD, or Others." });
+        }
+
+        var payable = (trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare) + trip.FareDiscountAmount;
+        var (pay, amount, percent, error) = FareDiscountRules.Apply(
+            payable,
+            kind,
+            request.Note,
+            requireNote: true,
+            request.Mode,
+            request.Value);
+        if (error is not null)
+        {
+            return BadRequest(new { message = error });
+        }
+
+        trip.CustomerFare = pay;
+        trip.FareDiscountKind = kind;
+        trip.FareDiscountAmount = amount;
+        trip.FareDiscountPercent = percent;
+        trip.FareDiscountNote = kind == FareDiscountKind.Other ? request.Note?.Trim() : null;
+        trip.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (trip.CustomerId is Guid customerId)
+        {
+            var label = FareDiscountRules.Label(kind, trip.FareDiscountNote, percent, amount);
+            await live.CustomerTripAsync(
+                customerId,
+                "discount",
+                "Discount applied",
+                $"{label}. You pay {pay:0.##}.",
+                cancellationToken);
+        }
+
+        return Ok(await BuildDeskAsync(rider.Id, cancellationToken));
+    }
+
     [HttpGet("trips/{id:guid}/chat")]
     public async Task<ActionResult<IReadOnlyList<RideChatMessageItem>>> Chat(
         Guid id,
