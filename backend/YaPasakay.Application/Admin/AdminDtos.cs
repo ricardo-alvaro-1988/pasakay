@@ -1566,16 +1566,17 @@ public record RiderNoticeListItem(
     Guid Id,
     string Title,
     string Body,
-    DateTime ScheduledAtUtc,
-    DateTime? SentAtUtc,
-    DateTime? CancelledAtUtc,
+    string NotifyAt,
+    DateTime NextFireUtc,
+    DateTime? LastSentAtUtc,
+    bool IsActive,
     string Status,
     DateTime CreatedAtUtc);
 
 public record CreateRiderNoticeRequest(
     string? Title,
     string? Body,
-    DateTime? ScheduledAtUtc);
+    string? NotifyAt);
 
 public static class UploadUrls
 {

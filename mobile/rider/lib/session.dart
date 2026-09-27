@@ -428,11 +428,15 @@ class RiderSession extends ChangeNotifier {
     }
     final prefs = await SharedPreferences.getInstance();
     final seen = prefs.getStringList(_noticeSeenKey)?.toSet() ?? <String>{};
-    final fresh = notices.where((notice) => notice.id.isNotEmpty && !seen.contains(notice.id)).toList();
+    String stampOf(RiderNotice notice) {
+      final sent = notice.sentAt?.toUtc().toIso8601String() ?? '';
+      return '${notice.id}|$sent';
+    }
+    final fresh = notices.where((notice) => notice.id.isNotEmpty && !seen.contains(stampOf(notice)) && !seen.contains(notice.id)).toList();
     if (fresh.isEmpty) {
       return;
     }
-    seen.addAll(fresh.map((notice) => notice.id));
+    seen.addAll(fresh.map(stampOf));
     final kept = seen.toList();
     if (kept.length > 80) {
       kept.removeRange(0, kept.length - 80);

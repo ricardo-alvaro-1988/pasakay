@@ -114,7 +114,7 @@ public record RiderDeskResponse(
     IReadOnlyList<RiderNoticeItem> Notices);
 
 public record RiderNoticeItem(
-    Guid Id,
+    string Id,
     string Title,
     string Body,
     DateTime SentAtUtc);

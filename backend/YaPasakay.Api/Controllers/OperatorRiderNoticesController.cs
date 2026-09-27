@@ -12,7 +12,7 @@ namespace YaPasakay.Api.Controllers;
 [Authorize(Roles = "Operator")]
 [ServiceFilter(typeof(OperatorAccessFilter))]
 [Route("api/operator/rider-notices")]
-public class OperatorRiderNoticesController(AppDbContext db, RiderNoticeService notices) : ControllerBase
+public class OperatorRiderNoticesController(AppDbContext db) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<RiderNoticeListItem>>> List(CancellationToken cancellationToken)
@@ -25,7 +25,8 @@ public class OperatorRiderNoticesController(AppDbContext db, RiderNoticeService 
 
         var rows = await db.RiderNotices.AsNoTracking()
             .Where(x => x.OperatorId == op.Id)
-            .OrderByDescending(x => x.ScheduledAtUtc)
+            .OrderByDescending(x => x.IsActive)
+            .ThenBy(x => x.NotifyMinuteOfDay)
             .Take(50)
             .ToListAsync(cancellationToken);
 
@@ -60,26 +61,9 @@ public class OperatorRiderNoticesController(AppDbContext db, RiderNoticeService 
             return BadRequest(new { message = "Message must be 400 characters or fewer." });
         }
 
-        if (request.ScheduledAtUtc is not DateTime scheduledRaw)
+        if (!RiderNoticeService.TryParseMinute(request.NotifyAt, out var minuteOfDay))
         {
-            return BadRequest(new { message = "Choose when riders should be notified. Use Philippine time." });
-        }
-
-        var scheduled = ToUtc(scheduledRaw);
-        var now = DateTime.UtcNow;
-        if (scheduled < now.AddMinutes(-2))
-        {
-            return BadRequest(new { message = "Choose a time from now onward." });
-        }
-
-        if (scheduled > now.AddDays(30))
-        {
-            return BadRequest(new { message = "Schedule within the next 30 days." });
-        }
-
-        if (scheduled < now)
-        {
-            scheduled = now;
+            return BadRequest(new { message = "Choose a daily time, such as 3:00 PM. Use Philippine time." });
         }
 
         var item = new RiderNotice
@@ -87,17 +71,12 @@ public class OperatorRiderNoticesController(AppDbContext db, RiderNoticeService 
             OperatorId = op.Id,
             Title = title,
             Body = body,
-            ScheduledAtUtc = scheduled
+            NotifyMinuteOfDay = minuteOfDay,
+            ScheduledAtUtc = RiderNoticeService.NextFireUtc(minuteOfDay, DateTime.UtcNow),
+            IsActive = true
         };
         db.RiderNotices.Add(item);
         await db.SaveChangesAsync(cancellationToken);
-
-        if (scheduled <= DateTime.UtcNow)
-        {
-            await notices.DeliverAsync(item.Id, cancellationToken);
-            item = await db.RiderNotices.AsNoTracking().FirstAsync(x => x.Id == item.Id, cancellationToken);
-        }
-
         return Ok(Map(item));
     }
 
@@ -118,15 +97,12 @@ public class OperatorRiderNoticesController(AppDbContext db, RiderNoticeService 
             return NotFound();
         }
 
-        if (item.SentAtUtc is not null)
+        if (item.IsActive && item.CancelledAtUtc is null)
         {
-            return BadRequest(new { message = "This announcement was already sent." });
-        }
-
-        if (item.CancelledAtUtc is null)
-        {
-            item.CancelledAtUtc = DateTime.UtcNow;
-            item.UpdatedAtUtc = item.CancelledAtUtc;
+            var now = DateTime.UtcNow;
+            item.IsActive = false;
+            item.CancelledAtUtc = now;
+            item.UpdatedAtUtc = now;
             await db.SaveChangesAsync(cancellationToken);
         }
 
@@ -135,27 +111,16 @@ public class OperatorRiderNoticesController(AppDbContext db, RiderNoticeService 
 
     private static RiderNoticeListItem Map(RiderNotice item)
     {
-        var statusName = item.CancelledAtUtc is not null
-            ? "Cancelled"
-            : item.SentAtUtc is not null
-                ? "Sent"
-                : "Scheduled";
+        var active = item.IsActive && item.CancelledAtUtc is null;
         return new RiderNoticeListItem(
             item.Id,
             item.Title,
             item.Body,
+            RiderNoticeService.FormatMinute(item.NotifyMinuteOfDay),
             DateTime.SpecifyKind(item.ScheduledAtUtc, DateTimeKind.Utc),
             item.SentAtUtc is DateTime sent ? DateTime.SpecifyKind(sent, DateTimeKind.Utc) : null,
-            item.CancelledAtUtc is DateTime cancelled ? DateTime.SpecifyKind(cancelled, DateTimeKind.Utc) : null,
-            statusName,
+            active,
+            active ? "Active" : "Stopped",
             DateTime.SpecifyKind(item.CreatedAtUtc, DateTimeKind.Utc));
     }
-
-    private static DateTime ToUtc(DateTime value) =>
-        value.Kind switch
-        {
-            DateTimeKind.Utc => value,
-            DateTimeKind.Local => value.ToUniversalTime(),
-            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
-        };
 }

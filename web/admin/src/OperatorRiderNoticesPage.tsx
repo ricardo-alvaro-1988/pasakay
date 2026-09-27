@@ -3,26 +3,11 @@ import { api, RiderNotice } from './api'
 
 const PH_TZ = 'Asia/Manila'
 
-function fromPhInput(value: string) {
-  const raw = value.trim()
-  if (!raw) return null
-  const normalized = raw.length === 16 ? `${raw}:00` : raw
-  const stamp = new Date(`${normalized}+08:00`)
-  return Number.isNaN(stamp.getTime()) ? null : stamp.toISOString()
-}
-
-function nowPhInput() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: PH_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(new Date())
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
-  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
+function clockLabel(value: string) {
+  const [hour, minute] = value.split(':').map(Number)
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return value
+  const stamp = new Date(Date.UTC(2026, 0, 1, hour, minute))
+  return stamp.toLocaleTimeString('en-PH', { timeZone: 'UTC', hour: 'numeric', minute: '2-digit' })
 }
 
 function phDateTime(value: string | null | undefined) {
@@ -41,7 +26,7 @@ export function OperatorRiderNoticesPage() {
   const [items, setItems] = useState<RiderNotice[]>([])
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
-  const [when, setWhen] = useState(nowPhInput)
+  const [when, setWhen] = useState('15:00')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -56,13 +41,12 @@ export function OperatorRiderNoticesPage() {
 
   async function submit(event: FormEvent) {
     event.preventDefault()
-    const scheduledAtUtc = fromPhInput(when)
     if (!title.trim() || !body.trim()) {
       setError('Title and message are required.')
       return
     }
-    if (!scheduledAtUtc) {
-      setError('Choose when riders should be notified.')
+    if (!when) {
+      setError('Choose the daily time.')
       return
     }
     setBusy(true)
@@ -72,31 +56,29 @@ export function OperatorRiderNoticesPage() {
       const saved = await api.createRiderNotice({
         title: title.trim(),
         body: body.trim(),
-        scheduledAtUtc,
+        notifyAt: when,
       })
       setTitle('')
       setBody('')
-      setWhen(nowPhInput())
+      setWhen('15:00')
       await load()
-      setNotice(saved.status === 'Sent'
-        ? 'Announcement sent. Riders get a short quiet tone.'
-        : `Announcement scheduled for ${phDateTime(saved.scheduledAtUtc)}.`)
+      setNotice(`Riders will be notified every day at ${clockLabel(saved.notifyAt)}.`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not schedule this announcement.')
+      setError(err instanceof Error ? err.message : 'Could not save this announcement.')
     } finally {
       setBusy(false)
     }
   }
 
-  async function cancel(item: RiderNotice) {
+  async function stop(item: RiderNotice) {
     setError('')
     setNotice('')
     try {
       await api.cancelRiderNotice(item.id)
       await load()
-      setNotice('Scheduled announcement cancelled.')
+      setNotice('Daily announcement stopped.')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not cancel this announcement.')
+      setError(err instanceof Error ? err.message : 'Could not stop this announcement.')
     }
   }
 
@@ -105,9 +87,9 @@ export function OperatorRiderNoticesPage() {
       <form className="card" onSubmit={(event) => void submit(event)}>
         <div className="panel-head">
           <div>
-            <h2 style={{ margin: 0 }}>Schedule a rider announcement</h2>
+            <h2 style={{ margin: 0 }}>Daily rider announcement</h2>
             <p className="muted" style={{ margin: '4px 0 0' }}>
-              Your riders get a notification with a short quiet tone, not the job alarm. Time is Philippine time.
+              Riders are notified every day at this time with a short quiet tone. Time is Philippine time. Example: 3:00 PM.
             </p>
           </div>
         </div>
@@ -121,15 +103,15 @@ export function OperatorRiderNoticesPage() {
             <textarea maxLength={400} value={body} onChange={(e) => setBody(e.target.value)} />
           </label>
           <label className="field">
-            <span>Notify at</span>
-            <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+            <span>Every day at</span>
+            <input type="time" value={when} onChange={(e) => setWhen(e.target.value)} />
           </label>
         </div>
         {error ? <p className="error">{error}</p> : null}
         {notice ? <p className="ok">{notice}</p> : null}
         <div style={{ display: 'flex', gap: 10, maxWidth: 280 }}>
           <button className="btn" type="submit" disabled={busy}>
-            {busy ? 'Saving…' : 'Schedule'}
+            {busy ? 'Saving…' : 'Save daily time'}
           </button>
         </div>
       </form>
@@ -143,7 +125,8 @@ export function OperatorRiderNoticesPage() {
             <thead>
               <tr>
                 <th>Announcement</th>
-                <th>When</th>
+                <th>Every day</th>
+                <th>Last sent</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -151,27 +134,26 @@ export function OperatorRiderNoticesPage() {
             <tbody>
               {items.length === 0 ? (
                 <tr>
-                  <td colSpan={4}>No announcements yet.</td>
+                  <td colSpan={5}>No announcements yet.</td>
                 </tr>
               ) : items.map((item) => (
                 <tr key={item.id}>
                   <td>
                     <strong>{item.title}</strong>
                     <div className="muted">{item.body}</div>
+                    {item.isActive ? <small className="muted">Next {phDateTime(item.nextFireUtc)}</small> : null}
                   </td>
+                  <td>{clockLabel(item.notifyAt)}</td>
+                  <td>{item.lastSentAtUtc ? phDateTime(item.lastSentAtUtc) : '—'}</td>
                   <td>
-                    <div>{phDateTime(item.scheduledAtUtc)}</div>
-                    {item.sentAtUtc ? <small className="muted">Sent {phDateTime(item.sentAtUtc)}</small> : null}
-                  </td>
-                  <td>
-                    <span className={`tag ${item.status === 'Sent' ? 'active' : item.status === 'Cancelled' ? 'rejected' : 'pending'}`}>
+                    <span className={`tag ${item.status === 'Active' ? 'active' : 'rejected'}`}>
                       {item.status}
                     </span>
                   </td>
                   <td>
-                    {item.status === 'Scheduled' ? (
-                      <button className="btn tiny danger" type="button" onClick={() => void cancel(item)}>
-                        Cancel
+                    {item.isActive ? (
+                      <button className="btn tiny danger" type="button" onClick={() => void stop(item)}>
+                        Stop
                       </button>
                     ) : null}
                   </td>

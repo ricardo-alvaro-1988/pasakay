@@ -828,11 +828,16 @@ public class RiderDeskController(
             .Select(x => new { x.Id, x.Title, x.Body, SentAtUtc = x.SentAtUtc!.Value })
             .ToListAsync(cancellationToken);
         var notices = noticeRows
-            .Select(x => new RiderNoticeItem(
-                x.Id,
-                x.Title,
-                x.Body,
-                DateTime.SpecifyKind(x.SentAtUtc, DateTimeKind.Utc)))
+            .Select(x =>
+            {
+                var sent = DateTime.SpecifyKind(x.SentAtUtc, DateTimeKind.Utc);
+                var day = YaPasakay.Application.Common.PhilippineTime.ToPh(sent);
+                return new RiderNoticeItem(
+                    $"{x.Id:N}:{day:yyyyMMdd}",
+                    x.Title,
+                    x.Body,
+                    sent);
+            })
             .ToList();
 
         RiderPendingHail? pendingHail = null;

@@ -545,7 +545,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.Entity<RiderNotice>(entity =>
         {
             entity.HasIndex(x => new { x.OperatorId, x.ScheduledAtUtc });
-            entity.HasIndex(x => new { x.SentAtUtc, x.ScheduledAtUtc });
+            entity.HasIndex(x => new { x.IsActive, x.ScheduledAtUtc });
             entity.Property(x => x.Title).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Body).HasMaxLength(400).IsRequired();
             entity.HasOne(x => x.Operator)

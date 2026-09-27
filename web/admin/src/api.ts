@@ -1256,15 +1256,16 @@ export type BookingReportResponse = {
   }
 }
 
-export type RiderNoticeStatus = 'Scheduled' | 'Sent' | 'Cancelled'
+export type RiderNoticeStatus = 'Active' | 'Stopped'
 
 export type RiderNotice = {
   id: string
   title: string
   body: string
-  scheduledAtUtc: string
-  sentAtUtc: string | null
-  cancelledAtUtc: string | null
+  notifyAt: string
+  nextFireUtc: string
+  lastSentAtUtc: string | null
+  isActive: boolean
   status: RiderNoticeStatus
   createdAtUtc: string
 }
@@ -1885,7 +1886,7 @@ export const api = {
   },
   scheduledBooking: (id: string) => request<RideDetail>(`/api/operator/schedule/${id}`),
   riderNotices: () => request<RiderNotice[]>('/api/operator/rider-notices'),
-  createRiderNotice: (body: { title: string; body: string; scheduledAtUtc: string }) =>
+  createRiderNotice: (body: { title: string; body: string; notifyAt: string }) =>
     request<RiderNotice>('/api/operator/rider-notices', {
       method: 'POST',
       body: JSON.stringify(body),
