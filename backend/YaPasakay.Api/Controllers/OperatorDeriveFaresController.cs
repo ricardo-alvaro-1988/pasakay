@@ -554,7 +554,7 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
                     preset.Code,
                     offer.DisplayName ?? preset.Name,
                     preset.IsCargo,
-                    offer.MaxPassengers ?? preset.MaxPassengers,
+                    Math.Max(preset.MaxPassengers, offer.MaxPassengers ?? 0),
                     offer.CommissionPercent,
                     MapRates(zone.Matrices.FirstOrDefault(x => x.VehicleType == preset.LegacyEnum)
                         ?? zone.Matrices.FirstOrDefault(x => x.VehicleCategoryId == preset.Id)));

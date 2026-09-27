@@ -594,7 +594,7 @@ public static class OperatorMaps
                     preset.Code,
                     offer.DisplayName ?? preset.Name,
                     preset.IsCargo,
-                    offer.MaxPassengers ?? preset.MaxPassengers,
+                    Math.Max(preset.MaxPassengers, offer.MaxPassengers ?? 0),
                     system,
                     FareRates(
                         fares.FirstOrDefault(x => x.VehicleCategoryId == preset.Id)
