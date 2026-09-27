@@ -125,9 +125,11 @@ public class DeriveFarePricingService(AppDbContext db)
                     && x.VehicleType == vehicleType
                     && x.IsActive,
                 cancellationToken);
+        // Zone prices apply only when this vehicle is offered inside the zone.
+        // Otherwise the caller uses the municipality fare the operator already saved.
         if (matrix is null)
         {
-            return (matched, null, $"No derive fare rates for {vehicleType} in {matched.Name}.");
+            return (null, null, null);
         }
 
         return (matched, matrix, null);

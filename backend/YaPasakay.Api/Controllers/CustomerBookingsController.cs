@@ -498,7 +498,8 @@ public class CustomerBookingsController(
                 fareCap = fareCap is > 0 ? Math.Min(fareCap.Value, deriveCap) : deriveCap;
             }
 
-            var maxPassengers = EffectiveSeatCapacity(preset.MaxPassengers, offer?.MaxPassengers, fareCap);
+            var catalogMax = Math.Max(preset.MaxPassengers, offer?.MaxPassengers ?? 0);
+            var maxPassengers = EffectiveSeatCapacity(catalogMax, null, fareCap);
             vehicles.Add(new CustomerVehicleOfferDto(
                 preset.Id,
                 preset.Code,
@@ -984,7 +985,9 @@ public class CustomerBookingsController(
 
             if (offer.VehicleCategory is not null)
             {
-                maxPassengers = offer.MaxPassengers ?? offer.VehicleCategory.MaxPassengers;
+                var catalogMax = VehicleCatalog.PresetFor(offer.VehicleCategory.Id)?.MaxPassengers
+                    ?? offer.VehicleCategory.MaxPassengers;
+                maxPassengers = Math.Max(catalogMax, offer.MaxPassengers ?? 0);
                 isCargo = offer.VehicleCategory.IsCargo;
             }
         }
