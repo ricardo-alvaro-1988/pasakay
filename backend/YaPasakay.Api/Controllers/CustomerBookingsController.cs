@@ -609,14 +609,14 @@ public class CustomerBookingsController(
                 x => x.CustomerId == customer.Id && x.RiderId == favoriteRiderId,
                 cancellationToken);
 
-        var isDirectHail = body.HailQr
+        var isQrOrLiveHail = body.HailQr
             || (TripBroadcastService.HailIsLive(customer.HailAtUtc)
                 && customer.HailRiderId is Guid hailedId
-                && body.RiderId == hailedId)
-            || isFavoriteDirect;
+                && body.RiderId == hailedId);
+        var isDirectHail = isQrOrLiveHail;
 
         var preview = await PrepareAsync(
-            body with { RiderId = isDirectHail ? body.RiderId : null },
+            body with { RiderId = isDirectHail || isFavoriteDirect ? body.RiderId : null },
             requireHailReady: false,
             requireRider: false,
             customer.Id,
@@ -628,8 +628,8 @@ public class CustomerBookingsController(
 
         var mode = preview.Operator.BookingDispatchMode;
         var isScheduled = scheduled is not null;
-        var customerPicksRider = !isDirectHail && !isScheduled && body.RiderId is Guid;
-        if (!isDirectHail && !isScheduled)
+        var customerPicksRider = !isDirectHail && !isFavoriteDirect && !isScheduled && body.RiderId is Guid;
+        if (!isDirectHail && !isFavoriteDirect && !isScheduled)
         {
             if (mode == BookingDispatchMode.Selection && body.RiderId is null)
             {
@@ -644,7 +644,7 @@ public class CustomerBookingsController(
 
         var prepared = await PrepareAsync(
             body,
-            requireHailReady: isDirectHail,
+            requireHailReady: isDirectHail || isFavoriteDirect,
             requireRider: true,
             customer.Id,
             cancellationToken);
@@ -747,6 +747,25 @@ public class CustomerBookingsController(
             await db.SaveChangesAsync(cancellationToken);
             await live.RiderAssignedAsync(prepared.Rider.Id, trip.Reference, isDirectHail, cancellationToken);
             await live.CustomerChangedAsync(customer.Id, isDirectHail ? "hail-booked" : "assigned", cancellationToken);
+            return Ok(await CustomerDeskBuilder.BuildAsync(db, customer, cancellationToken));
+        }
+
+        if (isFavoriteDirect)
+        {
+            var distance = Geo.DistanceKm(prepared.Rider.LastLat, prepared.Rider.LastLng, prepared.PickupLat, prepared.PickupLng);
+            db.TripOffers.Add(new TripOffer
+            {
+                TripId = trip.Id,
+                RiderId = prepared.Rider.Id,
+                Status = OfferStatus.Offered,
+                IsPreferred = true,
+                DistanceKm = distance is double km ? Math.Round((decimal)km, 2) : null,
+                OfferedAtUtc = now,
+                ExpiresAtUtc = now.Add(TripBroadcastService.LiveOfferTtl)
+            });
+            await db.SaveChangesAsync(cancellationToken);
+            await live.RiderOfferAsync(prepared.Rider.Id, trip.Reference, cancellationToken);
+            await live.CustomerChangedAsync(customer.Id, "booked", cancellationToken);
             return Ok(await CustomerDeskBuilder.BuildAsync(db, customer, cancellationToken));
         }
 
