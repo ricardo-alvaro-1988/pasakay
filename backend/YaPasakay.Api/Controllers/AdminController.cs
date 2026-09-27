@@ -1744,7 +1744,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             customer.CreatedAtUtc,
             customer.AppUser.IsActive,
             UploadUrls.FromPath(customer.PhotoPath),
-            customer.DeleteStatus);
+            customer.DeleteStatus,
+            customer.AppUser.IsLoginBlocked);
 
     private static CustomerDetailResponse MapCustomerDetail(CustomerProfile customer) =>
         new(
@@ -1761,7 +1762,9 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 customer.DeleteRequestedAtUtc,
                 customer.DeleteRequestReason,
                 customer.DeleteResolvedAtUtc,
-                customer.DeleteResolutionNote));
+                customer.DeleteResolutionNote),
+            customer.AppUser.Email,
+            customer.AppUser.IsLoginBlocked);
 
     private static string CustomerDisplayName(CustomerProfile customer)
     {

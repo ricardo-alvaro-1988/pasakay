@@ -119,7 +119,9 @@ public enum AuditAction
     OperatorUpdated = 2,
     OperatorActivated = 3,
     OperatorDeactivated = 4,
-    BillIssued = 5
+    BillIssued = 5,
+    CustomerBlocked = 6,
+    CustomerUnblocked = 7
 }
 
 public enum PaymentMethod

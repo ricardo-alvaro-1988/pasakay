@@ -782,6 +782,7 @@ export type CustomerListItem = {
   isActive: boolean
   photoUrl: string | null
   deleteStatus: DeleteAccountStatus
+  isBlocked: boolean
 }
 
 export type DeleteAccountStatus = 'None' | 'Pending' | 'Approved' | 'Rejected'
@@ -804,6 +805,8 @@ export type CustomerDetail = {
   isActive: boolean
   photoUrl: string | null
   deleteRequest: CustomerDeleteRequest
+  email: string | null
+  isBlocked: boolean
 }
 
 export type RideQuery = {
@@ -1432,6 +1435,8 @@ export type AuditAction =
   | 'OperatorActivated'
   | 'OperatorDeactivated'
   | 'BillIssued'
+  | 'CustomerBlocked'
+  | 'CustomerUnblocked'
 
 export type AuditLog = {
   id: string
@@ -1981,6 +1986,10 @@ export const api = {
     request<RiderRides>(`/api/operator/customers/${id}/rides?${rideQuery(opts)}`),
   opCustomerRide: (id: string, rideId: string) =>
     request<RideDetail>(`/api/operator/customers/${id}/rides/${rideId}`),
+  blockOpCustomer: (id: string) =>
+    request<CustomerDetail>(`/api/operator/customers/${id}/block`, { method: 'POST' }),
+  unblockOpCustomer: (id: string) =>
+    request<CustomerDetail>(`/api/operator/customers/${id}/unblock`, { method: 'POST' }),
   opRiders: (q = '', page = 1, pageSize = 10) =>
     request<Paged<RiderListItem>>(`/api/operator/riders?q=${encodeURIComponent(q)}&page=${page}&pageSize=${pageSize}`),
   opRider: (id: string) => request<RiderDetail>(`/api/operator/riders/${id}`),

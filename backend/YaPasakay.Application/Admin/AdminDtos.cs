@@ -263,7 +263,8 @@ public record CustomerListItem(
     DateTime RegisteredAtUtc,
     bool IsActive,
     string? PhotoUrl,
-    DeleteAccountStatus DeleteStatus);
+    DeleteAccountStatus DeleteStatus,
+    bool IsBlocked);
 
 public record CustomerDeleteRequestItem(
     DeleteAccountStatus Status,
@@ -281,7 +282,9 @@ public record CustomerDetailResponse(
     DateTime RegisteredAtUtc,
     bool IsActive,
     string? PhotoUrl,
-    CustomerDeleteRequestItem DeleteRequest);
+    CustomerDeleteRequestItem DeleteRequest,
+    string? Email,
+    bool IsBlocked);
 
 public record RecordDeleteRequest(string? Reason);
 

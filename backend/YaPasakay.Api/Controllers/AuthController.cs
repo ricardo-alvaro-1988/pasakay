@@ -39,6 +39,11 @@ public class AuthController(
                 : "Operators sign in with phone and password." });
         }
 
+        if (existing?.IsLoginBlocked == true || await LoginBlocks.IsBlockedAsync(db, existing?.Email, phone, cancellationToken))
+        {
+            return Unauthorized(new { message = LoginBlocks.Message });
+        }
+
         otpStore.Save(phone, FixedOtpSender.DevCode, TimeSpan.FromMinutes(10));
         await otpSender.SendAsync(phone, FixedOtpSender.DevCode, cancellationToken);
         return Ok(new { message = "OTP sent." });
@@ -55,6 +60,11 @@ public class AuthController(
         }
 
         var user = await db.Users.FirstOrDefaultAsync(x => x.PhoneNumber == phone, cancellationToken);
+        if (user?.IsLoginBlocked == true || await LoginBlocks.IsBlockedAsync(db, user?.Email, phone, cancellationToken))
+        {
+            return Unauthorized(new { message = LoginBlocks.Message });
+        }
+
         if (user is null || !user.IsActive)
         {
             return Unauthorized(new { message = "No account for this number." });
@@ -110,6 +120,11 @@ public class AuthController(
         }
 
         var user = await db.Users.FirstOrDefaultAsync(x => x.PhoneNumber == phone, cancellationToken);
+        if (user?.IsLoginBlocked == true || await LoginBlocks.IsBlockedAsync(db, user?.Email, phone, cancellationToken))
+        {
+            return Unauthorized(new { message = LoginBlocks.Message });
+        }
+
         if (user is null || !user.IsActive)
         {
             return Unauthorized(new { message = "No account for this number." });
@@ -164,6 +179,13 @@ public class AuthController(
         if (user is not null && user.Role != UserRole.Customer)
         {
             return Unauthorized(new { message = "This Google account is not a customer login." });
+        }
+
+        if (user?.IsLoginBlocked == true
+            || await LoginBlocks.IsBlockedAsync(db, profile.Email, user?.PhoneNumber, cancellationToken)
+            || await LoginBlocks.IsBlockedAsync(db, user?.Email, null, cancellationToken))
+        {
+            return Unauthorized(new { message = LoginBlocks.Message });
         }
 
         if (user is not null && !user.IsActive)
@@ -222,7 +244,18 @@ public class AuthController(
             .Include(x => x.AppUser)
             .FirstOrDefaultAsync(x => x.Token == request.RefreshToken, cancellationToken);
 
-        if (stored is null || !stored.IsActive || !stored.AppUser.IsActive)
+        if (stored is null || !stored.IsActive)
+        {
+            return Unauthorized(new { message = "Refresh token is invalid." });
+        }
+
+        if (stored.AppUser.IsLoginBlocked
+            || await LoginBlocks.IsBlockedAsync(db, stored.AppUser.Email, stored.AppUser.PhoneNumber, cancellationToken))
+        {
+            return Unauthorized(new { message = LoginBlocks.Message });
+        }
+
+        if (!stored.AppUser.IsActive)
         {
             return Unauthorized(new { message = "Refresh token is invalid." });
         }
@@ -258,6 +291,11 @@ public class AuthController(
 
     private async Task<ActionResult?> GateAsync(AppUser user, CancellationToken cancellationToken)
     {
+        if (user.IsLoginBlocked || await LoginBlocks.IsBlockedAsync(db, user.Email, user.PhoneNumber, cancellationToken))
+        {
+            return Unauthorized(new { message = LoginBlocks.Message });
+        }
+
         if (user.Role == UserRole.Operator && user.OperatorId is Guid operatorId)
         {
             var active = await db.Operators.AnyAsync(x => x.Id == operatorId && x.IsActive, cancellationToken);

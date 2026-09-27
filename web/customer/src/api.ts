@@ -457,7 +457,11 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const res = await fetch(path, { ...init, headers })
-  if (res.status === 401) {
+  const isSignIn = path.startsWith('/api/auth/google')
+    || path.startsWith('/api/auth/login')
+    || path.startsWith('/api/auth/verify-otp')
+    || path.startsWith('/api/auth/request-otp')
+  if (res.status === 401 && !isSignIn) {
     if (!retried && shouldAttemptRefresh(path) && (await refreshSession())) {
       return request<T>(path, init, true)
     }

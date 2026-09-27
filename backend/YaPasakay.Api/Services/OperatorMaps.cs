@@ -82,7 +82,8 @@ public static class OperatorMaps
             customer.CreatedAtUtc,
             customer.AppUser.IsActive,
             UploadUrls.FromPath(customer.PhotoPath),
-            customer.DeleteStatus);
+            customer.DeleteStatus,
+            customer.AppUser.IsLoginBlocked);
 
     public static CustomerDetailResponse CustomerDetail(CustomerProfile customer) =>
         new(
@@ -99,7 +100,9 @@ public static class OperatorMaps
                 customer.DeleteRequestedAtUtc,
                 customer.DeleteRequestReason,
                 customer.DeleteResolvedAtUtc,
-                customer.DeleteResolutionNote));
+                customer.DeleteResolutionNote),
+            customer.AppUser.Email,
+            customer.AppUser.IsLoginBlocked);
 
     public static string CustomerDisplayName(CustomerProfile customer)
     {

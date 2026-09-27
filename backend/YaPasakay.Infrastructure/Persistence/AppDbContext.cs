@@ -63,6 +63,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<OperatorVehicleOffer> OperatorVehicleOffers => Set<OperatorVehicleOffer>();
     public DbSet<OperatorBillVehicleLine> OperatorBillVehicleLines => Set<OperatorBillVehicleLine>();
     public DbSet<VehicleOfferingLog> VehicleOfferingLogs => Set<VehicleOfferingLog>();
+    public DbSet<CustomerLoginBlock> CustomerLoginBlocks => Set<CustomerLoginBlock>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -77,6 +78,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.Email).HasMaxLength(160);
             entity.Property(x => x.GoogleSubject).HasMaxLength(64);
             entity.Property(x => x.PasswordHash).HasMaxLength(200);
+            entity.Property(x => x.IsLoginBlocked).HasDefaultValue(false);
             entity.HasOne(x => x.Operator)
                 .WithMany(x => x.Users)
                 .HasForeignKey(x => x.OperatorId)
@@ -1018,6 +1020,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.Rider)
                 .WithMany()
                 .HasForeignKey(x => x.RiderId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CustomerLoginBlock>(entity =>
+        {
+            entity.HasIndex(x => x.Email);
+            entity.HasIndex(x => x.PhoneNumber);
+            entity.HasIndex(x => x.AppUserId);
+            entity.Property(x => x.Email).HasMaxLength(160);
+            entity.Property(x => x.PhoneNumber).HasMaxLength(20);
+            entity.Property(x => x.Reason).HasMaxLength(400);
+            entity.HasOne(x => x.AppUser)
+                .WithMany()
+                .HasForeignKey(x => x.AppUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Operator)
+                .WithMany()
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.BlockedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.BlockedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

@@ -4930,7 +4930,7 @@ function CustomerListPage({ onOpen }: { onOpen: (id: string) => void }) {
               <td>{phDate(row.registeredAtUtc)}</td>
               <td>
                 <div className="tag-row" style={{ marginTop: 0 }}>
-                  <StatusTag active={row.isActive} />
+                  {row.isBlocked ? <span className="tag status inactive">Blocked</span> : <StatusTag active={row.isActive} />}
                   {row.deleteStatus === 'Pending' ? <span className="tag pending">Delete requested</span> : null}
                 </div>
               </td>
@@ -5009,7 +5009,7 @@ function CustomerDetailPage({ customerId, onBack }: { customerId: string; onBack
             <h2 style={{ marginTop: 12 }}>{customer.fullName}</h2>
             <p>{customer.phoneNumber}</p>
             <div className="tag-row">
-              <StatusTag active={customer.isActive} />
+              {customer.isBlocked ? <span className="tag status inactive">Blocked</span> : <StatusTag active={customer.isActive} />}
               {del.status !== 'None' ? <span className={`tag ${del.status.toLowerCase()}`}>Delete {del.status.toLowerCase()}</span> : null}
             </div>
             <button className="btn tiny" type="button" style={{ marginTop: 10 }} onClick={() => void resetPassword()}>
@@ -5033,8 +5033,9 @@ function CustomerDetailPage({ customerId, onBack }: { customerId: string; onBack
         <DetailItem label="First name" value={customer.firstName} />
         <DetailItem label="Last name" value={customer.lastName} />
         <DetailItem label="Phone" value={customer.phoneNumber} />
+        <DetailItem label="Email" value={customer.email || '—'} />
         <DetailItem label="Registered" value={phDateTime(customer.registeredAtUtc)} />
-        <DetailItem label="Status" value={customer.isActive ? 'Active' : 'Inactive'} />
+        <DetailItem label="Status" value={customer.isBlocked ? 'Blocked' : customer.isActive ? 'Active' : 'Inactive'} />
         <DetailItem label="Delete request" value={del.status === 'None' ? 'None' : del.status} />
       </div>
       <div className="delete-box">
@@ -7447,6 +7448,8 @@ function AuditPage() {
     { id: 'OperatorActivated', label: 'Activated' },
     { id: 'OperatorDeactivated', label: 'Deactivated' },
     { id: 'BillIssued', label: 'Billed' },
+    { id: 'CustomerBlocked', label: 'Customer blocked' },
+    { id: 'CustomerUnblocked', label: 'Customer unblocked' },
   ]
 
   useEffect(() => {
@@ -7530,8 +7533,8 @@ function AuditPage() {
 
 function AuditActionTag({ action, label }: { action: AuditAction; label: string }) {
   const tone =
-    action === 'OperatorCreated' || action === 'OperatorActivated' ? 'active'
-      : action === 'OperatorDeactivated' ? 'rejected'
+    action === 'OperatorCreated' || action === 'OperatorActivated' || action === 'CustomerUnblocked' ? 'active'
+      : action === 'OperatorDeactivated' || action === 'CustomerBlocked' ? 'rejected'
         : action === 'BillIssued' ? 'pending'
           : 'kind'
   return <span className={`tag ${tone}`}>{label}</span>
@@ -9782,7 +9785,7 @@ function OperatorCustomerListPage({ onOpen }: { onOpen: (id: string) => void }) 
         <PersonSuggest
           value={q}
           onChange={setQ}
-          placeholder="Search name or phone"
+          placeholder="Search name, phone, or email"
           items={items.map((row) => ({
             id: row.id,
             name: row.fullName || 'Customer',
@@ -9836,10 +9839,10 @@ function OperatorCustomerListPage({ onOpen }: { onOpen: (id: string) => void }) 
                 <td>{row.phoneNumber}</td>
                 <td>{phDate(row.registeredAtUtc)}</td>
                 <td>
-                  <div className="tag-row" style={{ marginTop: 0 }}>
-                    <StatusTag active={row.isActive} />
-                    {row.deleteStatus === 'Pending' ? <span className="tag pending">Delete requested</span> : null}
-                  </div>
+                <div className="tag-row" style={{ marginTop: 0 }}>
+                  {row.isBlocked ? <span className="tag status inactive">Blocked</span> : <StatusTag active={row.isActive} />}
+                  {row.deleteStatus === 'Pending' ? <span className="tag pending">Delete requested</span> : null}
+                </div>
                 </td>
               </tr>
             ))}
@@ -9854,12 +9857,38 @@ function OperatorCustomerDetailPage({ customerId, onBack }: { customerId: string
   const [customer, setCustomer] = useState<CustomerDetail | null>(null)
   const [rideId, setRideId] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     api.opCustomer(customerId)
       .then(setCustomer)
       .catch((err: Error) => setError(err.message))
   }, [customerId])
+
+  async function setBlocked(blocked: boolean) {
+    const name = customer?.fullName || 'this customer'
+    const confirmed = window.confirm(
+      blocked
+        ? `Block ${name}? Their email and mobile number will not be able to sign in.`
+        : `Unblock ${name}? They can sign in again with their email or mobile number.`,
+    )
+    if (!confirmed) return
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const next = blocked ? await api.blockOpCustomer(customerId) : await api.unblockOpCustomer(customerId)
+      setCustomer(next)
+      setNotice(blocked
+        ? 'Customer blocked. That email and mobile number cannot sign in.'
+        : 'Customer unblocked. They can sign in again.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Request failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   if (!customer) {
     return error ? <p className="error">{error}</p> : <p>Loading customer…</p>
@@ -9887,10 +9916,20 @@ function OperatorCustomerDetailPage({ customerId, onBack }: { customerId: string
             <button className="btn tiny" type="button" onClick={onBack}>Back to customers</button>
             <h2 style={{ marginTop: 12 }}>{customer.fullName}</h2>
             <p>{customer.phoneNumber}</p>
+            {customer.email ? <p>{customer.email}</p> : null}
             <div className="tag-row">
-              <StatusTag active={customer.isActive} />
+              {customer.isBlocked ? <span className="tag status inactive">Blocked</span> : <StatusTag active={customer.isActive} />}
               {del.status !== 'None' ? <span className={`tag ${del.status.toLowerCase()}`}>Delete {del.status.toLowerCase()}</span> : null}
             </div>
+            {customer.isBlocked ? (
+              <button className="btn tiny" type="button" style={{ marginTop: 10 }} disabled={busy} onClick={() => void setBlocked(false)}>
+                Unblock customer
+              </button>
+            ) : (
+              <button className="btn danger tiny" type="button" style={{ marginTop: 10 }} disabled={busy} onClick={() => void setBlocked(true)}>
+                Block customer
+              </button>
+            )}
           </div>
         </div>
         <div className="rider-photos">
@@ -9904,14 +9943,21 @@ function OperatorCustomerDetailPage({ customerId, onBack }: { customerId: string
           </div>
         </div>
       </div>
+      {notice ? <p className="ok">{notice}</p> : null}
       <div className="detail-grid">
         <DetailItem label="First name" value={customer.firstName} />
         <DetailItem label="Last name" value={customer.lastName} />
         <DetailItem label="Phone" value={customer.phoneNumber} />
+        <DetailItem label="Email" value={customer.email || '—'} />
         <DetailItem label="Registered" value={phDateTime(customer.registeredAtUtc)} />
-        <DetailItem label="Status" value={customer.isActive ? 'Active' : 'Inactive'} />
+        <DetailItem label="Status" value={customer.isBlocked ? 'Blocked' : customer.isActive ? 'Active' : 'Inactive'} />
         <DetailItem label="Delete request" value={del.status === 'None' ? 'None' : del.status} />
       </div>
+      <p className="muted">
+        {customer.isBlocked
+          ? 'This customer cannot sign in. Their email and mobile number stay blocked until you unblock them.'
+          : 'Block customer stops this email and mobile number from signing in.'}
+      </p>
       {error ? <p className="error">{error}</p> : null}
       <p className="muted">Trips and bookings below are only those assigned to your riders.</p>
       <RidesReport
