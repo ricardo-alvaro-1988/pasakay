@@ -200,7 +200,10 @@ class RiderSession extends ChangeNotifier {
       await _syncChat();
       await _syncOnlineService();
       await _syncOfferAlarm(previous);
-      await _syncNotices();
+      final alarmsSet = await RiderAlerts.syncNotices(desk?.scheduledNotices ?? const []);
+      if (!alarmsSet) {
+        await _syncNotices();
+      }
       if (desk?.isOnline == true) {
         _scheduleGps();
       } else {
@@ -754,6 +757,7 @@ class RiderSession extends ChangeNotifier {
       desk.credibilityScore,
       desk.riderCancelCount,
       desk.notices.map((notice) => notice.id).join(','),
+      desk.scheduledNotices.map((notice) => '${notice.id}:${notice.minuteOfDay}').join(','),
     ].join('|');
   }
 

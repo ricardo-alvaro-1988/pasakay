@@ -11,6 +11,7 @@ export type VehicleType =
   | 'Van'
   | 'PickupL300'
   | 'PickupCargo'
+  | 'Tuktuk'
   | 'Custom'
 
 export const PLATFORM_VEHICLE_TYPES: VehicleType[] = [
@@ -22,6 +23,7 @@ export const PLATFORM_VEHICLE_TYPES: VehicleType[] = [
   'Van',
   'PickupL300',
   'PickupCargo',
+  'Tuktuk',
 ]
 
 export function vehicleTypeLabel(type: string) {

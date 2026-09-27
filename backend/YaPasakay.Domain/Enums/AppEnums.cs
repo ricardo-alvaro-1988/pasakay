@@ -19,6 +19,7 @@ public enum VehicleType
     Van = 6,
     PickupL300 = 7,
     PickupCargo = 8,
+    Tuktuk = 9,
     /// <summary>Operator-owned custom category; fare/rider rows key off VehicleCategoryId.</summary>
     Custom = 100
 }

@@ -46,6 +46,11 @@ String vehicleLabel(dynamic value) {
     case 'PickupCargo':
     case 'pickup-cargo':
       return 'Pickup (Cargo)';
+    case '9':
+    case 'Tuktuk':
+    case 'tuktuk':
+    case 'tuk-tuk':
+      return 'Tuktuk';
     default:
       return asText(value);
   }
@@ -182,6 +187,7 @@ class RiderDesk {
     this.credibilityScore = 100,
     this.riderCancelCount = 0,
     this.notices = const [],
+    this.scheduledNotices = const [],
   });
 
   final String riderId;
@@ -210,6 +216,7 @@ class RiderDesk {
   final int credibilityScore;
   final int riderCancelCount;
   final List<RiderNotice> notices;
+  final List<RiderScheduledNotice> scheduledNotices;
 
   String get vehicleLine => formatVehicleLine(
         vehicleType,
@@ -257,6 +264,32 @@ class RiderDesk {
             .whereType<Map<String, dynamic>>()
             .map(RiderNotice.fromJson)
             .toList(),
+        scheduledNotices: (json['scheduledNotices'] as List? ?? [])
+            .map(asJsonMap)
+            .whereType<Map<String, dynamic>>()
+            .map(RiderScheduledNotice.fromJson)
+            .toList(),
+      );
+}
+
+class RiderScheduledNotice {
+  RiderScheduledNotice({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.minuteOfDay,
+  });
+
+  final String id;
+  final String title;
+  final String body;
+  final int minuteOfDay;
+
+  factory RiderScheduledNotice.fromJson(Map<String, dynamic> json) => RiderScheduledNotice(
+        id: asText(json['id']),
+        title: asText(json['title']),
+        body: asText(json['body']),
+        minuteOfDay: asInt(json['notifyMinuteOfDay']),
       );
 }
 

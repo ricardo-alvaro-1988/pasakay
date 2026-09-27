@@ -1228,6 +1228,7 @@ function normalizeVehicleType(value: unknown): VehicleType | null {
   if (value === 'Van' || value === 6 || value === '6') return 'Van'
   if (value === 'PickupL300' || value === 7 || value === '7') return 'PickupL300'
   if (value === 'PickupCargo' || value === 8 || value === '8') return 'PickupCargo'
+  if (value === 'Tuktuk' || value === 9 || value === '9') return 'Tuktuk'
   if (value === 'Custom' || value === 100 || value === '100') return 'Custom'
   if (typeof value === 'string') {
     const key = value.trim().toLowerCase().replace(/[_\s]+/g, '-')
@@ -1242,6 +1243,8 @@ function normalizeVehicleType(value: unknown): VehicleType | null {
       pickupl300: 'PickupL300',
       'pickup-cargo': 'PickupCargo',
       pickupcargo: 'PickupCargo',
+      tuktuk: 'Tuktuk',
+      'tuk-tuk': 'Tuktuk',
       custom: 'Custom',
     }
     if (map[key]) return map[key]
@@ -1261,6 +1264,7 @@ function looksLikeVehicleTypeLabel(model: string) {
   if (!key) return false
   if (key === 'motorcycle' || key === 'motocycle' || key === 'motorcyle' || key === 'motorcycle') return true
   if (key === 'tricycle' || key === 'tricyle' || key === 'trike') return true
+  if (key === 'tuktuk') return true
   if (key.startsWith('motor') && key.includes('cycle')) return true
   if (key.startsWith('tric') && key.includes('cycle')) return true
   return false

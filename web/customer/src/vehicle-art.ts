@@ -43,6 +43,15 @@ const pickupArt = svgArt(`
   <circle cx="16" cy="30" r="5" fill="#444"/><circle cx="48" cy="30" r="5" fill="#444"/>
 `)
 
+const tuktukArt = svgArt(`
+  <path d="M18 8h22l6 8H14z" fill="#e30613"/>
+  <rect x="14" y="16" width="36" height="12" rx="2" fill="#1f2329"/>
+  <circle cx="20" cy="30" r="5" fill="#444"/>
+  <circle cx="44" cy="30" r="5" fill="#444"/>
+  <circle cx="32" cy="31" r="4" fill="#444"/>
+  <rect x="22" y="10" width="14" height="6" rx="1" fill="#fff" opacity=".85"/>
+`)
+
 const cargoArt = svgArt(`
   <rect x="4" y="16" width="24" height="12" rx="2" fill="#1f2329"/>
   <rect x="26" y="12" width="34" height="16" rx="2" fill="#6b7280"/>
@@ -60,12 +69,14 @@ export const VEHICLE_ART: Record<VehicleType, string> = {
   Van: vanArt,
   PickupL300: pickupArt,
   PickupCargo: cargoArt,
+  Tuktuk: tuktukArt,
   Custom: sedanArt,
 }
 
 export function vehicleArt(type: string | VehicleType | undefined | null, iconKey?: string | null) {
   if (iconKey) {
     const key = iconKey.toLowerCase()
+    if (key.includes('tuktuk') || key.includes('tuk-tuk') || key.includes('tuk')) return VEHICLE_ART.Tuktuk
     if (key.includes('tricycle')) return VEHICLE_ART.Tricycle
     if (key.includes('cargo')) return VEHICLE_ART.PickupCargo
     if (key.includes('pickup') || key.includes('l300')) return VEHICLE_ART.PickupL300
@@ -96,6 +107,8 @@ export function vehicleMaxPassengers(type: VehicleType, offerMax?: number) {
       return 10
     case 'PickupCargo':
       return 2
+    case 'Tuktuk':
+      return 5
     case 'Custom':
       return offerMax ?? 4
     default:

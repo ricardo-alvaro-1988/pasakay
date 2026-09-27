@@ -62,7 +62,7 @@ export function OperatorRiderNoticesPage() {
       setBody('')
       setWhen('15:00')
       await load()
-      setNotice(`Riders will be notified every day at ${clockLabel(saved.notifyAt)}.`)
+      setNotice(`Push notification set for every day at ${clockLabel(saved.notifyAt)}.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save this announcement.')
     } finally {
@@ -87,9 +87,9 @@ export function OperatorRiderNoticesPage() {
       <form className="card" onSubmit={(event) => void submit(event)}>
         <div className="panel-head">
           <div>
-            <h2 style={{ margin: 0 }}>Daily rider announcement</h2>
+            <h2 style={{ margin: 0 }}>Schedule a push notification</h2>
             <p className="muted" style={{ margin: '4px 0 0' }}>
-              Riders are notified every day at this time with a short quiet tone. Time is Philippine time. Example: 3:00 PM.
+              Every day at this time, each rider’s phone shows a notification with your message and a short quiet tone. Example: 3:00 PM.
             </p>
           </div>
         </div>
@@ -111,7 +111,7 @@ export function OperatorRiderNoticesPage() {
         {notice ? <p className="ok">{notice}</p> : null}
         <div style={{ display: 'flex', gap: 10, maxWidth: 280 }}>
           <button className="btn" type="submit" disabled={busy}>
-            {busy ? 'Saving…' : 'Save daily time'}
+            {busy ? 'Saving…' : 'Schedule push'}
           </button>
         </div>
       </form>

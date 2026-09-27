@@ -840,6 +840,16 @@ public class RiderDeskController(
             })
             .ToList();
 
+        var scheduledRows = await db.RiderNotices.AsNoTracking()
+            .Where(x => x.OperatorId == rider.OperatorId && x.IsActive && x.CancelledAtUtc == null)
+            .OrderBy(x => x.NotifyMinuteOfDay)
+            .Take(8)
+            .Select(x => new { x.Id, x.Title, x.Body, x.NotifyMinuteOfDay })
+            .ToListAsync(cancellationToken);
+        var scheduledNotices = scheduledRows
+            .Select(x => new RiderScheduledNoticeItem(x.Id.ToString("N"), x.Title, x.Body, x.NotifyMinuteOfDay))
+            .ToList();
+
         RiderPendingHail? pendingHail = null;
         if (active is null)
         {
@@ -889,7 +899,8 @@ public class RiderDeskController(
             rider.IsActive,
             rider.CredibilityScore,
             rider.RiderCancelCount,
-            notices);
+            notices,
+            scheduledNotices);
     }
 
     private async Task ClearRiderHailsAsync(Guid riderId, CancellationToken cancellationToken)

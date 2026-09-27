@@ -111,7 +111,14 @@ public record RiderDeskResponse(
     bool IsActive,
     int CredibilityScore,
     int RiderCancelCount,
-    IReadOnlyList<RiderNoticeItem> Notices);
+    IReadOnlyList<RiderNoticeItem> Notices,
+    IReadOnlyList<RiderScheduledNoticeItem> ScheduledNotices);
+
+public record RiderScheduledNoticeItem(
+    string Id,
+    string Title,
+    string Body,
+    int NotifyMinuteOfDay);
 
 public record RiderNoticeItem(
     string Id,

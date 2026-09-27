@@ -42,6 +42,15 @@ public static class VehicleCatalogBootstrap
             });
         }
 
+        var tuktukCap = VehicleCatalog.PresetFor(VehicleCatalog.TuktukId)?.MaxPassengers ?? 5;
+        var tuktuk = await db.VehicleCategories
+            .FirstOrDefaultAsync(x => x.Id == VehicleCatalog.TuktukId, cancellationToken);
+        if (tuktuk is not null && tuktuk.MaxPassengers != tuktukCap)
+        {
+            tuktuk.MaxPassengers = tuktukCap;
+            tuktuk.UpdatedAtUtc = now;
+        }
+
         if (db.ChangeTracker.HasChanges())
         {
             await db.SaveChangesAsync(cancellationToken);

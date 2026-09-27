@@ -32,7 +32,7 @@ class OnlineService : Service() {
         /** Bumped so one-shot alert settings apply on devices that already had older channels. */
         private const val OFFER_CHANNEL = "yp_job_offers_v5"
         private const val CHAT_CHANNEL = "yp_chat"
-        private const val NOTICE_CHANNEL = "yp_rider_notices"
+        private const val NOTICE_CHANNEL = "yp_rider_push_v1"
         /** Soft double-tap; no long continuous buzz. */
         private val OFFER_VIBE_TIMINGS = longArrayOf(0, 90, 70, 120)
         private val OFFER_VIBE_AMPS = intArrayOf(0, 110, 0, 150)
@@ -46,7 +46,10 @@ class OnlineService : Service() {
             private set
 
         @Volatile
-        private var noticeTone: MediaPlayer? = null
+        private var lastPushAt = 0L
+
+        @Volatile
+        private var lastPushKey = ""
 
         fun start(context: Context): Boolean {
             return startCommand(context, Intent(context, OnlineService::class.java).setAction(ACTION_START))
@@ -80,8 +83,14 @@ class OnlineService : Service() {
         fun pingNotice(context: Context, title: String, body: String): Boolean {
             val app = context.applicationContext
             ensureChannels(app)
+            val key = "$title|$body"
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (key == lastPushKey && now - lastPushAt < 60_000L) {
+                return true
+            }
+            lastPushKey = key
+            lastPushAt = now
             return try {
-                playNoticeTone(app)
                 val nm = app.getSystemService(NotificationManager::class.java)
                 val launch = Intent(app, MainActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -91,10 +100,10 @@ class OnlineService : Service() {
                     .setContentTitle(title)
                     .setContentText(body)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-                    .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
                     .setCategory(NotificationCompat.CATEGORY_MESSAGE)
                     .setAutoCancel(true)
-                    .setOnlyAlertOnce(true)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setContentIntent(open)
                     .build()
                 nm.notify(NOTICE_ID, notification)
@@ -102,42 +111,6 @@ class OnlineService : Service() {
             } catch (_: Throwable) {
                 false
             }
-        }
-
-        /** Short quiet tone. Does not use the job-offer alarm. */
-        private fun playNoticeTone(context: Context) {
-            try {
-                noticeTone?.setOnCompletionListener(null)
-                noticeTone?.stop()
-            } catch (_: Throwable) {
-            }
-            try {
-                noticeTone?.release()
-            } catch (_: Throwable) {
-            }
-            noticeTone = null
-            val next = MediaPlayer()
-            next.setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .build(),
-            )
-            next.setDataSource(context, Uri.parse("android.resource://${context.packageName}/${R.raw.notice_tone}"))
-            next.isLooping = false
-            next.setVolume(0.35f, 0.35f)
-            next.setOnCompletionListener {
-                try {
-                    it.release()
-                } catch (_: Throwable) {
-                }
-                if (noticeTone === it) {
-                    noticeTone = null
-                }
-            }
-            next.prepare()
-            next.start()
-            noticeTone = next
         }
 
         fun pingChat(context: Context, title: String, body: String): Boolean {
@@ -192,11 +165,17 @@ class OnlineService : Service() {
                         lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     },
                 )
+                val noticeSound = Uri.parse("android.resource://${context.packageName}/${R.raw.notice_tone}")
+                val noticeAudio = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
                 nm.createNotificationChannel(
-                    NotificationChannel(NOTICE_CHANNEL, "Announcements", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                        description = "Quiet alerts from your operator."
-                        setSound(null, null)
-                        enableVibration(false)
+                    NotificationChannel(NOTICE_CHANNEL, "Announcements", NotificationManager.IMPORTANCE_HIGH).apply {
+                        description = "Push notifications from your operator."
+                        setSound(noticeSound, noticeAudio)
+                        enableVibration(true)
+                        vibrationPattern = longArrayOf(0, 80, 60, 80)
                         lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     },
                 )
