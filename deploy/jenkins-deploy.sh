@@ -99,6 +99,80 @@ EOF
     echo "Release metadata updated: ${version} ${updated_at}"
 }
 
+raise_nginx_upload_limit() {
+    local port=""
+    port="$(printf '%s' "${health_url}" | sed -nE 's#https?://[^:]+:([0-9]+).*#\1#p')"
+    if [ -z "${port}" ]; then
+        echo "Skipping nginx upload limit; health URL has no port: ${health_url}"
+        return 0
+    fi
+
+    local files=()
+    local root file
+    for root in /etc/nginx/sites-enabled /etc/nginx/sites-available /etc/nginx/conf.d; do
+        [ -d "${root}" ] || continue
+        while IFS= read -r file; do
+            [ -n "${file}" ] || continue
+            files+=("${file}")
+        done < <(grep -lE "127\\.0\\.0\\.1:${port}|localhost:${port}" "${root}"/* 2>/dev/null || true)
+    done
+
+    if [ "${#files[@]}" -eq 0 ]; then
+        echo "No nginx site proxies port ${port}; APK upload limit was not changed."
+        return 0
+    fi
+
+    local changed=0
+    local seen=" "
+    local real backup
+    for file in "${files[@]}"; do
+        real="$(readlink -f "${file}" 2>/dev/null || printf '%s' "${file}")"
+        case "${seen}" in
+            *" ${real} "*) continue ;;
+        esac
+        seen="${seen}${real} "
+
+        if grep -Eq 'client_max_body_size[[:space:]]+120m;' "${real}"; then
+            continue
+        fi
+
+        backup="${real}.yapasakay-body-size.bak"
+        ${sudo_cmd} cp -a "${real}" "${backup}"
+        if grep -q 'client_max_body_size' "${real}"; then
+            ${sudo_cmd} sed -i -E 's/client_max_body_size[[:space:]]+[0-9]+[kKmMgG]?;/client_max_body_size 120m;/g' "${real}"
+        elif grep -q "127.0.0.1:${port}" "${real}"; then
+            ${sudo_cmd} sed -i "/proxy_pass http:\\/\\/127\\.0\\.0\\.1:${port}/i\\    client_max_body_size 120m;" "${real}"
+        else
+            ${sudo_cmd} sed -i "/proxy_pass http:\\/\\/localhost:${port}/i\\    client_max_body_size 120m;" "${real}"
+        fi
+        echo "Set client_max_body_size 120m in ${real}"
+        changed=1
+    done
+
+    if [ "${changed}" -ne 1 ]; then
+        return 0
+    fi
+
+    if ! ${sudo_cmd} nginx -t; then
+        echo "nginx config test failed. Restoring the previous site files." >&2
+        for file in "${files[@]}"; do
+            real="$(readlink -f "${file}" 2>/dev/null || printf '%s' "${file}")"
+            backup="${real}.yapasakay-body-size.bak"
+            if [ -f "${backup}" ]; then
+                ${sudo_cmd} mv "${backup}" "${real}"
+            fi
+        done
+        return 0
+    fi
+
+    ${sudo_cmd} systemctl reload nginx
+    for file in "${files[@]}"; do
+        real="$(readlink -f "${file}" 2>/dev/null || printf '%s' "${file}")"
+        ${sudo_cmd} rm -f "${real}.yapasakay-body-size.bak"
+    done
+    echo "Reloaded nginx. APK uploads up to 120 MB are accepted."
+}
+
 wait_for_health() {
     for _ in {1..90}; do
         if ${sudo_cmd} systemctl is-active --quiet "${service}" &&
@@ -163,6 +237,7 @@ ${sudo_cmd} systemctl start "${service}"
 
 wait_for_health
 write_release_metadata
+raise_nginx_upload_limit
 
 trap - EXIT
 

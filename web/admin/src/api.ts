@@ -1522,6 +1522,41 @@ function rideQuery(opts: RideQuery) {
   return params.toString()
 }
 
+function messageFromFailedResponse(status: number, text: string) {
+  const trimmed = text.trim()
+  if (
+    status === 413
+    || /413 Request Entity Too Large/i.test(trimmed)
+    || /entity too large/i.test(trimmed)
+  ) {
+    return 'This APK is larger than the server upload limit. Nginx is still capped below 120 MB, so the file never reaches the app.'
+  }
+  if (!trimmed) {
+    return `Request failed (${status}).`
+  }
+  try {
+    const body = JSON.parse(trimmed) as {
+      message?: string
+      title?: string
+      detail?: string
+      errors?: Record<string, string[] | string>
+    }
+    if (body.message) return body.message
+    if (body.detail) return body.detail
+    if (body.title && !trimmed.startsWith('<')) return body.title
+    if (body.errors) {
+      const first = Object.values(body.errors).flat()[0]
+      if (first) return first
+    }
+  } catch {
+    /* HTML or plain text */
+  }
+  if (trimmed.startsWith('<')) {
+    return `Request failed (${status}).`
+  }
+  return trimmed.slice(0, 240)
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
   const isForm = typeof FormData !== 'undefined' && init?.body instanceof FormData
@@ -1551,32 +1586,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let message = 'Request failed.'
     try {
       const text = await res.text()
-      if (text) {
-        try {
-          const body = JSON.parse(text) as {
-            message?: string
-            title?: string
-            detail?: string
-            errors?: Record<string, string[] | string>
-          }
-          if (body.message) {
-            message = body.message
-          } else if (body.detail) {
-            message = body.detail
-          } else if (body.title) {
-            message = body.title
-          } else if (body.errors) {
-            const first = Object.values(body.errors).flat()[0]
-            if (first) message = first
-          } else {
-            message = text.slice(0, 240)
-          }
-        } catch {
-          message = text.slice(0, 240)
-        }
-      } else {
-        message = `Request failed (${res.status}).`
-      }
+      message = messageFromFailedResponse(res.status, text)
     } catch {
       message = `Request failed (${res.status}).`
     }
@@ -1970,12 +1980,15 @@ export const api = {
         isLatest: boolean
       }[]
     }>('/api/admin/rider-app'),
-  publishRiderApp: (body: { version: string; notes?: string; file: File }) => {
+  publishRiderApp: (
+    body: { version: string; notes?: string; file: File },
+    onProgress?: (loaded: number, total: number) => void,
+  ) => {
     const data = new FormData()
     data.append('file', body.file)
     data.append('version', body.version)
     if (body.notes) data.append('notes', body.notes)
-    return request<{
+    type ReleasePayload = {
       latest: {
         id: string
         version: string
@@ -1992,7 +2005,35 @@ export const api = {
         notes: string | null
         isLatest: boolean
       }[]
-    }>('/api/admin/rider-app', { method: 'POST', body: data })
+    }
+    return new Promise<ReleasePayload>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/admin/rider-app')
+      const token = getToken()
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded, event.total)
+      }
+      xhr.onerror = () => reject(new Error('Upload failed before the server accepted the file.'))
+      xhr.onabort = () => reject(new Error('Upload was cancelled.'))
+      xhr.onload = () => {
+        if (xhr.status === 401) {
+          clearAuth()
+          reject(new Error(messageFromFailedResponse(xhr.status, xhr.responseText || 'Session expired. Sign in again.')))
+          return
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(messageFromFailedResponse(xhr.status, xhr.responseText)))
+          return
+        }
+        try {
+          resolve(JSON.parse(xhr.responseText) as ReleasePayload)
+        } catch {
+          reject(new Error('The server did not return the published release.'))
+        }
+      }
+      xhr.send(data)
+    })
   },
   operatorFleet: () => request<OperatorFleet>('/api/operator/fleet'),
   operatorCompany: () => request<OperatorDetail>('/api/operator/company'),

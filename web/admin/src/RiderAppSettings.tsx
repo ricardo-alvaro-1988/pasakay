@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 
 type Release = {
@@ -21,6 +21,11 @@ function formatReleasedAt(value: string) {
   }
 }
 
+function formatBytes(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
 export function RiderAppSettingsPage() {
   const [latest, setLatest] = useState<Release | null>(null)
   const [releases, setReleases] = useState<Release[]>([])
@@ -31,6 +36,9 @@ export function RiderAppSettingsPage() {
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [uploadLabel, setUploadLabel] = useState('')
+  const [uploadPercent, setUploadPercent] = useState<number | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function load() {
     const data = await api.getRiderApp()
@@ -61,18 +69,34 @@ export function RiderAppSettingsPage() {
     setBusy(true)
     setError('')
     setNotice('')
+    setUploadPercent(0)
+    setUploadLabel(`Uploading 0 MB of ${formatBytes(file.size)}`)
     try {
-      const data = await api.publishRiderApp({ version: version.trim(), notes: notes.trim() || undefined, file })
+      const data = await api.publishRiderApp(
+        { version: version.trim(), notes: notes.trim() || undefined, file },
+        (loaded, total) => {
+          const percent = total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : 0
+          setUploadPercent(percent)
+          setUploadLabel(
+            percent >= 100
+              ? 'Upload finished. Publishing the release…'
+              : `Uploading ${formatBytes(loaded)} of ${formatBytes(total)} (${percent}%)`,
+          )
+        },
+      )
       setLatest(data.latest)
       setReleases(data.releases)
       setVersion('')
       setNotes('')
       setFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
       setNotice(`Published version ${data.latest?.version ?? version.trim()}.`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not publish the APK.')
     } finally {
       setBusy(false)
+      setUploadPercent(null)
+      setUploadLabel('')
     }
   }
 
@@ -142,6 +166,7 @@ export function RiderAppSettingsPage() {
         <label className="field">
           <span>APK file</span>
           <input
+            ref={fileInputRef}
             type="file"
             accept=".apk,application/vnd.android.package-archive"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
@@ -149,7 +174,13 @@ export function RiderAppSettingsPage() {
             required
           />
         </label>
-        {file ? <p className="muted">Selected: {file.name}</p> : null}
+        {file ? <p className="muted">Selected: {file.name} ({formatBytes(file.size)})</p> : null}
+        {busy ? (
+          <div className="upload-progress">
+            <progress value={uploadPercent ?? 0} max={100} />
+            <p className="muted" style={{ margin: 0 }}>{uploadLabel || 'Starting upload…'}</p>
+          </div>
+        ) : null}
         {error ? <p className="error">{error}</p> : null}
         {notice ? <p className="ok">{notice}</p> : null}
         <button className="btn" type="submit" disabled={busy} style={{ marginTop: 12, maxWidth: 220 }}>
