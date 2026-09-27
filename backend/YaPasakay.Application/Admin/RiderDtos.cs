@@ -110,7 +110,14 @@ public record RiderDeskResponse(
     string FullAddress,
     bool IsActive,
     int CredibilityScore,
-    int RiderCancelCount);
+    int RiderCancelCount,
+    IReadOnlyList<RiderNoticeItem> Notices);
+
+public record RiderNoticeItem(
+    Guid Id,
+    string Title,
+    string Body,
+    DateTime SentAtUtc);
 
 public record RiderEarningsSummaryResponse(
     decimal TodayEarnings,

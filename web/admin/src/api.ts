@@ -63,6 +63,7 @@ export type PageId =
   | 'bookings'
   | 'schedule'
   | 'inbox'
+  | 'rider-notices'
   | 'company'
   | 'wallet'
   | 'promos'
@@ -1255,6 +1256,19 @@ export type BookingReportResponse = {
   }
 }
 
+export type RiderNoticeStatus = 'Scheduled' | 'Sent' | 'Cancelled'
+
+export type RiderNotice = {
+  id: string
+  title: string
+  body: string
+  scheduledAtUtc: string
+  sentAtUtc: string | null
+  cancelledAtUtc: string | null
+  status: RiderNoticeStatus
+  createdAtUtc: string
+}
+
 export type Announcement = {
   id: string
   title: string
@@ -1870,6 +1884,14 @@ export const api = {
     return request<Paged<ScheduledBooking>>(`/api/operator/schedule?${params}`)
   },
   scheduledBooking: (id: string) => request<RideDetail>(`/api/operator/schedule/${id}`),
+  riderNotices: () => request<RiderNotice[]>('/api/operator/rider-notices'),
+  createRiderNotice: (body: { title: string; body: string; scheduledAtUtc: string }) =>
+    request<RiderNotice>('/api/operator/rider-notices', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  cancelRiderNotice: (id: string) =>
+    request<RiderNotice>(`/api/operator/rider-notices/${id}/cancel`, { method: 'POST' }),
   createScheduledBooking: (body: {
     customerName: string
     phone: string

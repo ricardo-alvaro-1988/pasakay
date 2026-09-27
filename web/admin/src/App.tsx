@@ -142,6 +142,7 @@ import { OperatorPabiliMatrixPage } from './OperatorPabiliMatrixPage'
 import { OperatorPabiliOrdersPage } from './OperatorPabiliOrdersPage'
 import { OperatorPabiliRidersPage } from './OperatorPabiliRidersPage'
 import { OperatorPabiliSurchargesPage } from './OperatorPabiliSurchargesPage'
+import { OperatorRiderNoticesPage } from './OperatorRiderNoticesPage'
 import { OperatorProductCategoriesPage } from './OperatorProductCategoriesPage'
 import {
   ADMIN_MENU_GROUPS,
@@ -7720,6 +7721,7 @@ function OperatorShell({
         {page === 'derive-fares' && <OperatorDeriveFaresPage />}
         {page === 'surcharges' && <OperatorSurchargesPage />}
         {page === 'support' && <OperatorSupportPage />}
+        {page === 'rider-notices' && <OperatorRiderNoticesPage />}
         {page === 'inbox' && (
           <OperatorInboxPage
             onOpenBilling={() => setPage('billing')}

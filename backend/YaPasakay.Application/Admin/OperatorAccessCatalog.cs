@@ -17,6 +17,7 @@ public static class OperatorAccessCatalog
         new("surcharges", "Surcharges"),
         new("support", "Support"),
         new("inbox", "Inbox"),
+        new("rider-notices", "Announcements"),
         new("billing", "Billing"),
         new("wallet", "Wallet"),
         new("promos", "Promos"),

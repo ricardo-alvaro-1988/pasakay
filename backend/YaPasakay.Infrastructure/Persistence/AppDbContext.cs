@@ -66,6 +66,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<OperatorBillVehicleLine> OperatorBillVehicleLines => Set<OperatorBillVehicleLine>();
     public DbSet<VehicleOfferingLog> VehicleOfferingLogs => Set<VehicleOfferingLog>();
     public DbSet<CustomerLoginBlock> CustomerLoginBlocks => Set<CustomerLoginBlock>();
+    public DbSet<RiderNotice> RiderNotices => Set<RiderNotice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -539,6 +540,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasIndex(x => x.CreatedAtUtc);
             entity.Property(x => x.Title).HasMaxLength(120).IsRequired();
             entity.Property(x => x.Body).HasMaxLength(2000).IsRequired();
+        });
+
+        modelBuilder.Entity<RiderNotice>(entity =>
+        {
+            entity.HasIndex(x => new { x.OperatorId, x.ScheduledAtUtc });
+            entity.HasIndex(x => new { x.SentAtUtc, x.ScheduledAtUtc });
+            entity.Property(x => x.Title).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Body).HasMaxLength(400).IsRequired();
+            entity.HasOne(x => x.Operator)
+                .WithMany()
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<SupportTicket>(entity =>

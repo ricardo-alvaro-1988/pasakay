@@ -255,6 +255,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
+                  if (desk.notices.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _NoticeCard(notices: desk.notices),
+                  ],
                   const SizedBox(height: 12),
                   RepaintBoundary(
                     child: _TodayEarningsCard(
@@ -456,6 +460,37 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 void _noop() {}
+
+class _NoticeCard extends StatelessWidget {
+  const _NoticeCard({required this.notices});
+
+  final List<RiderNotice> notices;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = notices.take(3).toList();
+    return BrandPanel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Announcement', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+          const SizedBox(height: 8),
+          ...items.map((notice) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(notice.title, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(notice.body, style: const TextStyle(color: brandMuted)),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+}
 
 class _RiderHeaderCard extends StatelessWidget {
   const _RiderHeaderCard({

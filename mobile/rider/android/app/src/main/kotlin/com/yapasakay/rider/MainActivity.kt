@@ -55,6 +55,11 @@ class MainActivity : FlutterActivity() {
                         OnlineService.stopRing(this)
                         result.success(true)
                     }
+                    "pingNotice" -> {
+                        val title = call.argument<String>("title") ?: "Announcement"
+                        val body = call.argument<String>("body") ?: "Open Ya! Pasakay to read it."
+                        result.success(OnlineService.pingNotice(this, title, body))
+                    }
                     "pingChat" -> {
                         val title = call.argument<String>("title") ?: "New chat"
                         val body = call.argument<String>("body") ?: "Open Ya! Pasakay to reply."

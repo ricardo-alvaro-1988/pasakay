@@ -199,6 +199,11 @@ public static class OperatorAccess
             return "inbox";
         }
 
+        if (value.StartsWith("/api/operator/rider-notices"))
+        {
+            return "rider-notices";
+        }
+
         if (value.StartsWith("/api/operator/billing"))
         {
             return "billing";

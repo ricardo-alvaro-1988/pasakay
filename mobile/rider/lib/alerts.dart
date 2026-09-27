@@ -32,6 +32,14 @@ class RiderAlerts {
     } catch (_) {}
   }
 
+  static Future<bool> pingNotice({required String title, required String body}) async {
+    try {
+      return await _channel.invokeMethod<bool>('pingNotice', {'title': title, 'body': body}) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<bool> pingChat({required String title, required String body}) async {
     try {
       return await _channel.invokeMethod<bool>('pingChat', {'title': title, 'body': body}) == true;

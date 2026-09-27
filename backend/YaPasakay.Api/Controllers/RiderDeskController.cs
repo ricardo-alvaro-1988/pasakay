@@ -817,6 +817,24 @@ public class RiderDeskController(
             offers = rows.Select(x => TripBroadcastService.MapOffer(x, x.Trip)).ToArray();
         }
 
+        var noticeSince = now.AddHours(-24);
+        var noticeRows = await db.RiderNotices.AsNoTracking()
+            .Where(x => x.OperatorId == rider.OperatorId
+                && x.CancelledAtUtc == null
+                && x.SentAtUtc != null
+                && x.SentAtUtc >= noticeSince)
+            .OrderByDescending(x => x.SentAtUtc)
+            .Take(5)
+            .Select(x => new { x.Id, x.Title, x.Body, SentAtUtc = x.SentAtUtc!.Value })
+            .ToListAsync(cancellationToken);
+        var notices = noticeRows
+            .Select(x => new RiderNoticeItem(
+                x.Id,
+                x.Title,
+                x.Body,
+                DateTime.SpecifyKind(x.SentAtUtc, DateTimeKind.Utc)))
+            .ToList();
+
         RiderPendingHail? pendingHail = null;
         if (active is null)
         {
@@ -865,7 +883,8 @@ public class RiderDeskController(
             rider.FullAddress,
             rider.IsActive,
             rider.CredibilityScore,
-            rider.RiderCancelCount);
+            rider.RiderCancelCount,
+            notices);
     }
 
     private async Task ClearRiderHailsAsync(Guid riderId, CancellationToken cancellationToken)

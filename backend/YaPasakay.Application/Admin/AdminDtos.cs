@@ -1562,6 +1562,21 @@ public record RiderPabiliOrderDetail(
     decimal CustomerTotal,
     IReadOnlyList<CustomerPabiliOrderLineItem> Items);
 
+public record RiderNoticeListItem(
+    Guid Id,
+    string Title,
+    string Body,
+    DateTime ScheduledAtUtc,
+    DateTime? SentAtUtc,
+    DateTime? CancelledAtUtc,
+    string Status,
+    DateTime CreatedAtUtc);
+
+public record CreateRiderNoticeRequest(
+    string? Title,
+    string? Body,
+    DateTime? ScheduledAtUtc);
+
 public static class UploadUrls
 {
     public static string? FromPath(string? relativePath) =>

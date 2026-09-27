@@ -257,6 +257,7 @@ export const OPERATOR_MENU_GROUPS: SideNavGroup[] = [
     items: [
       { id: 'support', label: 'Support', icon: '☎' },
       { id: 'inbox', label: 'Inbox', icon: '✉' },
+      { id: 'rider-notices', label: 'Announcements', icon: '✺' },
     ],
   },
   {

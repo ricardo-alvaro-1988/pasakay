@@ -181,6 +181,7 @@ class RiderDesk {
     this.isActive = true,
     this.credibilityScore = 100,
     this.riderCancelCount = 0,
+    this.notices = const [],
   });
 
   final String riderId;
@@ -208,6 +209,7 @@ class RiderDesk {
   final bool isActive;
   final int credibilityScore;
   final int riderCancelCount;
+  final List<RiderNotice> notices;
 
   String get vehicleLine => formatVehicleLine(
         vehicleType,
@@ -250,6 +252,32 @@ class RiderDesk {
         isActive: asFlag(json['isActive'], true),
         credibilityScore: asInt(json['credibilityScore'], 100),
         riderCancelCount: asInt(json['riderCancelCount']),
+        notices: (json['notices'] as List? ?? [])
+            .map(asJsonMap)
+            .whereType<Map<String, dynamic>>()
+            .map(RiderNotice.fromJson)
+            .toList(),
+      );
+}
+
+class RiderNotice {
+  RiderNotice({
+    required this.id,
+    required this.title,
+    required this.body,
+    this.sentAt,
+  });
+
+  final String id;
+  final String title;
+  final String body;
+  final DateTime? sentAt;
+
+  factory RiderNotice.fromJson(Map<String, dynamic> json) => RiderNotice(
+        id: asText(json['id']),
+        title: asText(json['title']),
+        body: asText(json['body']),
+        sentAt: parseUtc(json['sentAtUtc']),
       );
 }
 
