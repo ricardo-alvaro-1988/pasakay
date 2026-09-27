@@ -36,6 +36,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AccessGroupPage> AccessGroupPages => Set<AccessGroupPage>();
     public DbSet<DeviceRegistration> DeviceRegistrations => Set<DeviceRegistration>();
     public DbSet<PlatformBrandSettings> PlatformBrandSettings => Set<PlatformBrandSettings>();
+    public DbSet<RiderAppRelease> RiderAppReleases => Set<RiderAppRelease>();
     public DbSet<RiderInviteLink> RiderInviteLinks => Set<RiderInviteLink>();
     public DbSet<RiderApplication> RiderApplications => Set<RiderApplication>();
     public DbSet<OperatorCashInBankAccount> OperatorCashInBankAccounts => Set<OperatorCashInBankAccount>();
@@ -652,6 +653,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.LogoPath).HasMaxLength(260);
             entity.Property(x => x.FaviconPath).HasMaxLength(260);
             entity.Property(x => x.ThemeId).HasMaxLength(40).IsRequired();
+        });
+
+        modelBuilder.Entity<RiderAppRelease>(entity =>
+        {
+            entity.HasIndex(x => x.Version).IsUnique();
+            entity.HasIndex(x => x.IsLatest);
+            entity.Property(x => x.Version).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ApkPath).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.ReleaseNotes).HasMaxLength(2000);
         });
 
         modelBuilder.Entity<RiderInviteLink>(entity =>

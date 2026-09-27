@@ -3,6 +3,7 @@ namespace YaPasakay.Api.Services;
 public class UploadStore(IWebHostEnvironment environment, IConfiguration configuration)
 {
     public const long MaxImageBytes = 5_000_000;
+    public const long MaxApkBytes = 120_000_000;
 
     private static readonly HashSet<string> Allowed = [".jpg", ".jpeg", ".png", ".webp", ".ico", ".svg"];
     private readonly string root = StoragePaths.UploadRoot(configuration, environment);
@@ -37,6 +38,42 @@ public class UploadStore(IWebHostEnvironment environment, IConfiguration configu
             throw new InvalidOperationException("Use a JPG, PNG, WEBP, SVG, or ICO image.");
         }
 
+        return await WriteAsync(file, folder, fileName, ext, cancellationToken);
+    }
+
+    public async Task<string?> SaveApkAsync(IFormFile? file, string folder, string fileName, CancellationToken cancellationToken)
+    {
+        if (file is null || file.Length == 0)
+        {
+            return null;
+        }
+
+        if (file.Length > MaxApkBytes)
+        {
+            throw new InvalidOperationException("APK is too large. Use a build under 120 MB.");
+        }
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(ext))
+        {
+            ext = ".apk";
+        }
+
+        if (ext != ".apk")
+        {
+            throw new InvalidOperationException("Upload an Android .apk file.");
+        }
+
+        return await WriteAsync(file, folder, fileName, ext, cancellationToken);
+    }
+
+    private async Task<string> WriteAsync(
+        IFormFile file,
+        string folder,
+        string fileName,
+        string ext,
+        CancellationToken cancellationToken)
+    {
         var relative = BuildRelativePath(folder, fileName, ext);
         var full = SafeFullPath(relative);
         Directory.CreateDirectory(Path.GetDirectoryName(full)!);

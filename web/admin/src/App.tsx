@@ -151,6 +151,7 @@ import {
   flattenMenuGroups,
 } from './side-nav'
 import { BrandingSettingsPage } from './BrandingSettings'
+import { RiderAppSettingsPage } from './RiderAppSettings'
 import {
   applyBrand,
   DEFAULT_BRAND_NAME,
@@ -162,7 +163,7 @@ const OPERATOR_MENUS = flattenMenuGroups(OPERATOR_MENU_GROUPS)
 
 const COMING_SOON: Record<string, string> = {}
 
-type SettingsSection = 'general' | 'branding'
+type SettingsSection = 'general' | 'branding' | 'rider-app'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
@@ -6536,9 +6537,14 @@ function SettingsPage({
         <button type="button" className={section === 'branding' ? 'on' : ''} onClick={() => onSection('branding')}>
           Branding
         </button>
+        <button type="button" className={section === 'rider-app' ? 'on' : ''} onClick={() => onSection('rider-app')}>
+          Rider app
+        </button>
       </div>
       {section === 'branding' ? (
         <BrandingSettingsPage onApplied={onBranding} />
+      ) : section === 'rider-app' ? (
+        <RiderAppSettingsPage />
       ) : (
         <div className="grid-2">
           <div className="card">

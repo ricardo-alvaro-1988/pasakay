@@ -55,6 +55,7 @@ import { RateRidePanel, usePendingRating } from './rate-ride'
 import { ShareTripButton } from './share-trip-button'
 import { lastKnownGps, readBootGps, readPickupGps, readGps, watchTripGps } from './gps'
 import { applyBrand, DEFAULT_BRAND_NAME, type BrandingConfig } from './brand-themes'
+import { isRiderDownloadPath, RiderDownloadPage } from './RiderDownloadPage'
 
 type Tab = 'home' | 'booking' | 'favorites' | 'account'
 
@@ -93,8 +94,10 @@ export default function App() {
   })
   const [accountPage, setAccountPage] = useState<AccountPage>('menu')
   const [branding, setBranding] = useState<BrandingConfig | null>(null)
+  const riderDownload = isRiderDownloadPath()
 
   useEffect(() => {
+    if (riderDownload) return
     api
       .branding()
       .then((data) => {
@@ -104,9 +107,13 @@ export default function App() {
       .catch(() => {
         /* bundled defaults */
       })
-  }, [])
+  }, [riderDownload])
 
   useEffect(() => {
+    if (riderDownload) {
+      setBoot(false)
+      return
+    }
     if (!getToken()) {
       setBoot(false)
       return
@@ -118,7 +125,7 @@ export default function App() {
         if (!getToken()) setDesk(null)
       })
       .finally(() => setBoot(false))
-  }, [])
+  }, [riderDownload])
 
   useEffect(() => {
     if (!desk) return
@@ -152,6 +159,8 @@ export default function App() {
 
   const brandName = branding?.brandName || DEFAULT_BRAND_NAME
   const brandLogo = branding?.logoUrl || logo
+
+  if (riderDownload) return <RiderDownloadPage />
 
   if (boot) {
     return (

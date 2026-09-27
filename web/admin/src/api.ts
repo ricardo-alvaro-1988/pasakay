@@ -1951,6 +1951,49 @@ export const api = {
       themes: { id: string; label: string; accent: string; good: string }[]
     }>('/api/admin/branding/favicon', { method: 'POST', body: data })
   },
+  getRiderApp: () =>
+    request<{
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }>('/api/admin/rider-app'),
+  publishRiderApp: (body: { version: string; notes?: string; file: File }) => {
+    const data = new FormData()
+    data.append('file', body.file)
+    data.append('version', body.version)
+    if (body.notes) data.append('notes', body.notes)
+    return request<{
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }>('/api/admin/rider-app', { method: 'POST', body: data })
+  },
   operatorFleet: () => request<OperatorFleet>('/api/operator/fleet'),
   operatorCompany: () => request<OperatorDetail>('/api/operator/company'),
   saveOperatorDispatchMode: (

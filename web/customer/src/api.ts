@@ -548,6 +548,22 @@ export const api = {
       accent: string
       good: string
     }>('/api/public/branding'),
+  riderAppLatest: () =>
+    request<{
+      version: string
+      downloadUrl: string
+      releasedAtUtc: string
+      notes: string | null
+    }>('/api/public/rider-app'),
+  riderAppReleases: () =>
+    request<
+      {
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+      }[]
+    >('/api/public/rider-app/releases'),
   googleSignIn: (idToken: string) =>
     request<AuthResponse>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
   mapsConfig: () => request<{ googleMapsBrowserKey: string }>('/api/public/maps'),
