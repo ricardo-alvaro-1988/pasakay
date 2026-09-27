@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Operator> Operators => Set<Operator>();
     public DbSet<RiderProfile> RiderProfiles => Set<RiderProfile>();
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
+    public DbSet<CustomerFavoriteRider> CustomerFavoriteRiders => Set<CustomerFavoriteRider>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Province> Provinces => Set<Province>();
     public DbSet<Municipality> Municipalities => Set<Municipality>();
@@ -235,6 +236,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .HasForeignKey(x => x.HailRiderId)
                 .OnDelete(DeleteBehavior.SetNull);
             entity.HasIndex(x => x.HailRiderId);
+        });
+
+        modelBuilder.Entity<CustomerFavoriteRider>(entity =>
+        {
+            entity.HasIndex(x => new { x.CustomerId, x.RiderId }).IsUnique();
+            entity.HasIndex(x => x.RiderId);
+            entity.HasOne(x => x.Customer)
+                .WithMany(x => x.FavoriteRiders)
+                .HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Rider)
+                .WithMany()
+                .HasForeignKey(x => x.RiderId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<RefreshToken>(entity =>

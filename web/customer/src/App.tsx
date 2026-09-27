@@ -13,6 +13,7 @@ import {
   passengerLabel,
   Quote,
   Stop,
+  FavoriteRider,
   HailRider,
   tripHeadline,
   tripCanSendChat,
@@ -42,7 +43,7 @@ import {
 } from './maps'
 import { AuthScreen, CompleteMobile } from './auth-screens'
 import { LoginBrandPanel } from './login-brand-panel'
-import { AccountHub, AccountPage, BookingScreen, PaymentBar } from './account-screens'
+import { AccountHub, AccountPage, BookingScreen, FavoritesScreen, PaymentBar } from './account-screens'
 import { PabiliStorefront } from './PabiliStorefront'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
 import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
@@ -55,7 +56,23 @@ import { ShareTripButton } from './share-trip-button'
 import { lastKnownGps, readBootGps, readPickupGps, readGps, watchTripGps } from './gps'
 import { applyBrand, DEFAULT_BRAND_NAME, type BrandingConfig } from './brand-themes'
 
-type Tab = 'home' | 'booking' | 'account'
+type Tab = 'home' | 'booking' | 'favorites' | 'account'
+
+function favoriteAsHail(rider: FavoriteRider): HailRider {
+  return {
+    riderId: rider.riderId,
+    fullName: rider.fullName,
+    plateNumber: rider.plateNumber,
+    vehicleType: rider.vehicleType,
+    vehicleModel: rider.vehicleModel,
+    photoUrl: rider.photoUrl,
+    phoneNumber: rider.phoneNumber,
+    isOnline: rider.isOnline,
+    isBusy: rider.isBusy,
+    companyName: rider.companyName,
+    paymentMethods: rider.paymentMethods,
+  }
+}
 type ServiceMode = 'pasakay' | 'pabili'
 type SearchTarget = 'pickup' | 'dropoff' | null
 
@@ -353,6 +370,7 @@ function Home({
   const [selectedRiderId, setSelectedRiderId] = useState<string | null>(null)
   const [dispatchChoice, setDispatchChoice] = useState<'pick' | 'broadcast'>('pick')
   const [loadingRiders, setLoadingRiders] = useState(false)
+  const [favoritePick, setFavoritePick] = useState<HailRider | null>(null)
   const installPrompt = useRef<BeforeInstallPromptEvent | null>(null)
   const locateGen = useRef(0)
   const [locating, setLocating] = useState(false)
@@ -360,6 +378,7 @@ function Home({
   const [bookSheetOpen, setBookSheetOpen] = useState(true)
   const trip = desk.activeTrip
   const hail = desk.hailedRider
+  const lockedRider = hail ?? favoritePick
   const pendingRate = usePendingRating(desk)
   const noOperator = useNoOperatorNotice(
     pickup,
@@ -595,7 +614,7 @@ function Home({
         const count = cargo || max <= 1 ? 1 : passengers
         return {
           key,
-          quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, hail?.riderId, count, promoCode, 0, categoryId, max, cargo)),
+          quote: await api.quote(bookBody(type, pickup!, dropoff!, payment, paymentRef, lockedRider?.riderId, count, promoCode, 0, categoryId, max, cargo)),
           error: '',
         }
       } catch (err) {
@@ -607,8 +626,8 @@ function Home({
       try {
         const next: Record<string, Quote | null> = {}
         let quoteError = ''
-        if (hail) {
-          const one = await quoteOne(hail.vehicleType)
+        if (lockedRider) {
+          const one = await quoteOne(lockedRider.vehicleType)
           next[one.key] = one.quote
           quoteError = one.error
         } else if (noOperator.useOffers) {
@@ -636,8 +655,8 @@ function Home({
         const uncovered = !anyQuote && isOperatorCoverageError(quoteError)
         setCoverageHint(uncovered)
         setError(anyQuote || isOperatorCoverageError(quoteError) ? '' : quoteError)
-        if (hail) {
-          setVehicle(hail.vehicleType)
+        if (lockedRider) {
+          setVehicle(lockedRider.vehicleType)
           setVehicleCategoryId(null)
         }
       } catch (err) {
@@ -649,10 +668,10 @@ function Home({
     void load()
     return () => { ignore = true }
     // Depend on stable offer ids / types strings — not fresh array identities — so quoting can finish.
-  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, hail?.riderId, hail?.vehicleType, passengers, noOperator.useOffers, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.availableTypes.join('|'), noOperator.availableVehicles.map((v) => `${v.id}:${v.available}:${v.maxPassengers}`).join('|')])
+  }, [pickup, dropoff, payment, paymentRef, promoCode, trip, lockedRider?.riderId, lockedRider?.vehicleType, passengers, noOperator.useOffers, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.availableTypes.join('|'), noOperator.availableVehicles.map((v) => `${v.id}:${v.available}:${v.maxPassengers}`).join('|')])
 
   useEffect(() => {
-    if (hail) return
+    if (lockedRider) return
     if (noOperator.useOffers) {
       const available = noOperator.availableVehicles
       const current = available.find((v) => v.id === vehicleCategoryId)
@@ -678,7 +697,7 @@ function Home({
 
   const selectedQuoteKey = quoteKey(vehicle, vehicleCategoryId)
   const selectedQuote = quotes[selectedQuoteKey] ?? quotes[vehicle] ?? null
-  const selectedOffer = hail
+  const selectedOffer = lockedRider
     ? null
     : (noOperator.listedVehicles.find((v) => v.id === vehicleCategoryId)
       ?? noOperator.listedVehicles.find((v) => v.vehicleType === vehicle && v.available)
@@ -697,10 +716,10 @@ function Home({
   }, [showPassengerPicker, selectedMaxPassengers, vehicle, vehicleCategoryId])
 
   const dispatchMode = selectedQuote?.bookingDispatchMode ?? 'Broadcast'
-  const needsRiderPick = !hail && (dispatchMode === 'Selection' || (dispatchMode === 'Both' && dispatchChoice === 'pick'))
+  const needsRiderPick = !lockedRider && (dispatchMode === 'Selection' || (dispatchMode === 'Both' && dispatchChoice === 'pick'))
 
   useEffect(() => {
-    if (!needsRiderPick || !pickup || !dropoff || trip || hail) {
+    if (!needsRiderPick || !pickup || !dropoff || trip || lockedRider) {
       setAvailableRiders([])
       setSelectedRiderId(null)
       return
@@ -728,10 +747,13 @@ function Home({
         if (!cancelled) setLoadingRiders(false)
       })
     return () => { cancelled = true }
-  }, [needsRiderPick, pickup, dropoff, vehicle, vehicleCategoryId, payment, trip, hail?.riderId, pickup?.details, pickup?.label])
+  }, [needsRiderPick, pickup, dropoff, vehicle, vehicleCategoryId, payment, trip, lockedRider?.riderId, pickup?.details, pickup?.label])
 
   useEffect(() => {
-    if (hail) setShowQr(false)
+    if (hail) {
+      setShowQr(false)
+      setFavoritePick(null)
+    }
   }, [hail?.riderId])
 
   useEffect(() => {
@@ -743,12 +765,12 @@ function Home({
   }, [showQr])
 
   useEffect(() => {
-    if (!hail) return
-    setVehicle(hail.vehicleType)
-    if (!hail.paymentMethods.includes(payment)) {
-      setPayment(hail.paymentMethods[0] ?? 'Cash')
+    if (!lockedRider) return
+    setVehicle(lockedRider.vehicleType)
+    if (!lockedRider.paymentMethods.includes(payment)) {
+      setPayment(lockedRider.paymentMethods[0] ?? 'Cash')
     }
-  }, [hail?.riderId])
+  }, [lockedRider?.riderId])
 
   useEffect(() => {
     const maps = mapsRef.current
@@ -879,6 +901,8 @@ function Home({
 
   async function clearHail() {
     setError('')
+    setFavoritePick(null)
+    if (!hail) return
     try { onDesk(await api.clearHail()) }
     catch (err) { setError(err instanceof Error ? err.message : 'Could not clear this rider.') }
   }
@@ -943,13 +967,13 @@ function Home({
   const modalTotal = quotePay + modalBoost
   const showPromoField = !!(Object.values(quotes).some((q) => q?.hasActivePromos) || quote?.hasActivePromos)
   const searchingArea = noOperator.searching
-  const canBook = !!pickup && !!dropoff && !quoting && !searchingArea && !noOperator.uncovered && !!quote && quote.riderAvailable !== false && !hail?.isBusy && (payment !== 'Other' || !!paymentRef.trim())
+  const canBook = !!pickup && !!dropoff && !quoting && !searchingArea && !noOperator.uncovered && !!quote && quote.riderAvailable !== false && !lockedRider?.isBusy && (payment !== 'Other' || !!paymentRef.trim())
     && (!needsRiderPick || !!selectedRiderId)
     && !(needsRiderPick && !loadingRiders && availableRiders.length === 0)
   const bookLabel = !pickup || !dropoff
     ? 'Choose pickup and drop-off'
     : busy || searchingArea
-      ? (hail && busy ? 'Requesting…' : needsRiderPick && busy ? 'Booking…' : 'Finding a ride…')
+      ? (lockedRider && busy ? 'Requesting…' : needsRiderPick && busy ? 'Booking…' : 'Finding a ride…')
       : quoting
         ? 'Getting fare…'
         : noOperator.uncovered
@@ -964,8 +988,8 @@ function Home({
                 ? `No ${vehicle.toLowerCase()} riders nearby`
                 : needsRiderPick && !selectedRiderId
                   ? 'Choose a rider'
-                  : hail
-                    ? `Request ${hail.fullName.split(' ')[0]} · ${peso(quotePay)}`
+                  : lockedRider
+                    ? `Request ${lockedRider.fullName.split(' ')[0]} · ${peso(quotePay)}`
                     : needsRiderPick && selectedRiderId
                       ? `Book ${availableRiders.find((r) => r.riderId === selectedRiderId)?.fullName.split(' ')[0] ?? 'rider'} · ${peso(quotePay)}`
                       : `Confirm ${vehicle} · ${peso(quotePay)} · ${kmLabel(quote.distanceKm)}`
@@ -991,8 +1015,12 @@ function Home({
 
   async function book(boostAmount = 0) {
     if (!pickup || !dropoff) return
-    if (hail?.isBusy) {
+    if (lockedRider?.isBusy) {
       setError('This rider is on another trip right now.')
+      return
+    }
+    if (lockedRider && !lockedRider.isOnline) {
+      setError('This rider is offline. Try again when they are online.')
       return
     }
     if (needsRiderPick && !selectedRiderId) {
@@ -1003,8 +1031,9 @@ function Home({
     setBusy(true)
     setError('')
     try {
-      const riderId = hail?.riderId ?? (needsRiderPick ? selectedRiderId ?? undefined : undefined)
+      const riderId = lockedRider?.riderId ?? (needsRiderPick ? selectedRiderId ?? undefined : undefined)
       onDesk(await api.book(bookBody(vehicle, pickup, dropoff, payment, paymentRef, riderId, passengers, promoCode, boostAmount, vehicleCategoryId, selectedMaxPassengers, selectedIsCargo)))
+      setFavoritePick(null)
       setDraftBoost(0)
       setBoostCustom('')
     } catch (err) {
@@ -1053,7 +1082,7 @@ function Home({
             )}
             {installNote && <p className="install-note">{installNote}</p>}
           </div>
-          {!trip && !hail && !pendingRate.trip && (
+          {!trip && !lockedRider && !pendingRate.trip && (
             <ShowQrButton onClick={() => setShowQr(true)} />
           )}
         </div>
@@ -1091,21 +1120,22 @@ function Home({
                 ) : null}
                 {bookSheetOpen ? (
                   <>
-                {hail && (
+                {lockedRider && (
                   <div className="hail">
-                    {hail.photoUrl
-                      ? <img src={mediaUrl(hail.photoUrl)} alt="" />
-                      : <div className="hail-fallback">{hail.fullName.slice(0, 1)}</div>}
+                    {lockedRider.photoUrl
+                      ? <img src={mediaUrl(lockedRider.photoUrl)} alt="" />
+                      : <div className="hail-fallback">{lockedRider.fullName.slice(0, 1)}</div>}
                     <div>
-                      <b>{hail.fullName}</b>
+                      <b>{lockedRider.fullName}</b>
                       <small>
-                        {[hail.plateNumber, hail.vehicleModel || hail.vehicleType].filter(Boolean).join(' · ')}
-                        {hail.isOnline ? '' : ' · Offline'}
-                        {hail.isBusy ? ' · On a trip' : ''}
+                        {favoritePick && !hail ? 'Favorite · ' : ''}
+                        {[lockedRider.plateNumber, lockedRider.vehicleModel || lockedRider.vehicleType].filter(Boolean).join(' · ')}
+                        {lockedRider.isOnline ? '' : ' · Offline'}
+                        {lockedRider.isBusy ? ' · On a trip' : ''}
                       </small>
                     </div>
                     <div className="hail-actions">
-                      {hail.phoneNumber && <a className="call" href={`tel:${hail.phoneNumber}`}>Call</a>}
+                      {lockedRider.phoneNumber && <a className="call" href={`tel:${lockedRider.phoneNumber}`}>Call</a>}
                       <button type="button" className="ghost hail-clear" onClick={() => void clearHail()}>Clear</button>
                     </div>
                   </div>
@@ -1126,10 +1156,10 @@ function Home({
                     </button>
                   </div>
                 </div>
-                {(hail || pickup) && (
+                {(lockedRider || pickup) && (
                 <div className="vehicles">
-                  {(hail
-                    ? [{ id: hail.vehicleType, vehicleType: hail.vehicleType, name: vehicleLabel(hail.vehicleType), available: true } as const]
+                  {(lockedRider
+                    ? [{ id: lockedRider.vehicleType, vehicleType: lockedRider.vehicleType, name: vehicleLabel(lockedRider.vehicleType), available: true } as const]
                     : (noOperator.useOffers
                         ? noOperator.availableVehicles
                         : noOperator.availableTypes.map((t) => ({
@@ -1157,7 +1187,7 @@ function Home({
                       <button
                         key={itemKey}
                         type="button"
-                        disabled={(!!hail && hail.vehicleType !== type) || !canSelect}
+                        disabled={(!!lockedRider && lockedRider.vehicleType !== type) || !canSelect}
                         className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
                         title={!canSelect ? 'Not offered for bookings in this area yet' : undefined}
                         onClick={() => {
@@ -1180,10 +1210,10 @@ function Home({
                   })}
                 </div>
                 )}
-                {!hail && pickup && !noOperator.vehiclesReady && (
+                {!lockedRider && pickup && !noOperator.vehiclesReady && (
                   <p className="muted" style={{ margin: '8px 0 0' }}>Checking available vehicles…</p>
                 )}
-                {!hail && pickup && noOperator.vehiclesReady && noOperator.availableTypes.length === 0 && (
+                {!lockedRider && pickup && noOperator.vehiclesReady && noOperator.availableTypes.length === 0 && (
                   <p className="muted" style={{ margin: '8px 0 0' }}>No vehicle types are offered for bookings in this municipality yet.</p>
                 )}
                 {showPassengerPicker && (
@@ -1231,7 +1261,7 @@ function Home({
                 <PaymentBar
                   payment={payment}
                   refNo={paymentRef}
-                  allowed={hail?.paymentMethods}
+                  allowed={lockedRider?.paymentMethods}
                   onPayment={(method) => {
                     setPayment(method)
                     if (method === 'Cash') setPaymentRef('')
@@ -1261,7 +1291,7 @@ function Home({
                     ) : null}
                   </>
                 ) : null}
-                {!hail && dispatchMode === 'Both' && (
+                {!lockedRider && dispatchMode === 'Both' && (
                   <div className="dispatch-choice" role="group" aria-label="How to find a rider">
                     <button
                       type="button"
@@ -1329,12 +1359,23 @@ function Home({
             <BookingScreen desk={desk} onDesk={onDesk} />
           </section>
         )}
+        {tab === 'favorites' && (
+          <section className="panel page-panel">
+            <FavoritesScreen
+              onBook={(rider) => {
+                setFavoritePick(favoriteAsHail(rider))
+                setBookSheetOpen(true)
+                onTab('home')
+              }}
+            />
+          </section>
+        )}
         {tab === 'account' && (
           <section className="panel page-panel">
             <AccountHub desk={desk} page={accountPage} onPage={onAccountPage} onDesk={onDesk} onLogout={onLogout} />
           </section>
         )}
-        <nav className="nav">
+        <nav className="nav nav-with-favs">
           <button className={tab === 'home' ? 'on' : ''} onClick={() => onTab('home')}>
             <span className="ico"><HomeIcon /></span>
             Home
@@ -1364,6 +1405,10 @@ function Home({
               Scan
             </button>
           )}
+          <button className={tab === 'favorites' ? 'on' : ''} onClick={() => onTab('favorites')}>
+            <span className="ico"><FavsIcon /></span>
+            Favs
+          </button>
           <button className={tab === 'account' ? 'on' : ''} onClick={() => onTab('account')}>
             <span className="ico"><AccountIcon /></span>
             Account
@@ -1749,6 +1794,17 @@ function SosIcon() {
       <path d="M12 1.4 1.2 20.6h21.6L12 1.4z" fill="currentColor" />
       <path d="M12 8.2v6.2" stroke="#e30613" strokeWidth="2.2" strokeLinecap="round" />
       <circle cx="12" cy="17.2" r="1.25" fill="#e30613" />
+    </svg>
+  )
+}
+
+function FavsIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 3.6 14.3 9l5.7.5-4.3 3.7 1.3 5.5L12 15.8 6.9 18.7 8.2 13.2 3.9 9.5 9.6 9 12 3.6z"
+        {...navStroke()}
+      />
     </svg>
   )
 }

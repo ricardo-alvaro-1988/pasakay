@@ -17,13 +17,15 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
     public const int MaxRiders = 20;
     public const string DirectHailNote = "Direct hail";
     public const string CustomerPickNote = "Customer selected rider";
+    public const string FavoriteRiderNote = "Favorite rider";
     public static readonly TimeSpan HailTtl = TimeSpan.FromMinutes(10);
 
     public static bool HailIsLive(DateTime? at) =>
         at is DateTime stamped && DateTime.UtcNow - stamped <= HailTtl;
 
     public static bool IsCustomerPick(string? notes) =>
-        string.Equals(notes, CustomerPickNote, StringComparison.OrdinalIgnoreCase);
+        string.Equals(notes, CustomerPickNote, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(notes, FavoriteRiderNote, StringComparison.OrdinalIgnoreCase);
     public static readonly TimeSpan LiveOfferTtl = TimeSpan.FromMinutes(10);
     public static readonly TimeSpan ScheduledOfferTtl = TimeSpan.FromHours(2);
     /// <summary>Default minutes a live Pending booking waits before system cancel.</summary>
@@ -77,7 +79,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
 
         await ExpireStaleAsync(trip.Id, cancellationToken);
 
-        if (string.Equals(trip.Notes, DirectHailNote, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(trip.Notes, DirectHailNote, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trip.Notes, FavoriteRiderNote, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }

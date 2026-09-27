@@ -46,6 +46,20 @@ public record CustomerHailRider(
     IReadOnlyList<PaymentMethod> PaymentMethods,
     double? DistanceKm = null);
 
+public record CustomerFavoriteRiderCard(
+    Guid RiderId,
+    string FullName,
+    string PlateNumber,
+    VehicleType VehicleType,
+    string? VehicleModel,
+    string? PhotoUrl,
+    string? PhoneNumber,
+    bool IsOnline,
+    bool IsBusy,
+    bool CanBook,
+    string CompanyName,
+    IReadOnlyList<PaymentMethod> PaymentMethods);
+
 public record TripChatSendRequest(string Body);
 
 public record CustomerQuoteResponse(
@@ -129,7 +143,8 @@ public record CustomerTripItem(
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
     string? PromoCode = null,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    Guid? RiderId = null);
 
 public record CustomerRateRequest(int Rating, string? Comment);
 

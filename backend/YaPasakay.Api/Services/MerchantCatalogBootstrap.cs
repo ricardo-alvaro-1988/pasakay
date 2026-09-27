@@ -683,6 +683,39 @@ public static class MerchantCatalogBootstrap
             """, cancellationToken);
     }
 
+    public static async Task EnsureCustomerFavoriteRidersAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            IF OBJECT_ID(N'[CustomerFavoriteRiders]', N'U') IS NULL
+            BEGIN
+                CREATE TABLE [CustomerFavoriteRiders] (
+                    [Id] uniqueidentifier NOT NULL,
+                    [CustomerId] uniqueidentifier NOT NULL,
+                    [RiderId] uniqueidentifier NOT NULL,
+                    [CreatedAtUtc] datetime2 NOT NULL,
+                    [UpdatedAtUtc] datetime2 NULL,
+                    CONSTRAINT [PK_CustomerFavoriteRiders] PRIMARY KEY ([Id]),
+                    CONSTRAINT [FK_CustomerFavoriteRiders_CustomerProfiles_CustomerId]
+                        FOREIGN KEY ([CustomerId]) REFERENCES [CustomerProfiles] ([Id]) ON DELETE CASCADE,
+                    CONSTRAINT [FK_CustomerFavoriteRiders_RiderProfiles_RiderId]
+                        FOREIGN KEY ([RiderId]) REFERENCES [RiderProfiles] ([Id]) ON DELETE CASCADE
+                );
+                CREATE UNIQUE INDEX [IX_CustomerFavoriteRiders_CustomerId_RiderId]
+                    ON [CustomerFavoriteRiders] ([CustomerId], [RiderId]);
+                CREATE INDEX [IX_CustomerFavoriteRiders_RiderId]
+                    ON [CustomerFavoriteRiders] ([RiderId]);
+            END
+
+            IF NOT EXISTS (
+                SELECT 1 FROM [__EFMigrationsHistory]
+                WHERE [MigrationId] = N'20260927094229_CustomerFavoriteRiders'
+            )
+                INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+                VALUES (N'20260927094229_CustomerFavoriteRiders', N'9.0.8');
+            """, cancellationToken);
+    }
+
     public static async Task<bool> HasMerchantsTableAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
         var conn = db.Database.GetDbConnection();

@@ -199,6 +199,7 @@ public static class CustomerDeskBuilder
             trip.IsPromoSponsored && trip.DiscountPercent is int pct
                 ? OperatorPromoRules.DisplayCode(pct)
                 : null,
-            trip.CustomerBoostAmount);
+            trip.CustomerBoostAmount,
+            showRider ? rider!.Id : trip.RiderId);
     }
 }

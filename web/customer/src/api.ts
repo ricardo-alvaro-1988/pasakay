@@ -95,6 +95,22 @@ export type CustomerTrip = {
   discountPercent?: number | null
   promoCode?: string | null
   customerBoostAmount?: number
+  riderId?: string | null
+}
+
+export type FavoriteRider = {
+  riderId: string
+  fullName: string
+  plateNumber: string
+  vehicleType: VehicleType
+  vehicleModel: string | null
+  photoUrl: string | null
+  phoneNumber: string | null
+  isOnline: boolean
+  isBusy: boolean
+  canBook: boolean
+  companyName: string
+  paymentMethods: PaymentMethod[]
 }
 
 export type Desk = {
@@ -584,6 +600,11 @@ export const api = {
   }),
   book: (body: BookBody) => request<Desk>('/api/customer/book', { method: 'POST', body: JSON.stringify(body) }),
   clearHail: () => request<Desk>('/api/customer/hail/clear', { method: 'POST' }),
+  favorites: () => request<FavoriteRider[]>('/api/customer/favorites'),
+  addFavorite: (riderId: string) =>
+    request<FavoriteRider>(`/api/customer/favorites/${riderId}`, { method: 'POST' }),
+  removeFavorite: (riderId: string) =>
+    request<void>(`/api/customer/favorites/${riderId}`, { method: 'DELETE' }),
   cancel: (id: string) => request<Desk>(`/api/customer/trips/${id}/cancel`, { method: 'POST' }),
   tripDetail: (id: string) => request<CustomerTripDetail>(`/api/customer/trips/${id}`),
   rate: (id: string, rating: number, comment?: string) =>

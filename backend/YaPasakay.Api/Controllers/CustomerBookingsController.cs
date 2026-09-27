@@ -603,10 +603,17 @@ public class CustomerBookingsController(
             return BadRequest(new { message = "Ask the rider to scan your QR first, then confirm the trip." });
         }
 
+        var isFavoriteDirect = !scheduled.HasValue
+            && body.RiderId is Guid favoriteRiderId
+            && await db.CustomerFavoriteRiders.AnyAsync(
+                x => x.CustomerId == customer.Id && x.RiderId == favoriteRiderId,
+                cancellationToken);
+
         var isDirectHail = body.HailQr
             || (TripBroadcastService.HailIsLive(customer.HailAtUtc)
                 && customer.HailRiderId is Guid hailedId
-                && body.RiderId == hailedId);
+                && body.RiderId == hailedId)
+            || isFavoriteDirect;
 
         var preview = await PrepareAsync(
             body with { RiderId = isDirectHail ? body.RiderId : null },
@@ -692,11 +699,13 @@ public class CustomerBookingsController(
             Reference = scheduled is DateTime at
                 ? $"YP{at:yyyyMMdd}-S{Random.Shared.Next(10, 99):00}{now:ss}"
                 : $"YP{now:yyyyMMdd}-C{Random.Shared.Next(10, 99):00}{now:ss}",
-            Notes = isDirectHail
-                ? TripBroadcastService.DirectHailNote
-                : customerPicksRider
-                    ? TripBroadcastService.CustomerPickNote
-                    : string.IsNullOrWhiteSpace(body.Notes) ? null : body.Notes.Trim(),
+            Notes = isFavoriteDirect
+                ? TripBroadcastService.FavoriteRiderNote
+                : isDirectHail
+                    ? TripBroadcastService.DirectHailNote
+                    : customerPicksRider
+                        ? TripBroadcastService.CustomerPickNote
+                        : string.IsNullOrWhiteSpace(body.Notes) ? null : body.Notes.Trim(),
             Fare = prepared.Fare,
             CustomerFare = prepared.CustomerFare,
             CustomerBoostAmount = prepared.CustomerBoostAmount,
