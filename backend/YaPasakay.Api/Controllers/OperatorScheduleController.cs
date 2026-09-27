@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using YaPasakay.Api.Services;
 using YaPasakay.Application.Admin;
 using YaPasakay.Application.Common;
+using YaPasakay.Domain;
 using YaPasakay.Domain.Entities;
 using YaPasakay.Domain.Enums;
 using YaPasakay.Infrastructure.Persistence;
@@ -13,7 +14,10 @@ namespace YaPasakay.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "Operator")]
 [Route("api/operator/schedule")]
-public class OperatorScheduleController(AppDbContext db, TripBroadcastService broadcast) : ControllerBase
+public class OperatorScheduleController(
+    AppDbContext db,
+    TripBroadcastService broadcast,
+    GoogleDrivingDistance driving) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResult<ScheduledBookingItem>>> List(
@@ -43,8 +47,8 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
                 x.Reference.Contains(term) ||
                 x.CustomerName.Contains(term) ||
                 x.CustomerPhone.Contains(phone.Length > 0 ? phone : term) ||
-                x.Rider.AppUser.FullName.Contains(term) ||
-                x.Rider.PlateNumber.Contains(term));
+                (x.Rider != null && x.Rider.AppUser.FullName.Contains(term)) ||
+                (x.Rider != null && x.Rider.PlateNumber.Contains(term)));
         }
 
         if (tripStatus is TripStatus filterStatus)
@@ -73,7 +77,7 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
         }
 
         var trip = await OperatorMaps.RideDetailQuery(db)
-            .FirstOrDefaultAsync(x => x.OperatorId == op!.Id && x.Id == id && x.ScheduledAtUtc != null, cancellationToken);
+            .FirstOrDefaultAsync(x => x.OperatorId == op!.Id && x.Id == id, cancellationToken);
         return trip is null ? NotFound() : Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
     }
 
@@ -95,32 +99,39 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
             return BadRequest(new { message = "Customer name and a valid phone number are required." });
         }
 
-        var scheduled = DateTime.SpecifyKind(request.ScheduledAtUtc.ToUniversalTime(), DateTimeKind.Utc);
-        if (request.ScheduledAtUtc == default || scheduled < DateTime.UtcNow.AddMinutes(10))
+        if (request.PaymentMethod is not (PaymentMethod.Cash or PaymentMethod.GCash or PaymentMethod.Maya))
         {
-            return BadRequest(new { message = "Schedule the booking at least 10 minutes from now (Philippine time)." });
+            return BadRequest(new { message = "Choose Cash, GCash, or Maya." });
         }
 
-        var rider = await db.RiderProfiles
-            .Include(x => x.AppUser)
-            .Include(x => x.Wallet)
-            .FirstOrDefaultAsync(x => x.Id == request.RiderId && x.OperatorId == op!.Id, cancellationToken);
-        if (rider is null || !rider.IsActive || !rider.AppUser.IsActive)
+        var paymentError = RiderPaymentSync.ValidateTripPayment(request.PaymentMethod, request.PaymentMethodOther);
+        if (paymentError is not null)
         {
-            return BadRequest(new { message = "Choose an active rider from your fleet." });
+            return BadRequest(new { message = paymentError });
         }
 
-        var balance = rider.Wallet?.Balance ?? 0;
-        if (!TripBroadcastService.CanReceiveBookings(balance))
+        DateTime? scheduled = null;
+        if (!request.IsImmediate)
         {
-            return BadRequest(new { message = TripBroadcastService.WalletBlockedMessage(balance) });
+            if (request.ScheduledAtUtc is null || request.ScheduledAtUtc == default)
+            {
+                return BadRequest(new { message = "Set the pickup date and time in Philippine time." });
+            }
+
+            scheduled = DateTime.SpecifyKind(request.ScheduledAtUtc.Value.ToUniversalTime(), DateTimeKind.Utc);
+            if (scheduled < DateTime.UtcNow.AddMinutes(10))
+            {
+                return BadRequest(new { message = "Schedule the booking at least 10 minutes from now (Philippine time)." });
+            }
         }
 
-        var pickup = await LoadBarangayAsync(request.PickupBarangayId, cancellationToken);
-        var dropoff = await LoadBarangayAsync(request.DropoffBarangayId, cancellationToken);
-        if (pickup is null || dropoff is null)
+        var pickupLat = request.PickupLat;
+        var pickupLng = request.PickupLng;
+        var dropoffLat = request.DropoffLat;
+        var dropoffLng = request.DropoffLng;
+        if (pickupLat == 0 || pickupLng == 0 || dropoffLat == 0 || dropoffLng == 0)
         {
-            return BadRequest(new { message = "Choose pickup and drop-off barangays." });
+            return BadRequest(new { message = "Set pickup and drop-off on the map." });
         }
 
         var pickupDetails = (request.PickupDetails ?? string.Empty).Trim();
@@ -130,53 +141,119 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
             return BadRequest(new { message = "Add pickup and drop-off address details." });
         }
 
-        var distance = request.DistanceKm <= 0 ? 4m : Math.Round(request.DistanceKm, 1, MidpointRounding.AwayFromZero);
-        var passengers = VehicleTypeRules.ClampPassengers(rider.VehicleType, request.PassengerCount);
-        var fare = await QuoteAsync(op.Id, rider.VehicleType, distance, passengers, pickup.MunicipalityId, cancellationToken);
-        if (fare is null)
+        var pickup = await TerritoryLookup.MatchFromAddressAsync(
+            db, request.PickupBarangayId, pickupDetails, cancellationToken);
+        var dropoff = await TerritoryLookup.MatchFromAddressAsync(
+            db, request.DropoffBarangayId, dropoffDetails, cancellationToken);
+        if (pickup is null || dropoff is null)
         {
-            return BadRequest(new { message = "No fare matrix for this municipality. Create rates for this city first." });
-        }
-        var paymentError = RiderPaymentSync.ValidateTripPayment(request.PaymentMethod, request.PaymentMethodOther);
-        if (paymentError is not null)
-        {
-            return BadRequest(new { message = paymentError });
+            return BadRequest(new { message = "Pickup and drop-off must match a Philippine barangay." });
         }
 
-        if (!await RiderPaymentSync.AcceptsAsync(db, rider.Id, request.PaymentMethod, cancellationToken))
+        var coverage = await OperatorAreaSync.CoverageErrorAsync(db, op.Id, pickup.Id, cancellationToken);
+        if (coverage is not null)
         {
-            return BadRequest(new { message = "The assigned rider does not accept that payment method." });
+            return BadRequest(new { message = coverage });
+        }
+
+        var (vehicle, vehicleCategoryId, maxPassengers, isCargo, vehicleError) =
+            await ResolveVehicleAsync(op.Id, request.VehicleType, request.VehicleCategoryId, cancellationToken);
+        if (vehicleError is not null)
+        {
+            return BadRequest(new { message = vehicleError });
+        }
+
+        var selectMode = request.RiderId is Guid;
+        RiderProfile? assignedRider = null;
+        if (selectMode)
+        {
+            assignedRider = await db.RiderProfiles
+                .Include(x => x.AppUser)
+                .Include(x => x.Wallet)
+                .FirstOrDefaultAsync(x => x.Id == request.RiderId && x.OperatorId == op.Id, cancellationToken);
+            if (assignedRider is null || !assignedRider.IsActive || !assignedRider.AppUser.IsActive)
+            {
+                return BadRequest(new { message = "Choose an active rider from your fleet." });
+            }
+
+            if (!RiderMatchesVehicle(assignedRider, vehicle, vehicleCategoryId))
+            {
+                return BadRequest(new { message = "That rider does not match the selected vehicle type." });
+            }
+
+            var balance = assignedRider.Wallet?.Balance ?? 0;
+            if (!TripBroadcastService.CanReceiveBookings(balance))
+            {
+                return BadRequest(new { message = TripBroadcastService.WalletBlockedMessage(balance) });
+            }
+        }
+
+        var (measuredKm, _) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
+        var distance = request.DistanceKm > 0
+            ? Math.Round(request.DistanceKm, 1, MidpointRounding.AwayFromZero)
+            : (measuredKm > 0 ? Math.Round(measuredKm, 1, MidpointRounding.AwayFromZero) : 4m);
+
+        var fareRow = await OperatorMaps.LoadFareMatrixAsync(
+            db, op.Id, vehicle, pickup.MunicipalityId, vehicleCategoryId, cancellationToken);
+        if (fareRow is null)
+        {
+            return BadRequest(new { message = "No fare matrix for this vehicle in the pickup municipality. Create rates first." });
+        }
+
+        var passengers = VehicleCatalog.ClampPassengers(vehicle, isCargo, maxPassengers, request.PassengerCount);
+        var fare = DeriveFarePricingService.ComputeMunicipalityWithSurcharges(fareRow, passengers, distance);
+
+        var provisionalRider = assignedRider ?? await PickProvisionalRiderAsync(
+            op.Id, vehicle, vehicleCategoryId, pickupLat, pickupLng, cancellationToken);
+        if (provisionalRider is null)
+        {
+            return BadRequest(new
+            {
+                message = selectMode
+                    ? "Choose an active rider from your fleet."
+                    : "No rider is available for that vehicle type yet. Add a rider or use Select."
+            });
         }
 
         var customer = await db.CustomerProfiles
             .Include(x => x.AppUser)
             .FirstOrDefaultAsync(x => x.AppUser.PhoneNumber == phone, cancellationToken);
 
+        var now = DateTime.UtcNow;
         var trip = new Trip
         {
             OperatorId = op.Id,
-            RiderId = rider.Id,
-            VehicleType = rider.VehicleType,
+            RiderId = provisionalRider.Id,
+            VehicleType = vehicle,
+            VehicleCategoryId = vehicleCategoryId
+                ?? (VehicleTypeRules.IsKnown(vehicle) ? VehicleCatalog.IdFor(vehicle) : null),
             Status = TripStatus.Pending,
             Pickup = pickupDetails,
             PickupDetails = pickupDetails,
             PickupBarangayId = pickup.Id,
+            PickupLat = pickupLat,
+            PickupLng = pickupLng,
             Dropoff = dropoffDetails,
             DropoffDetails = dropoffDetails,
             DropoffBarangayId = dropoff.Id,
+            DropoffLat = dropoffLat,
+            DropoffLng = dropoffLng,
             CustomerId = customer?.Id,
             CustomerName = name,
             CustomerPhone = phone,
-            Reference = $"YP{scheduled:yyyyMMdd}-S{Random.Shared.Next(10, 99):00}{DateTime.UtcNow:ss}",
-            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
-            Fare = fare.Value,
+            Reference = scheduled is DateTime at
+                ? $"YP{at:yyyyMMdd}-S{Random.Shared.Next(10, 99):00}{now:ss}"
+                : $"YP{now:yyyyMMdd}-O{Random.Shared.Next(10, 99):00}{now:ss}",
+            Notes = selectMode
+                ? TripBroadcastService.CustomerPickNote
+                : (string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim()),
+            Fare = fare,
+            CustomerFare = fare,
             DistanceKm = distance,
             PassengerCount = passengers,
             PaymentMethod = request.PaymentMethod,
-            PaymentMethodOther = request.PaymentMethod == PaymentMethod.Other
-                ? request.PaymentMethodOther?.Trim()
-                : null,
-            RequestedAtUtc = DateTime.UtcNow,
+            PaymentMethodOther = null,
+            RequestedAtUtc = now,
             ScheduledAtUtc = scheduled
         };
         db.Trips.Add(trip);
@@ -197,21 +274,24 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
             return StatusCode(status, new { message });
         }
 
+        // Allow cancel for scheduled rows and Immediate desk bookings created from this module.
         var trip = await OperatorMaps.RideDetailQuery(db)
-            .FirstOrDefaultAsync(x => x.OperatorId == op!.Id && x.Id == id && x.ScheduledAtUtc != null, cancellationToken);
+            .FirstOrDefaultAsync(x => x.OperatorId == op!.Id && x.Id == id, cancellationToken);
         if (trip is null)
         {
             return NotFound();
         }
 
-        if (trip.Status is TripStatus.Completed or TripStatus.Cancelled or TripStatus.Ongoing)
+        if (trip.Status is not (TripStatus.Pending or TripStatus.Waiting))
         {
-            return BadRequest(new { message = "This scheduled booking can no longer be cancelled." });
+            return BadRequest(new { message = "This booking can no longer be cancelled." });
         }
 
         trip.Status = TripStatus.Cancelled;
         trip.CancelledAtUtc = DateTime.UtcNow;
-        trip.CancelReason = "Customer cancelled the scheduled booking.";
+        trip.CancelReason = trip.ScheduledAtUtc is null
+            ? "Operator cancelled the booking."
+            : "Operator cancelled the scheduled booking.";
         trip.CancelledBy = CancelledBy.Operator;
         trip.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
@@ -219,33 +299,137 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
         return Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
     }
 
-    private async Task<Barangay?> LoadBarangayAsync(Guid id, CancellationToken cancellationToken) =>
-        await db.Barangays
-            .Include(x => x.Municipality)
-            .ThenInclude(x => x.Province)
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-
-    private async Task<decimal?> QuoteAsync(
+    private async Task<(VehicleType Vehicle, Guid? CategoryId, int MaxPassengers, bool IsCargo, string? Error)> ResolveVehicleAsync(
         Guid operatorId,
-        VehicleType vehicleType,
-        decimal distanceKm,
-        int passengerCount,
-        Guid municipalityId,
+        VehicleType requestedType,
+        Guid? requestedCategoryId,
         CancellationToken cancellationToken)
     {
-        var fare = await OperatorMaps.LoadFareMatrixAsync(
-            db,
-            operatorId,
-            vehicleType,
-            municipalityId,
-            null,
-            cancellationToken);
-        if (fare is null)
+        Guid? categoryId = requestedCategoryId;
+        var vehicle = requestedType;
+        var maxPassengers = VehicleTypeRules.MaxPassengers(vehicle);
+        var isCargo = VehicleTypeRules.IsCargo(vehicle);
+
+        if (categoryId is Guid catId)
+        {
+            var offer = await db.OperatorVehicleOffers
+                .AsNoTracking()
+                .Include(x => x.VehicleCategory)
+                .FirstOrDefaultAsync(
+                    x => x.OperatorId == operatorId && x.VehicleCategoryId == catId && x.IsEnabled,
+                    cancellationToken);
+            if (offer?.VehicleCategory is null)
+            {
+                return (vehicle, null, maxPassengers, isCargo, "That vehicle type is not available for your fleet.");
+            }
+
+            var cat = offer.VehicleCategory;
+            categoryId = cat.Id;
+            if (cat.LegacyEnumValue is int legacy && Enum.IsDefined(typeof(VehicleType), legacy))
+            {
+                vehicle = (VehicleType)legacy;
+            }
+            else if (VehicleCatalog.TypeFor(cat.Id) is VehicleType platformType)
+            {
+                vehicle = platformType;
+            }
+            else
+            {
+                vehicle = VehicleType.Custom;
+            }
+
+            maxPassengers = offer.MaxPassengers ?? cat.MaxPassengers;
+            isCargo = cat.IsCargo;
+            return (vehicle, categoryId, maxPassengers, isCargo, null);
+        }
+
+        if (VehicleTypeRules.ValidateChoice(vehicle) is { } invalid)
+        {
+            return (vehicle, null, maxPassengers, isCargo, invalid);
+        }
+
+        var presetId = VehicleCatalog.IdFor(vehicle);
+        var enabled = await db.OperatorVehicleOffers
+            .AsNoTracking()
+            .AnyAsync(x => x.OperatorId == operatorId && x.VehicleCategoryId == presetId && x.IsEnabled, cancellationToken);
+        if (!enabled)
+        {
+            return (vehicle, null, maxPassengers, isCargo, "That vehicle type is not enabled for your fleet.");
+        }
+
+        return (vehicle, presetId, maxPassengers, isCargo, null);
+    }
+
+    private static bool RiderMatchesVehicle(RiderProfile rider, VehicleType vehicle, Guid? vehicleCategoryId)
+    {
+        if (vehicle == VehicleType.Custom)
+        {
+            return vehicleCategoryId is Guid cat
+                && rider.VehicleType == VehicleType.Custom
+                && rider.VehicleCategoryId == cat;
+        }
+
+        if (rider.VehicleType != vehicle)
+        {
+            return false;
+        }
+
+        if (vehicleCategoryId is Guid preferred && rider.VehicleCategoryId is Guid riderCat)
+        {
+            return riderCat == preferred;
+        }
+
+        return true;
+    }
+
+    private async Task<RiderProfile?> PickProvisionalRiderAsync(
+        Guid operatorId,
+        VehicleType vehicleType,
+        Guid? vehicleCategoryId,
+        double pickupLat,
+        double pickupLng,
+        CancellationToken cancellationToken)
+    {
+        IQueryable<RiderProfile> query = db.RiderProfiles
+            .Include(x => x.AppUser)
+            .Include(x => x.Wallet)
+            .Where(x => x.OperatorId == operatorId && x.IsActive && x.AcceptsPasakay && x.AppUser.IsActive);
+
+        if (vehicleType == VehicleType.Custom)
+        {
+            if (vehicleCategoryId is not Guid categoryId)
+            {
+                return null;
+            }
+
+            query = query.Where(x => x.VehicleType == VehicleType.Custom && x.VehicleCategoryId == categoryId);
+        }
+        else
+        {
+            query = query.Where(x => x.VehicleType == vehicleType);
+        }
+
+        var riders = await query.ToListAsync(cancellationToken);
+        if (vehicleCategoryId is Guid preferredCategoryId && vehicleType != VehicleType.Custom)
+        {
+            var matched = riders.Where(x => x.VehicleCategoryId == preferredCategoryId).ToList();
+            if (matched.Count > 0)
+            {
+                riders = matched;
+            }
+        }
+
+        if (riders.Count == 0)
         {
             return null;
         }
 
-        return DeriveFarePricingService.ComputeMunicipalityWithSurcharges(fare, passengerCount, distanceKm);
+        var funded = riders.Where(x => TripBroadcastService.CanReceiveBookings(x.Wallet?.Balance ?? 0)).ToList();
+        var pool = funded.Count > 0 ? funded : riders;
+        return pool
+            .OrderByDescending(x => x.IsOnline)
+            .ThenBy(x => Geo.DistanceKm(x.LastLat, x.LastLng, pickupLat, pickupLng) ?? double.MaxValue)
+            .First();
     }
 
     private static ScheduledBookingItem Map(Trip trip) =>
@@ -256,8 +440,8 @@ public class OperatorScheduleController(AppDbContext db, TripBroadcastService br
             trip.CustomerName,
             trip.CustomerPhone,
             trip.RiderId,
-            trip.Rider.AppUser.FullName,
-            trip.Rider.PlateNumber,
+            trip.Rider?.AppUser?.FullName ?? "Broadcast",
+            trip.Rider?.PlateNumber ?? "—",
             trip.VehicleType,
             TripAddress.Display(trip.PickupDetails, trip.Pickup),
             TripAddress.Display(trip.DropoffDetails, trip.Dropoff),

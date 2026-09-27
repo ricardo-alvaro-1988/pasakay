@@ -603,7 +603,7 @@ public record ScheduledBookingItem(
     DateTime ScheduledAtUtc,
     string CustomerName,
     string CustomerPhone,
-    Guid RiderId,
+    Guid? RiderId,
     string RiderName,
     string PlateNumber,
     VehicleType VehicleType,
@@ -617,17 +617,26 @@ public record ScheduledBookingItem(
 public record CreateScheduledBookingRequest(
     string CustomerName,
     string Phone,
-    Guid RiderId,
-    Guid PickupBarangayId,
+    /// <summary>When set, dispatch is Select (that rider). When null, Broadcast to fleet.</summary>
+    Guid? RiderId,
+    /// <summary>True = live now (no ScheduledAtUtc). False = scheduled datetime required.</summary>
+    bool IsImmediate,
+    DateTime? ScheduledAtUtc,
+    VehicleType VehicleType,
+    Guid? VehicleCategoryId,
+    double PickupLat,
+    double PickupLng,
+    double DropoffLat,
+    double DropoffLng,
+    Guid? PickupBarangayId,
     string PickupDetails,
-    Guid DropoffBarangayId,
+    Guid? DropoffBarangayId,
     string DropoffDetails,
-    DateTime ScheduledAtUtc,
     string? Notes,
-    decimal DistanceKm,
     PaymentMethod PaymentMethod,
     string? PaymentMethodOther,
-    int PassengerCount = 1);
+    int PassengerCount = 1,
+    decimal DistanceKm = 0);
 
 public record ReassignBookingRequest(Guid RiderId);
 

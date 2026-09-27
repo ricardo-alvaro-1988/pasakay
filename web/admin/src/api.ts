@@ -1381,7 +1381,7 @@ export type ScheduledBooking = {
   scheduledAtUtc: string
   customerName: string
   customerPhone: string
-  riderId: string
+  riderId: string | null
   riderName: string
   plateNumber: string
   vehicleType: VehicleType
@@ -1823,6 +1823,8 @@ export const api = {
     return request<OperatorBookingBoard>(`/api/operator/bookings${query ? `?${query}` : ''}`)
   },
   operatorBooking: (id: string) => request<RideDetail>(`/api/operator/bookings/${id}`),
+  cancelOperatorBooking: (id: string) =>
+    request<RideDetail>(`/api/operator/bookings/${id}/cancel`, { method: 'POST' }),
   operatorBookingList: (q = '', page = 1, pageSize = 10, status?: TripStatus | '', from?: string, to?: string) => {
     const params = new URLSearchParams({
       q,
@@ -1856,17 +1858,24 @@ export const api = {
   createScheduledBooking: (body: {
     customerName: string
     phone: string
-    riderId: string
-    pickupBarangayId: string
+    riderId?: string | null
+    isImmediate: boolean
+    scheduledAtUtc?: string | null
+    vehicleType: VehicleType | string
+    vehicleCategoryId?: string | null
+    pickupLat: number
+    pickupLng: number
+    dropoffLat: number
+    dropoffLng: number
+    pickupBarangayId?: string | null
     pickupDetails: string
-    dropoffBarangayId: string
+    dropoffBarangayId?: string | null
     dropoffDetails: string
-    scheduledAtUtc: string
     notes?: string
-    distanceKm: number
     passengerCount?: number
     paymentMethod: PaymentMethod
     paymentMethodOther?: string
+    distanceKm?: number
   }) => request<RideDetail>('/api/operator/schedule', { method: 'POST', body: JSON.stringify(body) }),
   cancelScheduledBooking: (id: string) =>
     request<RideDetail>(`/api/operator/schedule/${id}/cancel`, { method: 'POST' }),
