@@ -31,9 +31,9 @@ public class Trip : BaseEntity
     public CustomerProfile? Customer { get; set; }
     public string Reference { get; set; } = string.Empty;
     public string? Notes { get; set; }
-    /// <summary>Full quoted fare (used for commission).</summary>
+    /// <summary>Fare used for commission. A rider discount rewrites this to the amount after the discount.</summary>
     public decimal Fare { get; set; }
-    /// <summary>What the customer should pay after promo (equals Fare when no promo).</summary>
+    /// <summary>What the customer pays. Equals Fare after a rider discount. A promo can make this lower than Fare.</summary>
     public decimal CustomerFare { get; set; }
     /// <summary>Optional customer-added fare included in Fare and CustomerFare.</summary>
     public decimal CustomerBoostAmount { get; set; }
@@ -43,7 +43,7 @@ public class Trip : BaseEntity
     public OperatorPromo? Promo { get; set; }
     public int? DiscountPercent { get; set; }
     public FareDiscountKind FareDiscountKind { get; set; } = FareDiscountKind.None;
-    /// <summary>Pesos taken off CustomerFare for a senior, PWD, or other discount.</summary>
+    /// <summary>Pesos already taken off Fare for a senior, PWD, or other discount.</summary>
     public decimal FareDiscountAmount { get; set; }
     public int? FareDiscountPercent { get; set; }
     public string? FareDiscountNote { get; set; }

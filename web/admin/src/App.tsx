@@ -4405,9 +4405,11 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
           value={`${Math.max(1, ride.passengerCount ?? 1)} passenger${(ride.passengerCount ?? 1) === 1 ? '' : 's'}`}
         />
         <DetailItem label="Fare" value={peso(customerPay)} />
-        {customerPay < ride.fare ? <DetailItem label="Original fare" value={peso(ride.fare)} /> : null}
-        {customerPay < ride.fare ? (
-          <DetailItem label="Operator owes rider" value={peso(Math.max(0, ride.fare - customerPay))} />
+        {customerPay < ride.fare && !ride.fareDiscountLabel ? (
+          <DetailItem label="Original fare" value={peso(ride.fare)} />
+        ) : null}
+        {ride.isPromoSponsored && (ride.promoDiscountAmount ?? 0) > 0 ? (
+          <DetailItem label="Operator owes rider" value={peso(ride.promoDiscountAmount ?? 0)} />
         ) : null}
         {(ride.customerBoostAmount ?? 0) > 0 ? (
           <DetailItem label="Customer boost" value={`+${peso(ride.customerBoostAmount!)}`} />
@@ -4449,8 +4451,8 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
         commission={ride.commission}
         view={commissionView}
         status={ride.status}
-        fare={ride.fare}
-        payable={customerPay}
+        fare={ride.fareDiscountLabel ? customerPay : ride.fare}
+        payable={ride.fareDiscountLabel ? customerPay : customerPay < ride.fare ? customerPay : undefined}
       />
       <div className="detail-split">
         <div className="detail-card">

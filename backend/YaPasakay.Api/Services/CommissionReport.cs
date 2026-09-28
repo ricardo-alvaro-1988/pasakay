@@ -100,7 +100,7 @@ public static class CommissionReport
                 breakdown?.DriverAmount ?? 0,
                 breakdown?.OperatorAmount ?? 0,
                 breakdown?.SystemAmount ?? 0,
-                trip.Fare,
+                RideCommissionCalculator.SettlementFare(trip),
                 DateTime.SpecifyKind(when, DateTimeKind.Utc),
                 trip.Status);
         }).ToList();
@@ -112,7 +112,7 @@ public static class CommissionReport
             .ToListAsync(cancellationToken);
         var summaryFares = await OperatorMaps.LoadFareMatrixLookupAsync(db, summaryTrips, cancellationToken);
         var (system, opAmount, driver) = RideCommissionCalculator.Sum(summaryTrips, summaryFares);
-        var gross = CommissionCut.Round(summaryTrips.Sum(x => x.Fare));
+        var gross = CommissionCut.Round(summaryTrips.Sum(RideCommissionCalculator.SettlementFare));
 
         return new CommissionReportResponse(
             new PagedResult<CommissionReportItem>(items, page, pageSize, total),

@@ -279,14 +279,22 @@ public class OperatorDeskController(AppDbContext db) : ControllerBase
 
         var trips = await db.Trips
             .Where(x => x.OperatorId == op!.Id && x.Status == TripStatus.Completed && x.BillId == null)
-            .Select(x => new { x.VehicleType, x.Fare, x.CompletedAtUtc })
+            .Select(x => new { x.VehicleType, x.Fare, x.CustomerFare, x.FareDiscountAmount, x.CompletedAtUtc })
             .ToListAsync(cancellationToken);
         var motorcycle = CommissionCut.Round(trips
             .Where(x => x.VehicleType == VehicleType.Motorcycle)
-            .Sum(x => CommissionCut.Of(x.Fare, x.VehicleType, op.MotorcycleCommissionPercent, op.TricycleCommissionPercent)));
+            .Sum(x => CommissionCut.Of(
+                RideCommissionCalculator.SettlementFare(x.Fare, x.CustomerFare, x.FareDiscountAmount),
+                x.VehicleType,
+                op.MotorcycleCommissionPercent,
+                op.TricycleCommissionPercent)));
         var tricycle = CommissionCut.Round(trips
             .Where(x => x.VehicleType == VehicleType.Tricycle)
-            .Sum(x => CommissionCut.Of(x.Fare, x.VehicleType, op.MotorcycleCommissionPercent, op.TricycleCommissionPercent)));
+            .Sum(x => CommissionCut.Of(
+                RideCommissionCalculator.SettlementFare(x.Fare, x.CustomerFare, x.FareDiscountAmount),
+                x.VehicleType,
+                op.MotorcycleCommissionPercent,
+                op.TricycleCommissionPercent)));
 
         var billRows = await db.OperatorBills
             .Where(x => x.OperatorId == op.Id)
@@ -304,6 +312,8 @@ public class OperatorDeskController(AppDbContext db) : ControllerBase
                     RiderName = x.Rider.AppUser.FullName,
                     x.Reference,
                     x.Fare,
+                    x.CustomerFare,
+                    x.FareDiscountAmount,
                     x.VehicleType
                 })
                 .ToListAsync(cancellationToken);
@@ -313,16 +323,20 @@ public class OperatorDeskController(AppDbContext db) : ControllerBase
             var lines = billedTrips
                 .Where(t => t.BillId == x.Id)
                 .OrderBy(t => t.AtUtc)
-                .Select(t => new BillTripItem(
+                .Select(t =>
+                {
+                    var fare = RideCommissionCalculator.SettlementFare(t.Fare, t.CustomerFare, t.FareDiscountAmount);
+                    return new BillTripItem(
                     DateTime.SpecifyKind(t.AtUtc, DateTimeKind.Utc),
                     t.RiderName,
                     t.Reference,
-                    t.Fare,
+                    fare,
                     CommissionCut.Round(CommissionCut.Of(
-                        t.Fare,
+                        fare,
                         t.VehicleType,
                         op.MotorcycleCommissionPercent,
-                        op.TricycleCommissionPercent))))
+                        op.TricycleCommissionPercent)));
+                })
                 .ToList();
             return new BillListItem(
                 x.Id,

@@ -586,7 +586,7 @@ public class RiderDeskController(
             return BadRequest(new { message = "Choose Senior citizen, PWD, or Others." });
         }
 
-        var payable = (trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare) + trip.FareDiscountAmount;
+        var payable = FareBeforeRiderDiscount(trip);
         var (pay, amount, percent, error) = FareDiscountRules.Apply(
             payable,
             kind,
@@ -599,6 +599,7 @@ public class RiderDeskController(
             return BadRequest(new { message = error });
         }
 
+        trip.Fare = pay;
         trip.CustomerFare = pay;
         trip.FareDiscountKind = kind;
         trip.FareDiscountAmount = amount;
@@ -619,6 +620,22 @@ public class RiderDeskController(
         }
 
         return Ok(await BuildDeskAsync(rider.Id, cancellationToken));
+    }
+
+    /// <summary>Fare before the current rider discount, so a change replaces it instead of stacking.</summary>
+    private static decimal FareBeforeRiderDiscount(Trip trip)
+    {
+        if (trip.FareDiscountAmount <= 0)
+        {
+            return trip.Fare;
+        }
+
+        if (trip.CustomerFare > 0 && trip.Fare <= trip.CustomerFare)
+        {
+            return trip.Fare + trip.FareDiscountAmount;
+        }
+
+        return trip.Fare;
     }
 
     [HttpGet("trips/{id:guid}/chat")]

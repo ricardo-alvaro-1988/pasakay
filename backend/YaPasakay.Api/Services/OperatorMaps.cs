@@ -446,7 +446,7 @@ public static class OperatorMaps
             await query.CountAsync(x => x.Status == TripStatus.Completed, cancellationToken),
             await query.CountAsync(x => x.Status == TripStatus.Cancelled, cancellationToken),
             await query.CountAsync(x => x.Status == TripStatus.Ongoing, cancellationToken),
-            completedTrips.Sum(x => x.Fare),
+            completedTrips.Sum(RideCommissionCalculator.SettlementFare),
             systemAmount,
             operatorAmount,
             driverAmount);

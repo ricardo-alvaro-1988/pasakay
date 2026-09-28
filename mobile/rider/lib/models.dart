@@ -399,11 +399,10 @@ class JobOffer {
       if (promoDiscountAmount > 0) {
         owed += promoDiscountAmount;
       } else {
-        final diff = fare - collectFromCustomer - fareDiscountAmount;
+        final diff = fare - collectFromCustomer;
         if (diff > 0) owed += diff > fare ? fare : diff;
       }
     }
-    if (fareDiscountAmount > 0) owed += fareDiscountAmount;
     return owed;
   }
 
@@ -520,11 +519,10 @@ class RiderTrip {
       if (promoDiscountAmount > 0) {
         owed += promoDiscountAmount;
       } else {
-        final diff = fare - collectFromCustomer - fareDiscountAmount;
+        final diff = fare - collectFromCustomer;
         if (diff > 0) owed += diff > fare ? fare : diff;
       }
     }
-    if (fareDiscountAmount > 0) owed += fareDiscountAmount;
     return owed;
   }
 

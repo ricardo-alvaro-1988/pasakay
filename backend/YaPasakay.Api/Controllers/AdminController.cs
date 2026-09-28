@@ -43,9 +43,12 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             .Include(x => x.Operator)
             .ThenInclude(o => o.VehicleOffers)
             .Where(x => x.Status == TripStatus.Completed && x.CompletedAtUtc >= DateTime.UtcNow.Date)
-            .Select(x => new { x.Fare, x.VehicleType, x.Operator })
+            .Select(x => new { x.Fare, x.CustomerFare, x.FareDiscountAmount, x.VehicleType, x.Operator })
             .ToListAsync(cancellationToken);
-        var adminCutToday = completedTodayTrips.Sum(x => CommissionCut.Of(x.Fare, x.VehicleType, x.Operator));
+        var adminCutToday = completedTodayTrips.Sum(x => CommissionCut.Of(
+            RideCommissionCalculator.SettlementFare(x.Fare, x.CustomerFare, x.FareDiscountAmount),
+            x.VehicleType,
+            x.Operator));
         var openSos = await db.SupportTickets.CountAsync(
             x => x.Kind == SupportKind.Sos && x.Status == SupportStatus.Open,
             cancellationToken);
@@ -1641,7 +1644,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             await query.CountAsync(x => x.Status == TripStatus.Completed, cancellationToken),
             await query.CountAsync(x => x.Status == TripStatus.Cancelled, cancellationToken),
             await query.CountAsync(x => x.Status == TripStatus.Ongoing, cancellationToken),
-            completedTrips.Sum(x => x.Fare),
+            completedTrips.Sum(RideCommissionCalculator.SettlementFare),
             systemAmount,
             operatorAmount,
             driverAmount);

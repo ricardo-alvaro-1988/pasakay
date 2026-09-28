@@ -40,17 +40,21 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             cancellationToken);
         var pendingTrips = await db.Trips
             .Where(x => x.OperatorId == op.Id && x.Status == TripStatus.Completed && x.BillId == null)
-            .Select(x => new { x.VehicleType, x.Fare })
+            .Select(x => new { x.VehicleType, x.Fare, x.CustomerFare, x.FareDiscountAmount })
             .ToListAsync(cancellationToken);
         var pending = CommissionCut.Round(pendingTrips.Sum(x =>
-            CommissionCut.Of(x.Fare, x.VehicleType, op.MotorcycleCommissionPercent, op.TricycleCommissionPercent)));
+            CommissionCut.Of(
+                RideCommissionCalculator.SettlementFare(x.Fare, x.CustomerFare, x.FareDiscountAmount),
+                x.VehicleType,
+                op.MotorcycleCommissionPercent,
+                op.TricycleCommissionPercent)));
 
         var now = DateTime.UtcNow;
         var today = now.Date;
         var from = today.AddDays(-6);
         var window = await db.Trips
             .Where(x => x.OperatorId == op.Id && (x.RequestedAtUtc >= from || (x.CompletedAtUtc != null && x.CompletedAtUtc >= from)))
-            .Select(x => new { x.Status, x.Fare, x.RequestedAtUtc, x.CompletedAtUtc, x.ScheduledAtUtc })
+            .Select(x => new { x.Status, x.Fare, x.CustomerFare, x.FareDiscountAmount, x.RequestedAtUtc, x.CompletedAtUtc, x.ScheduledAtUtc })
             .ToListAsync(cancellationToken);
 
         bool LivePending(TripStatus status, DateTime? scheduled) =>
@@ -58,7 +62,7 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
 
         var salesToday = window
             .Where(x => x.Status == TripStatus.Completed && (x.CompletedAtUtc ?? x.RequestedAtUtc).Date == today)
-            .Sum(x => x.Fare);
+            .Sum(x => RideCommissionCalculator.SettlementFare(x.Fare, x.CustomerFare, x.FareDiscountAmount));
         var pendingNow = await db.Trips.CountAsync(
             x => x.OperatorId == op.Id && x.Status == TripStatus.Pending && (x.ScheduledAtUtc == null || x.ScheduledAtUtc <= now),
             cancellationToken);
@@ -73,7 +77,7 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
                 var day = from.AddDays(offset).Date;
                 var sales = window
                     .Where(x => x.Status == TripStatus.Completed && (x.CompletedAtUtc ?? x.RequestedAtUtc).Date == day)
-                    .Sum(x => x.Fare);
+                    .Sum(x => RideCommissionCalculator.SettlementFare(x.Fare, x.CustomerFare, x.FareDiscountAmount));
                 var pendingDay = window.Count(x => LivePending(x.Status, x.ScheduledAtUtc) && x.RequestedAtUtc.Date == day);
                 var ongoingDay = window.Count(x => x.Status == TripStatus.Ongoing && x.RequestedAtUtc.Date == day);
                 var completeDay = window.Count(x => x.Status == TripStatus.Completed && (x.CompletedAtUtc ?? x.RequestedAtUtc).Date == day);
