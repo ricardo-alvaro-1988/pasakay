@@ -286,9 +286,9 @@ class _BookingDetailPageState extends State<BookingDetailPage> {
                       _row('Vehicle', formatVehicleLine(detail.vehicleType, vehicleModel: detail.vehicleModel, plateNumber: detail.plateNumber)),
                       _row('Payment', paymentLabel(detail.paymentMethod)),
                       _row('Fare', peso(detail.fareToShow), emphasize: true),
-                      if ((detail.fareDiscountLabel ?? '').isNotEmpty || (detail.customerFare > 0 && detail.customerFare < detail.fare)) ...[
+                      if ((detail.fareDiscountLabel ?? '').isNotEmpty || detail.originalFare > detail.fareToShow) ...[
                         if ((detail.fareDiscountLabel ?? '').isNotEmpty) _row('Discount', detail.fareDiscountLabel),
-                        _row('Original fare', peso(detail.fare)),
+                        if (detail.originalFare > detail.fareToShow) _row('Original fare', peso(detail.originalFare)),
                       ],
                       _row('Distance', '${detail.distanceKm.toStringAsFixed(1)} km'),
                       _row('Requested', _dateTime(detail.requestedAt)),

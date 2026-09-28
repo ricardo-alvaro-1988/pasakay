@@ -69,6 +69,20 @@ public static class RideCommissionCalculator
         return fare;
     }
 
+    /// <summary>Price before a rider discount. Fare may already have been rewritten down to the net amount.</summary>
+    public static decimal QuotedFare(Trip trip) =>
+        QuotedFare(trip.Fare, trip.CustomerFare, trip.FareDiscountAmount);
+
+    public static decimal QuotedFare(decimal fare, decimal customerFare, decimal fareDiscountAmount)
+    {
+        if (fareDiscountAmount > 0 && !(customerFare > 0 && customerFare < fare))
+        {
+            return fare + fareDiscountAmount;
+        }
+
+        return fare;
+    }
+
     /// <summary>Rider wallet debit: admin + operator share (matches rider "System" view).</summary>
     public static (decimal Amount, decimal RemitPercent)? WalletDeduction(
         Trip trip,

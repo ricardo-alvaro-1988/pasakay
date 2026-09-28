@@ -151,7 +151,7 @@ public static class BookingReport
                 breakdown?.SystemAmount ?? 0,
                 breakdown?.OperatorAmount ?? 0,
                 CommissionCut.Round(trip.PromoDiscountAmount),
-                CommissionCut.Round(trip.Fare),
+                CommissionCut.Round(RideCommissionCalculator.QuotedFare(trip)),
                 trip.Status,
                 CommissionCut.Round(payable),
                 FareDiscountRules.LabelOrNull(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount));

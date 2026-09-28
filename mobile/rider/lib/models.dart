@@ -931,6 +931,12 @@ class RiderTripDetail {
 
   double get fareToShow => customerFare > 0 ? customerFare : fare;
 
+  double get originalFare {
+    if (fareDiscountAmount > 0 && customerFare > 0 && customerFare < fare) return fare;
+    if (fareDiscountAmount > 0) return fare + fareDiscountAmount;
+    return fare;
+  }
+
   bool get canViewChat {
     final value = status.toLowerCase();
     return value == 'waiting' ||

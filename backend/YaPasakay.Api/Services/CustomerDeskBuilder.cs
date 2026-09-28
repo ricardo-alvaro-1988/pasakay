@@ -168,7 +168,7 @@ public static class CustomerDeskBuilder
             trip.PickupLng,
             trip.DropoffLat,
             trip.DropoffLng,
-            trip.Fare,
+            RideCommissionCalculator.QuotedFare(trip),
             trip.DistanceKm,
             Math.Max(1, trip.PassengerCount),
             trip.VehicleType,
