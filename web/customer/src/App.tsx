@@ -52,6 +52,7 @@ import { TripChatPanel } from './trip-chat'
 import { createDeskConnection, startDeskHub, stopDeskHub, emitDeskChat } from './desk-hub'
 import type { HubConnection } from '@microsoft/signalr'
 import { RateRidePanel, usePendingRating } from './rate-ride'
+import { ServiceReceipt } from './service-receipt'
 import { ShareTripButton } from './share-trip-button'
 import { lastKnownGps, readBootGps, readPickupGps, readGps, watchTripGps } from './gps'
 import { applyBrand, DEFAULT_BRAND_NAME, type BrandingConfig } from './brand-themes'
@@ -1626,6 +1627,7 @@ function TripPanel({
         ) : null}
         {kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · {passengerLabel(trip.passengerCount)} · {trip.vehicleType} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}
       </p>
+      <ServiceReceipt trip={trip} />
       {trip.canCancel && (
         <div className="actions">
           <button className="danger" onClick={() => void cancel()}>Cancel ride</button>

@@ -230,7 +230,8 @@ public record RideDetailResponse(
     int? DiscountPercent = null,
     string? PromoCode = null,
     decimal CustomerBoostAmount = 0,
-    string? FareDiscountLabel = null);
+    string? FareDiscountLabel = null,
+    decimal FareDiscountAmount = 0);
 
 public record RideChatMessageItem(
     Guid Id,

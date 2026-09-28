@@ -174,7 +174,8 @@ public static class OperatorMaps
             trip.CustomerBoostAmount,
             trip.FareDiscountKind == FareDiscountKind.None
                 ? null
-                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount));
+                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount),
+            trip.FareDiscountAmount);
     }
 
     public static async Task<RideDetailResponse> RideDetailAsync(

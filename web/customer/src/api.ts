@@ -99,6 +99,7 @@ export type CustomerTrip = {
   customerBoostAmount?: number
   riderId?: string | null
   fareDiscountLabel?: string | null
+  fareDiscountAmount?: number
 }
 
 export type FavoriteRider = {
@@ -294,6 +295,7 @@ export type CustomerTripDetail = {
   promoCode?: string | null
   customerBoostAmount?: number
   fareDiscountLabel?: string | null
+  fareDiscountAmount?: number
 }
 
 export function chatFromRider(sender: unknown) {

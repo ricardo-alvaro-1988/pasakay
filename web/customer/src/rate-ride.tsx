@@ -3,12 +3,10 @@ import {
   api,
   CustomerTrip,
   Desk,
-  peso,
-  kmLabel,
-  paymentLabel,
   tripHeadline,
   phWhen,
 } from './api'
+import { ServiceReceipt } from './service-receipt'
 
 const STAR_LABELS = ['Tap to rate', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'] as const
 
@@ -76,10 +74,7 @@ export function RateRidePanel({
           </div>
         </div>
       )}
-      <p className="fareline" style={{ marginTop: 10 }}>
-        <b>{peso(trip.customerFare && trip.customerFare > 0 ? trip.customerFare : trip.fare)}</b>
-        {kmLabel(trip.distanceKm) ? ` · ${kmLabel(trip.distanceKm)}` : ''} · {paymentLabel(trip.paymentMethod, trip.paymentMethodOther)}
-      </p>
+      <ServiceReceipt trip={trip} />
       <div className="star-rating">
         <div
           className="star-row"

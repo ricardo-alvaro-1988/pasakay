@@ -24,6 +24,7 @@ import {
 } from './api'
 import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
 import { BookingHistoryRating, RateRidePanel } from './rate-ride'
+import { ServiceReceipt } from './service-receipt'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
 
 const PAYMENT_METHODS: PaymentMethod[] = ['Cash', 'GCash', 'Maya', 'Other']
@@ -308,9 +309,10 @@ function BookingRoute({ trip }: { trip: Pick<CustomerTrip, 'pickup' | 'dropoff'>
 function BookingDetailBody({ detail }: { detail: CustomerTripDetail }) {
   const promo = tripPromoLabel(detail)
   const pay = tripPayAmount(detail)
+  const completed = String(detail.status).toLowerCase() === 'completed'
   return (
     <>
-      <BookingRoute trip={detail} />
+      {completed ? <ServiceReceipt trip={detail} /> : <BookingRoute trip={detail} />}
       <div className="booking-meta">
         <div className="booking-meta-row">
           <span>Trip details</span>

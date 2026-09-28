@@ -1555,7 +1555,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             trip.CustomerBoostAmount,
             trip.FareDiscountKind == FareDiscountKind.None
                 ? null
-                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount));
+                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount),
+            trip.FareDiscountAmount);
     }
 
     private static RideStopItem MapRideStop(string details, string fullAddress, Barangay? barangay)

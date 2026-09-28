@@ -149,7 +149,8 @@ public record CustomerTripItem(
     string? PromoCode = null,
     decimal CustomerBoostAmount = 0,
     Guid? RiderId = null,
-    string? FareDiscountLabel = null);
+    string? FareDiscountLabel = null,
+    decimal FareDiscountAmount = 0);
 
 public record CustomerRateRequest(int Rating, string? Comment);
 

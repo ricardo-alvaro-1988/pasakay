@@ -203,6 +203,7 @@ public static class CustomerDeskBuilder
             showRider ? rider!.Id : trip.RiderId,
             trip.FareDiscountKind == FareDiscountKind.None
                 ? null
-                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount));
+                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount),
+            trip.FareDiscountAmount);
     }
 }

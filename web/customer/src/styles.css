@@ -1836,6 +1836,77 @@ button.where-toggle .where { pointer-events: none; }
   padding-top: 12px;
   border-top: 1px solid var(--line);
 }
+.service-receipt {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-elev);
+}
+.service-receipt header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+.service-receipt header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.service-receipt header b { font-size: 14px; }
+.service-receipt-when,
+.service-receipt-service,
+.service-receipt-pay {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.service-receipt-route span {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.service-receipt-route p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.service-receipt-lines {
+  margin: 12px 0 0;
+  display: grid;
+  gap: 8px;
+}
+.service-receipt-lines div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+.service-receipt-lines dt,
+.service-receipt-lines dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+.service-receipt-lines dd { text-align: right; }
+.service-receipt-total {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.service-receipt-total dt,
+.service-receipt-total dd {
+  font-weight: 800;
+  color: var(--accent);
+}
 .booking-meta.booking-chat > span {
   display: block;
   color: var(--muted);
