@@ -185,7 +185,7 @@ public class RiderDeskController(
                 x.CustomerName,
                 x.VehicleType,
                 x.Status,
-                RideCommissionCalculator.QuotedFare(x),
+                RideCommissionCalculator.SettlementFare(x),
                 x.DistanceKm,
                 Math.Max(1, x.PassengerCount),
                 x.PaymentMethod,

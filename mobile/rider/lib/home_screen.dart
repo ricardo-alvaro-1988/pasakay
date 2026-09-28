@@ -1348,11 +1348,11 @@ class _RecentTripsBlock extends StatelessWidget {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: _MoneyBit(label: 'Fare', value: peso(trip.fare))),
+                        Expanded(child: _MoneyBit(label: 'Fare', value: peso(trip.fareToShow))),
                         Expanded(
                           child: _MoneyBit(
                             label: 'Your Earnings',
-                            value: peso(trip.driverAmount ?? trip.fare),
+                            value: peso(trip.driverAmount ?? trip.fareToShow),
                             color: brandSuccess,
                           ),
                         ),
