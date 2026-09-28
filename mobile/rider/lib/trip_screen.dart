@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
@@ -23,19 +24,15 @@ class TripScreen extends StatelessWidget {
     await launchUrl(Uri(scheme: 'tel', path: cleaned));
   }
 
-  Future<void> _askDiscount(BuildContext context, RiderTrip trip, String kind, String label, {bool askReason = false}) async {
-    final result = await showDialog<({String mode, int value, String? note})>(
+  Future<void> _askDiscount(BuildContext context, RiderTrip trip) async {
+    final maxPesos = (trip.collectFromCustomer + trip.fareDiscountAmount).floor();
+    await showDialog<void>(
       context: context,
-      builder: (context) => _DiscountDialog(title: label, askReason: askReason),
+      builder: (context) => _DiscountDialog(
+        maxPesos: maxPesos < 1 ? 1 : maxPesos,
+        onApply: (kind, mode, value, note) => session.applyDiscount(trip.tripId, kind, mode: mode, value: value, note: note),
+      ),
     );
-    if (result == null || !context.mounted) return;
-    try {
-      await session.applyDiscount(trip.tripId, kind, mode: result.mode, value: result.value, note: result.note);
-    } catch (err) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$err')));
-      }
-    }
   }
 
   Future<void> _navigate(RiderTrip trip) async {
@@ -236,7 +233,7 @@ class TripScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 14),
                     Text(
-                      '${peso(trip.fare)}  ·  ${trip.distanceKm.toStringAsFixed(1)} km  ·  ${paymentLabel(trip.paymentMethod)}',
+                      '${peso(trip.fareDiscountAmount > 0 ? trip.collectFromCustomer : trip.fare)}  ·  ${trip.distanceKm.toStringAsFixed(1)} km  ·  ${paymentLabel(trip.paymentMethod)}',
                       style: const TextStyle(fontWeight: FontWeight.w800),
                     ),
                     if (trip.customerBoostAmount > 0) ...[
@@ -320,25 +317,10 @@ class TripScreen extends StatelessWidget {
               ],
               if (trip.canStart || trip.canComplete) ...[
                 const SizedBox(height: 8),
-                const Text('Discount', style: TextStyle(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton(
-                      onPressed: () => _askDiscount(context, trip, 'SeniorCitizen', 'Senior citizen'),
-                      child: const Text('Senior citizen'),
-                    ),
-                    OutlinedButton(
-                      onPressed: () => _askDiscount(context, trip, 'Pwd', 'PWD'),
-                      child: const Text('PWD'),
-                    ),
-                    OutlinedButton(
-                      onPressed: () => _askDiscount(context, trip, 'Other', 'Others', askReason: true),
-                      child: const Text('Others'),
-                    ),
-                  ],
+                OutlinedButton.icon(
+                  onPressed: () => _askDiscount(context, trip),
+                  icon: const Icon(Icons.sell_outlined),
+                  label: Text(trip.fareDiscountAmount > 0 ? 'Change discount' : 'Discount'),
                 ),
               ],
               if (trip.canComplete) ...[
@@ -527,10 +509,10 @@ bool _endedStatus(String status) {
 }
 
 class _DiscountDialog extends StatefulWidget {
-  const _DiscountDialog({required this.title, required this.askReason});
+  const _DiscountDialog({required this.maxPesos, required this.onApply});
 
-  final String title;
-  final bool askReason;
+  final int maxPesos;
+  final Future<void> Function(String kind, String mode, int value, String? note) onApply;
 
   @override
   State<_DiscountDialog> createState() => _DiscountDialogState();
@@ -539,7 +521,10 @@ class _DiscountDialog extends StatefulWidget {
 class _DiscountDialogState extends State<_DiscountDialog> {
   final _amount = TextEditingController();
   final _reason = TextEditingController();
+  var _kind = 'SeniorCitizen';
   var _percent = true;
+  var _busy = false;
+  var _error = '';
 
   @override
   void dispose() {
@@ -548,59 +533,153 @@ class _DiscountDialogState extends State<_DiscountDialog> {
     super.dispose();
   }
 
-  void _apply() {
+  Future<void> _apply() async {
     final whole = int.tryParse(_amount.text.trim());
-    if (whole == null || whole < 1 || (_percent && whole > 100)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_percent ? 'Enter a percent from 1 to 100.' : 'Enter a whole peso amount.')),
-      );
+    if (whole == null || whole < 1) {
+      setState(() => _error = _percent ? 'Enter a percent from 1 to 100.' : 'Enter a whole peso amount.');
+      return;
+    }
+    if (_percent && whole > 100) {
+      setState(() => _error = 'Percent must be from 1 to 100.');
+      return;
+    }
+    if (!_percent && whole > widget.maxPesos) {
+      setState(() => _error = 'Discount cannot be more than ₱${widget.maxPesos}.');
       return;
     }
     final reason = _reason.text.trim();
-    if (widget.askReason && reason.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Say what the other discount is for.')),
-      );
+    if (_kind == 'Other' && reason.length < 2) {
+      setState(() => _error = 'Say what the other discount is for.');
       return;
     }
-    Navigator.pop(context, (mode: _percent ? 'percent' : 'amount', value: whole, note: widget.askReason ? reason : null));
+    setState(() {
+      _busy = true;
+      _error = '';
+    });
+    try {
+      await widget.onApply(_kind, _percent ? 'percent' : 'amount', whole, _kind == 'Other' ? reason : null);
+      if (mounted) Navigator.pop(context);
+    } catch (err) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = '$err';
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: true, label: Text('%')),
-              ButtonSegment(value: false, label: Text('₱')),
-            ],
-            selected: {_percent},
-            onSelectionChanged: (next) => setState(() => _percent = next.first),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _amount,
-            keyboardType: TextInputType.number,
-            decoration: InputDecoration(hintText: _percent ? 'Percent, for example 20' : 'Pesos, for example 50'),
-          ),
-          if (widget.askReason) ...[
-            const SizedBox(height: 12),
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text('Discount', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: brandInk)),
+            const SizedBox(height: 4),
+            const Text('Choose the passenger, then enter a percent or pesos.', style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _KindChip(label: 'Senior', selected: _kind == 'SeniorCitizen', onTap: _busy ? null : () => setState(() => _kind = 'SeniorCitizen')),
+                const SizedBox(width: 8),
+                _KindChip(label: 'PWD', selected: _kind == 'Pwd', onTap: _busy ? null : () => setState(() => _kind = 'Pwd')),
+                const SizedBox(width: 8),
+                _KindChip(label: 'Others', selected: _kind == 'Other', onTap: _busy ? null : () => setState(() => _kind = 'Other')),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                _KindChip(label: 'Percent', selected: _percent, onTap: _busy ? null : () => setState(() => _percent = true)),
+                const SizedBox(width: 8),
+                _KindChip(label: 'Pesos', selected: !_percent, onTap: _busy ? null : () => setState(() => _percent = false)),
+              ],
+            ),
+            const SizedBox(height: 14),
             TextField(
-              controller: _reason,
-              maxLength: 80,
-              decoration: const InputDecoration(hintText: 'Student, resident, or other reason'),
+              controller: _amount,
+              enabled: !_busy,
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: InputDecoration(
+                labelText: _percent ? 'Percent' : 'Pesos',
+                hintText: _percent ? '20' : '50',
+              ),
+            ),
+            if (_kind == 'Other') ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: _reason,
+                enabled: !_busy,
+                maxLength: 80,
+                decoration: const InputDecoration(labelText: 'Reason', hintText: 'Student, resident, or other'),
+              ),
+            ],
+            if (_error.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(_error, style: const TextStyle(color: brandRed, fontWeight: FontWeight.w700)),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _busy ? null : () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _busy ? null : _apply,
+                    child: Text(_busy ? 'Applying…' : 'Apply'),
+                  ),
+                ),
+              ],
             ),
           ],
-        ],
+        ),
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: _apply, child: const Text('Apply')),
-      ],
+    );
+  }
+}
+
+class _KindChip extends StatelessWidget {
+  const _KindChip({required this.label, required this.selected, required this.onTap});
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Material(
+        color: selected ? brandRed : brandSoft,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: selected ? brandRed : brandLine),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(fontWeight: FontWeight.w800, color: selected ? Colors.white : brandInk),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

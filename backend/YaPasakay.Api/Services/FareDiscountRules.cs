@@ -25,6 +25,9 @@ public static class FareDiscountRules
         return Enum.IsDefined(kind);
     }
 
+    public static string? LabelOrNull(FareDiscountKind kind, string? note = null, int? percent = null, decimal amount = 0) =>
+        kind == FareDiscountKind.None ? null : Label(kind, note, percent, amount);
+
     public static string Label(FareDiscountKind kind, string? note = null, int? percent = null, decimal amount = 0)
     {
         var name = kind switch

@@ -196,7 +196,8 @@ public class RiderDeskController(
                 x.IsPromoSponsored,
                 x.DiscountPercent,
                 x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
-                x.CustomerBoostAmount);
+                x.CustomerBoostAmount,
+                FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount));
         }).ToList();
 
         return Ok(trips.Select(x => x with

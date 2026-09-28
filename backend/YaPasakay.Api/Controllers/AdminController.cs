@@ -1029,48 +1029,15 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var rows = await query
-            .OrderBy(x => x.Status == TripStatus.Completed || x.Status == TripStatus.Cancelled ? 2 : 0)
-            .ThenByDescending(x => x.ScheduledAtUtc ?? x.RequestedAtUtc)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(x => new OperatorBookingListItem(
-                x.Id,
-                x.Reference,
-                x.RequestedAtUtc,
-                x.ScheduledAtUtc,
-                x.CustomerName,
-                x.CustomerPhone,
-                x.Rider.AppUser.FullName,
-                x.Rider.PlateNumber,
-                x.Rider.VehicleType,
-                x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
-                x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
-                x.Status,
-                x.Fare,
-                x.PaymentMethod,
-                x.PaymentMethodOther,
-                x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
-                x.PromoDiscountAmount,
-                x.IsPromoSponsored,
-                x.DiscountPercent,
-                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null,
-                x.CustomerBoostAmount))
-            .ToListAsync(cancellationToken);
+        var rows = await OperatorMaps.LoadBookingListAsync(
+            query
+                .OrderBy(x => x.Status == TripStatus.Completed || x.Status == TripStatus.Cancelled ? 2 : 0)
+                .ThenByDescending(x => x.ScheduledAtUtc ?? x.RequestedAtUtc)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize),
+            cancellationToken);
 
-        return Ok(new PagedResult<OperatorBookingListItem>(
-            rows.Select(x => x with
-            {
-                RequestedAtUtc = DateTime.SpecifyKind(x.RequestedAtUtc, DateTimeKind.Utc),
-                ScheduledAtUtc = x.ScheduledAtUtc is DateTime scheduled
-                    ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc)
-                    : null,
-                Pickup = TripAddress.Clean(x.Pickup),
-                Dropoff = TripAddress.Clean(x.Dropoff)
-            }).ToList(),
-            page,
-            pageSize,
-            total));
+        return Ok(new PagedResult<OperatorBookingListItem>(rows, page, pageSize, total));
     }
 
     [HttpGet("operators/{id:guid}/bookings/{bookingId:guid}")]
@@ -1730,7 +1697,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                     x.IsPromoSponsored,
                     x.DiscountPercent,
                     x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
-                    x.CustomerBoostAmount);
+                    x.CustomerBoostAmount,
+                    FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount));
             })
             .ToList();
 

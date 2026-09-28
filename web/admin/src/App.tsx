@@ -791,6 +791,34 @@ function PromoTag({
   )
 }
 
+function payableFare(fare: number, customerFare?: number | null) {
+  return customerFare && customerFare > 0 ? customerFare : fare
+}
+
+function FareAmount({
+  fare,
+  customerFare,
+  emphasize = false,
+}: {
+  fare: number
+  customerFare?: number | null
+  emphasize?: boolean
+}) {
+  const pay = payableFare(fare, customerFare)
+  const amount = emphasize ? <strong>{peso(pay)}</strong> : <>{peso(pay)}</>
+  return (
+    <div>
+      {amount}
+      {pay < fare ? <div><small className="muted">was {peso(fare)}</small></div> : null}
+    </div>
+  )
+}
+
+function DiscountTag({ label }: { label?: string | null }) {
+  if (!label) return null
+  return <span className="tag discount">{label}</span>
+}
+
 const TRIP_STATUS_FILTERS: { value: TripStatus | ''; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'Pending', label: 'Pending' },
@@ -4218,11 +4246,13 @@ function CommissionSection({
   view,
   status,
   fare,
+  payable,
 }: {
   commission: RideCommissionBreakdown | null | undefined
   view: CommissionView
   status: TripStatus
   fare: number
+  payable?: number
 }) {
   if (status === 'Cancelled' || !commission) {
     return null
@@ -4234,7 +4264,9 @@ function CommissionSection({
         <div>
           <h3 style={{ margin: 0 }}>Commission</h3>
           <p className="muted" style={{ margin: '4px 0 0' }}>
-            {status === 'Completed' ? 'Split of the trip fare' : 'Estimated split of the trip fare'} · Fare {peso(fare)}
+            {payable != null && payable < fare
+              ? `Commission stays on the original fare ${peso(fare)}. Customer pays ${peso(payable)}.`
+              : `${status === 'Completed' ? 'Split of the trip fare' : 'Estimated split of the trip fare'} · Fare ${peso(fare)}`}
           </p>
         </div>
       </div>
@@ -4352,7 +4384,10 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
           </div>
         ) : null}
         {ride.fareDiscountLabel ? (
-          <DetailItem label="Discount" value={ride.fareDiscountLabel} />
+          <div className="detail-item">
+            <span>Discount</span>
+            <p><DiscountTag label={ride.fareDiscountLabel} /></p>
+          </div>
         ) : null}
         <DetailItem label="Customer" value={ride.customerName} />
         <DetailItem label="Customer phone" value={ride.customerPhone} />
@@ -4369,15 +4404,13 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
           label="Passengers"
           value={`${Math.max(1, ride.passengerCount ?? 1)} passenger${(ride.passengerCount ?? 1) === 1 ? '' : 's'}`}
         />
-        <DetailItem label="Fare" value={peso(ride.fare)} />
+        <DetailItem label="Fare" value={peso(customerPay)} />
+        {customerPay < ride.fare ? <DetailItem label="Original fare" value={peso(ride.fare)} /> : null}
+        {customerPay < ride.fare ? (
+          <DetailItem label="Operator owes rider" value={peso(Math.max(0, ride.fare - customerPay))} />
+        ) : null}
         {(ride.customerBoostAmount ?? 0) > 0 ? (
           <DetailItem label="Customer boost" value={`+${peso(ride.customerBoostAmount!)}`} />
-        ) : null}
-        {ride.isPromoSponsored ? (
-          <>
-            <DetailItem label="Customer pays" value={peso(customerPay)} />
-            <DetailItem label="Operator owes rider" value={peso(ride.promoDiscountAmount ?? Math.max(0, ride.fare - customerPay))} />
-          </>
         ) : null}
         <DetailItem label="Payment" value={paymentMethodLabel(ride.paymentMethod, ride.paymentMethodOther)} />
         <DetailItem label="Duration" value={ride.durationMinutes ? `${ride.durationMinutes} min` : '—'} />
@@ -4417,6 +4450,7 @@ function BookingDetailsBody({ ride, commissionView = 'operator' }: { ride: RideD
         view={commissionView}
         status={ride.status}
         fare={ride.fare}
+        payable={customerPay}
       />
       <div className="detail-split">
         <div className="detail-card">
@@ -4830,7 +4864,10 @@ function RidesReport({
                         </div>
                       </td>
                       <td><PaymentMethodTag method={ride.paymentMethod} other={ride.paymentMethodOther} /></td>
-                      <td>{peso(ride.fare)}</td>
+                      <td>
+                        <FareAmount fare={ride.fare} customerFare={ride.customerFare} emphasize />
+                        <DiscountTag label={ride.fareDiscountLabel} />
+                      </td>
                       {commissionView === 'rider' ? (
                         <>
                           <td>{systemCommissionTableCell(ride.commission, ride.status)}</td>
@@ -8196,7 +8233,10 @@ function OperatorBookingReportPage() {
                   <td>{peso(row.systemCommission)}</td>
                   <td>{peso(row.operatorCommission)}</td>
                   <td>{peso(row.promo)}</td>
-                  <td><strong>{peso(row.fare)}</strong></td>
+                  <td>
+                    <FareAmount fare={row.fare} customerFare={row.customerFare} emphasize />
+                    <DiscountTag label={row.fareDiscountLabel} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -8792,9 +8832,10 @@ function OperatorBookingList({
                       promoCode={row.promoCode}
                       discountPercent={row.discountPercent}
                     />
+                    <DiscountTag label={row.fareDiscountLabel} />
                   </div>
                 </td>
-                <td>{peso(row.fare)}</td>
+                <td><FareAmount fare={row.fare} customerFare={row.customerFare} emphasize /></td>
               </tr>
             ))}
           </tbody>
@@ -8974,6 +9015,7 @@ function OperatorDashboardPage() {
                           promoCode={ride.promoCode}
                           discountPercent={ride.discountPercent}
                         />
+                        <DiscountTag label={ride.fareDiscountLabel} />
                         <TripStatusTag status={ride.status} />
                       </span>
                     </span>
@@ -8982,7 +9024,7 @@ function OperatorDashboardPage() {
                     <span className="booking-card-meta">
                       <VehicleTag type={ride.vehicleType} />
                       <PaymentMethodTag method={ride.paymentMethod} other={ride.paymentMethodOther} />
-                      <em>{peso(ride.fare)}</em>
+                      <em><FareAmount fare={ride.fare} customerFare={ride.customerFare} /></em>
                     </span>
                     <small>{phDateTime(ride.requestedAtUtc)}</small>
                   </button>
@@ -9156,7 +9198,10 @@ function OperatorScheduleList({
                   </td>
                   <td><PaymentMethodTag method={row.paymentMethod} other={row.paymentMethodOther} /></td>
                   <td><TripStatusTag status={row.status} /></td>
-                  <td>{peso(row.fare)}</td>
+                  <td>
+                    <FareAmount fare={row.fare} customerFare={row.customerFare} emphasize />
+                    <DiscountTag label={row.fareDiscountLabel} />
+                  </td>
                   <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                     {canCancel ? (
                       <button

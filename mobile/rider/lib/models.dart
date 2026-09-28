@@ -591,6 +591,7 @@ class RiderTripListItem {
     this.paymentMethodOther,
     this.driverAmount,
     this.platformFee,
+    this.customerFare = 0,
   });
 
   final String id;
@@ -608,6 +609,9 @@ class RiderTripListItem {
   final DateTime? requestedAt;
   final double? driverAmount;
   final double? platformFee;
+  final double customerFare;
+
+  double get fareToShow => customerFare > 0 ? customerFare : fare;
 
   factory RiderTripListItem.fromJson(Map<String, dynamic> json) {
     final commission = asJsonMap(json['commission']);
@@ -631,6 +635,7 @@ class RiderTripListItem {
       requestedAt: parseUtc(json['requestedAtUtc']),
       driverAmount: driver,
       platformFee: platform,
+      customerFare: (json['customerFare'] as num?)?.toDouble() ?? 0,
     );
   }
 }
@@ -884,6 +889,9 @@ class RiderTripDetail {
     this.paymentMethodOther,
     this.vehicleModel,
     this.riderPhotoUrl,
+    this.customerFare = 0,
+    this.fareDiscountAmount = 0,
+    this.fareDiscountLabel,
   });
 
   final String id;
@@ -919,6 +927,11 @@ class RiderTripDetail {
   final String? vehicleModel;
   final String? riderPhotoUrl;
   final List<ChatMessage> chat;
+  final double customerFare;
+  final double fareDiscountAmount;
+  final String? fareDiscountLabel;
+
+  double get fareToShow => customerFare > 0 ? customerFare : fare;
 
   bool get canViewChat {
     final value = status.toLowerCase();
@@ -949,6 +962,9 @@ class RiderTripDetail {
         dropoff: asText(json['dropoff']),
         notes: asTextOrNull(json['notes']),
         fare: (json['fare'] as num?)?.toDouble() ?? 0,
+        customerFare: (json['customerFare'] as num?)?.toDouble() ?? 0,
+        fareDiscountAmount: (json['fareDiscountAmount'] as num?)?.toDouble() ?? 0,
+        fareDiscountLabel: asTextOrNull(json['fareDiscountLabel']),
         distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
         passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
         durationMinutes: json['durationMinutes'] == null ? null : asInt(json['durationMinutes']),

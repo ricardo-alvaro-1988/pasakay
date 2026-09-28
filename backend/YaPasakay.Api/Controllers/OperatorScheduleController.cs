@@ -448,5 +448,7 @@ public class OperatorScheduleController(
             trip.Status,
             trip.Fare,
             trip.PaymentMethod,
-            trip.PaymentMethodOther);
+            trip.PaymentMethodOther,
+            trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,
+            FareDiscountRules.LabelOrNull(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount));
 }

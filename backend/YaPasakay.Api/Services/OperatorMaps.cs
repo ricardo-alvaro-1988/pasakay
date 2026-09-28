@@ -502,7 +502,8 @@ public static class OperatorMaps
                     x.IsPromoSponsored,
                     x.DiscountPercent,
                     x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
-                    x.CustomerBoostAmount);
+                    x.CustomerBoostAmount,
+                    FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount));
             })
             .ToList();
 
@@ -739,6 +740,123 @@ public static class OperatorMaps
                 label,
                 atUtc is DateTime stamp ? DateTime.SpecifyKind(stamp, DateTimeKind.Utc) : null)
             : null;
+
+    public static async Task<List<OperatorBookingListItem>> LoadBookingListAsync(
+        IQueryable<Trip> pageQuery,
+        CancellationToken cancellationToken)
+    {
+        var rows = await pageQuery
+            .Select(x => new
+            {
+                x.Id,
+                x.Reference,
+                x.RequestedAtUtc,
+                x.ScheduledAtUtc,
+                x.CustomerName,
+                x.CustomerPhone,
+                RiderName = x.Rider.AppUser.FullName,
+                PlateNumber = x.Rider.PlateNumber,
+                VehicleType = x.Rider.VehicleType,
+                Pickup = x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
+                Dropoff = x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
+                x.Status,
+                x.Fare,
+                x.PaymentMethod,
+                x.PaymentMethodOther,
+                x.CustomerFare,
+                x.PromoDiscountAmount,
+                x.IsPromoSponsored,
+                x.DiscountPercent,
+                x.CustomerBoostAmount,
+                x.FareDiscountKind,
+                x.FareDiscountNote,
+                x.FareDiscountPercent,
+                x.FareDiscountAmount,
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(x => new OperatorBookingListItem(
+            x.Id,
+            x.Reference,
+            DateTime.SpecifyKind(x.RequestedAtUtc, DateTimeKind.Utc),
+            x.ScheduledAtUtc is DateTime scheduled ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc) : null,
+            x.CustomerName,
+            x.CustomerPhone,
+            x.RiderName,
+            x.PlateNumber,
+            x.VehicleType,
+            TripAddress.Clean(x.Pickup),
+            TripAddress.Clean(x.Dropoff),
+            x.Status,
+            x.Fare,
+            x.PaymentMethod,
+            x.PaymentMethodOther,
+            x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
+            x.PromoDiscountAmount,
+            x.IsPromoSponsored,
+            x.DiscountPercent,
+            x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
+            x.CustomerBoostAmount,
+            FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount)))
+            .ToList();
+    }
+
+    public static async Task<List<RideListItem>> LoadBoardItemsAsync(
+        IQueryable<Trip> pageQuery,
+        CancellationToken cancellationToken)
+    {
+        var rows = await pageQuery
+            .Select(x => new
+            {
+                x.Id,
+                x.Reference,
+                x.RequestedAtUtc,
+                Pickup = x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
+                Dropoff = x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
+                x.CustomerName,
+                VehicleType = x.Rider != null ? x.Rider.VehicleType : x.VehicleType,
+                x.Status,
+                x.Fare,
+                x.DistanceKm,
+                PassengerCount = x.PassengerCount < 1 ? 1 : x.PassengerCount,
+                x.PaymentMethod,
+                x.PaymentMethodOther,
+                x.CustomerFare,
+                x.PromoDiscountAmount,
+                x.IsPromoSponsored,
+                x.DiscountPercent,
+                x.CustomerBoostAmount,
+                x.FareDiscountKind,
+                x.FareDiscountNote,
+                x.FareDiscountPercent,
+                x.FareDiscountAmount,
+            })
+            .ToListAsync(cancellationToken);
+
+        return rows.Select(x => new RideListItem(
+            x.Id,
+            x.Reference,
+            DateTime.SpecifyKind(x.RequestedAtUtc, DateTimeKind.Utc),
+            TripAddress.Clean(x.Pickup),
+            TripAddress.Clean(x.Dropoff),
+            x.CustomerName,
+            x.VehicleType,
+            x.Status,
+            x.Fare,
+            x.DistanceKm,
+            x.PassengerCount,
+            x.PaymentMethod,
+            x.PaymentMethodOther,
+            null,
+            x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
+            x.PromoDiscountAmount,
+            x.IsPromoSponsored,
+            x.DiscountPercent,
+            x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
+            x.CustomerBoostAmount,
+            FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount)))
+            .ToList();
+    }
 
     /// <summary>
     /// Drop model values that are really vehicle-type labels (incl. typos like "Motocycle").

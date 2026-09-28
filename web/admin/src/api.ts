@@ -651,6 +651,7 @@ export type RideListItem = {
   discountPercent?: number | null
   promoCode?: string | null
   customerBoostAmount?: number
+  fareDiscountLabel?: string | null
 }
 
 export type RideDetail = {
@@ -1245,6 +1246,8 @@ export type BookingReportItem = {
   promo: number
   fare: number
   status: TripStatus
+  customerFare?: number
+  fareDiscountLabel?: string | null
 }
 
 export type BookingReportResponse = {
@@ -1412,6 +1415,8 @@ export type ScheduledBooking = {
   fare: number
   paymentMethod: PaymentMethod
   paymentMethodOther: string | null
+  customerFare?: number
+  fareDiscountLabel?: string | null
 }
 
 export type OperatorBookingListItem = {
@@ -1435,6 +1440,7 @@ export type OperatorBookingListItem = {
   isPromoSponsored?: boolean
   discountPercent?: number | null
   promoCode?: string | null
+  fareDiscountLabel?: string | null
 }
 
 export type OperatorInboxItem = {

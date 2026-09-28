@@ -184,7 +184,8 @@ public record RideListItem(
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
     string? PromoCode = null,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    string? FareDiscountLabel = null);
 
 public record RideDetailResponse(
     Guid Id,
@@ -616,7 +617,9 @@ public record ScheduledBookingItem(
     TripStatus Status,
     decimal Fare,
     PaymentMethod PaymentMethod,
-    string? PaymentMethodOther);
+    string? PaymentMethodOther,
+    decimal CustomerFare = 0,
+    string? FareDiscountLabel = null);
 
 public record CreateScheduledBookingRequest(
     string CustomerName,
@@ -665,7 +668,8 @@ public record OperatorBookingListItem(
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
     string? PromoCode = null,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    string? FareDiscountLabel = null);
 
 public record CommissionReportItem(
     Guid Id,
@@ -751,7 +755,9 @@ public record BookingReportItem(
     decimal OperatorCommission,
     decimal Promo,
     decimal Fare,
-    TripStatus Status);
+    TripStatus Status,
+    decimal CustomerFare = 0,
+    string? FareDiscountLabel = null);
 
 public record BookingReportSummary(
     int Count,
