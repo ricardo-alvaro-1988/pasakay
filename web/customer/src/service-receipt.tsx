@@ -58,9 +58,9 @@ export function ServiceReceipt({ trip }: { trip: ReceiptTrip }) {
     || (trip.discountPercent != null ? `Save${trip.discountPercent}` : 'Promo')
 
   return (
-    <section className="service-receipt" aria-label="Trip receipt">
+    <section className="service-receipt" aria-label={`Trans No# : ${trip.reference}`}>
       <header>
-        <span>Receipt</span>
+        <span>Trans No# :</span>
         <b>{trip.reference}</b>
       </header>
       <p className="service-receipt-when">{phWhen(when)}</p>
