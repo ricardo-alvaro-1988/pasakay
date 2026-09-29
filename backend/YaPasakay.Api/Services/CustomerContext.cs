@@ -20,7 +20,17 @@ public static class CustomerContext
         }
 
         var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
-        if (user is null || user.Role != UserRole.Customer || !user.IsActive)
+        if (user is null || user.Role != UserRole.Customer)
+        {
+            return (null, 401, "This login is for customers.");
+        }
+
+        if (user.IsLoginBlocked || await LoginBlocks.IsBlockedAsync(db, user.Email, user.PhoneNumber, cancellationToken))
+        {
+            return (null, 401, LoginBlocks.Message);
+        }
+
+        if (!user.IsActive)
         {
             return (null, 401, "This login is for customers.");
         }

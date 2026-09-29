@@ -32,16 +32,24 @@ class OnlineService : Service() {
         /** Bumped so one-shot alert settings apply on devices that already had older channels. */
         private const val OFFER_CHANNEL = "yp_job_offers_v5"
         private const val CHAT_CHANNEL = "yp_chat"
+        private const val NOTICE_CHANNEL = "yp_rider_push_v1"
         /** Soft double-tap; no long continuous buzz. */
         private val OFFER_VIBE_TIMINGS = longArrayOf(0, 90, 70, 120)
         private val OFFER_VIBE_AMPS = intArrayOf(0, 110, 0, 150)
         private const val ONLINE_ID = 1001
         private const val OFFER_ID = 1002
         private const val CHAT_ID = 1003
+        private const val NOTICE_ID = 1004
 
         @Volatile
         var running = false
             private set
+
+        @Volatile
+        private var lastPushAt = 0L
+
+        @Volatile
+        private var lastPushKey = ""
 
         fun start(context: Context): Boolean {
             return startCommand(context, Intent(context, OnlineService::class.java).setAction(ACTION_START))
@@ -69,6 +77,39 @@ class OnlineService : Service() {
             try {
                 context.startService(Intent(context, OnlineService::class.java).setAction(ACTION_STOP_RING))
             } catch (_: Throwable) {
+            }
+        }
+
+        fun pingNotice(context: Context, title: String, body: String): Boolean {
+            val app = context.applicationContext
+            ensureChannels(app)
+            val key = "$title|$body"
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (key == lastPushKey && now - lastPushAt < 60_000L) {
+                return true
+            }
+            lastPushKey = key
+            lastPushAt = now
+            return try {
+                val nm = app.getSystemService(NotificationManager::class.java)
+                val launch = Intent(app, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                val open = PendingIntent.getActivity(app, 4, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                val notification = NotificationCompat.Builder(app, NOTICE_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_stat_notify)
+                    .setContentTitle(title)
+                    .setContentText(body)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .setAutoCancel(true)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setContentIntent(open)
+                    .build()
+                nm.notify(NOTICE_ID, notification)
+                true
+            } catch (_: Throwable) {
+                false
             }
         }
 
@@ -121,6 +162,20 @@ class OnlineService : Service() {
                         // Sound is played once by OnlineService; channel stays silent to avoid a double ring.
                         setSound(null, null)
                         enableVibration(false)
+                        lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    },
+                )
+                val noticeSound = Uri.parse("android.resource://${context.packageName}/${R.raw.notice_tone}")
+                val noticeAudio = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build()
+                nm.createNotificationChannel(
+                    NotificationChannel(NOTICE_CHANNEL, "Announcements", NotificationManager.IMPORTANCE_HIGH).apply {
+                        description = "Push notifications from your operator."
+                        setSound(noticeSound, noticeAudio)
+                        enableVibration(true)
+                        vibrationPattern = longArrayOf(0, 80, 60, 80)
                         lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     },
                 )

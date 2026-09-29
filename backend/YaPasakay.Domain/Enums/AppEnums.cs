@@ -19,6 +19,7 @@ public enum VehicleType
     Van = 6,
     PickupL300 = 7,
     PickupCargo = 8,
+    Tuktuk = 9,
     /// <summary>Operator-owned custom category; fare/rider rows key off VehicleCategoryId.</summary>
     Custom = 100
 }
@@ -119,7 +120,17 @@ public enum AuditAction
     OperatorUpdated = 2,
     OperatorActivated = 3,
     OperatorDeactivated = 4,
-    BillIssued = 5
+    BillIssued = 5,
+    CustomerBlocked = 6,
+    CustomerUnblocked = 7
+}
+
+public enum FareDiscountKind
+{
+    None = 0,
+    SeniorCitizen = 1,
+    Pwd = 2,
+    Other = 3
 }
 
 public enum PaymentMethod

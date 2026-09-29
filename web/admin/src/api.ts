@@ -11,6 +11,7 @@ export type VehicleType =
   | 'Van'
   | 'PickupL300'
   | 'PickupCargo'
+  | 'Tuktuk'
   | 'Custom'
 
 export const PLATFORM_VEHICLE_TYPES: VehicleType[] = [
@@ -22,6 +23,7 @@ export const PLATFORM_VEHICLE_TYPES: VehicleType[] = [
   'Van',
   'PickupL300',
   'PickupCargo',
+  'Tuktuk',
 ]
 
 export function vehicleTypeLabel(type: string) {
@@ -63,6 +65,7 @@ export type PageId =
   | 'bookings'
   | 'schedule'
   | 'inbox'
+  | 'rider-notices'
   | 'company'
   | 'wallet'
   | 'promos'
@@ -70,6 +73,7 @@ export type PageId =
   | 'product-categories'
   | 'pabili-ads'
   | 'pabili-payments'
+  | 'pabili-browse-categories'
   | 'pabili-orders'
   | 'pabili-matrix'
   | 'pabili-riders'
@@ -473,6 +477,20 @@ export type SaveOperatorPabiliPaymentMethodBody = {
   sortOrder: number
 }
 
+export type OperatorPabiliBrowseCategoryItem = {
+  id: string
+  name: string
+  isActive: boolean
+  sortOrder: number
+  createdAtUtc: string
+}
+
+export type SaveOperatorPabiliBrowseCategoryBody = {
+  name: string
+  isActive: boolean
+  sortOrder: number
+}
+
 export type MerchantOperatingHourItem = {
   dayOfWeek: number
   isClosed: boolean
@@ -633,6 +651,7 @@ export type RideListItem = {
   discountPercent?: number | null
   promoCode?: string | null
   customerBoostAmount?: number
+  fareDiscountLabel?: string | null
 }
 
 export type RideDetail = {
@@ -678,6 +697,7 @@ export type RideDetail = {
   discountPercent?: number | null
   promoCode?: string | null
   customerBoostAmount?: number
+  fareDiscountLabel?: string | null
 }
 
 export type ChatSender = 'Customer' | 'Rider'
@@ -767,6 +787,7 @@ export type CustomerListItem = {
   isActive: boolean
   photoUrl: string | null
   deleteStatus: DeleteAccountStatus
+  isBlocked: boolean
 }
 
 export type DeleteAccountStatus = 'None' | 'Pending' | 'Approved' | 'Rejected'
@@ -789,6 +810,8 @@ export type CustomerDetail = {
   isActive: boolean
   photoUrl: string | null
   deleteRequest: CustomerDeleteRequest
+  email: string | null
+  isBlocked: boolean
 }
 
 export type RideQuery = {
@@ -1223,6 +1246,8 @@ export type BookingReportItem = {
   promo: number
   fare: number
   status: TripStatus
+  customerFare?: number
+  fareDiscountLabel?: string | null
 }
 
 export type BookingReportResponse = {
@@ -1235,6 +1260,20 @@ export type BookingReportResponse = {
     promo: number
     fare: number
   }
+}
+
+export type RiderNoticeStatus = 'Active' | 'Stopped'
+
+export type RiderNotice = {
+  id: string
+  title: string
+  body: string
+  notifyAt: string
+  nextFireUtc: string
+  lastSentAtUtc: string | null
+  isActive: boolean
+  status: RiderNoticeStatus
+  createdAtUtc: string
 }
 
 export type Announcement = {
@@ -1366,7 +1405,7 @@ export type ScheduledBooking = {
   scheduledAtUtc: string
   customerName: string
   customerPhone: string
-  riderId: string
+  riderId: string | null
   riderName: string
   plateNumber: string
   vehicleType: VehicleType
@@ -1376,6 +1415,8 @@ export type ScheduledBooking = {
   fare: number
   paymentMethod: PaymentMethod
   paymentMethodOther: string | null
+  customerFare?: number
+  fareDiscountLabel?: string | null
 }
 
 export type OperatorBookingListItem = {
@@ -1399,6 +1440,7 @@ export type OperatorBookingListItem = {
   isPromoSponsored?: boolean
   discountPercent?: number | null
   promoCode?: string | null
+  fareDiscountLabel?: string | null
 }
 
 export type OperatorInboxItem = {
@@ -1417,6 +1459,8 @@ export type AuditAction =
   | 'OperatorActivated'
   | 'OperatorDeactivated'
   | 'BillIssued'
+  | 'CustomerBlocked'
+  | 'CustomerUnblocked'
 
 export type AuditLog = {
   id: string
@@ -1502,6 +1546,41 @@ function rideQuery(opts: RideQuery) {
   return params.toString()
 }
 
+function messageFromFailedResponse(status: number, text: string) {
+  const trimmed = text.trim()
+  if (
+    status === 413
+    || /413 Request Entity Too Large/i.test(trimmed)
+    || /entity too large/i.test(trimmed)
+  ) {
+    return 'This APK is larger than the server upload limit. Nginx is still capped below 120 MB, so the file never reaches the app.'
+  }
+  if (!trimmed) {
+    return `Request failed (${status}).`
+  }
+  try {
+    const body = JSON.parse(trimmed) as {
+      message?: string
+      title?: string
+      detail?: string
+      errors?: Record<string, string[] | string>
+    }
+    if (body.message) return body.message
+    if (body.detail) return body.detail
+    if (body.title && !trimmed.startsWith('<')) return body.title
+    if (body.errors) {
+      const first = Object.values(body.errors).flat()[0]
+      if (first) return first
+    }
+  } catch {
+    /* HTML or plain text */
+  }
+  if (trimmed.startsWith('<')) {
+    return `Request failed (${status}).`
+  }
+  return trimmed.slice(0, 240)
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers)
   const isForm = typeof FormData !== 'undefined' && init?.body instanceof FormData
@@ -1531,32 +1610,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let message = 'Request failed.'
     try {
       const text = await res.text()
-      if (text) {
-        try {
-          const body = JSON.parse(text) as {
-            message?: string
-            title?: string
-            detail?: string
-            errors?: Record<string, string[] | string>
-          }
-          if (body.message) {
-            message = body.message
-          } else if (body.detail) {
-            message = body.detail
-          } else if (body.title) {
-            message = body.title
-          } else if (body.errors) {
-            const first = Object.values(body.errors).flat()[0]
-            if (first) message = first
-          } else {
-            message = text.slice(0, 240)
-          }
-        } catch {
-          message = text.slice(0, 240)
-        }
-      } else {
-        message = `Request failed (${res.status}).`
-      }
+      message = messageFromFailedResponse(res.status, text)
     } catch {
       message = `Request failed (${res.status}).`
     }
@@ -1808,6 +1862,8 @@ export const api = {
     return request<OperatorBookingBoard>(`/api/operator/bookings${query ? `?${query}` : ''}`)
   },
   operatorBooking: (id: string) => request<RideDetail>(`/api/operator/bookings/${id}`),
+  cancelOperatorBooking: (id: string) =>
+    request<RideDetail>(`/api/operator/bookings/${id}/cancel`, { method: 'POST' }),
   operatorBookingList: (q = '', page = 1, pageSize = 10, status?: TripStatus | '', from?: string, to?: string) => {
     const params = new URLSearchParams({
       q,
@@ -1838,20 +1894,35 @@ export const api = {
     return request<Paged<ScheduledBooking>>(`/api/operator/schedule?${params}`)
   },
   scheduledBooking: (id: string) => request<RideDetail>(`/api/operator/schedule/${id}`),
+  riderNotices: () => request<RiderNotice[]>('/api/operator/rider-notices'),
+  createRiderNotice: (body: { title: string; body: string; notifyAt: string }) =>
+    request<RiderNotice>('/api/operator/rider-notices', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  cancelRiderNotice: (id: string) =>
+    request<RiderNotice>(`/api/operator/rider-notices/${id}/cancel`, { method: 'POST' }),
   createScheduledBooking: (body: {
     customerName: string
     phone: string
-    riderId: string
-    pickupBarangayId: string
+    riderId?: string | null
+    isImmediate: boolean
+    scheduledAtUtc?: string | null
+    vehicleType: VehicleType | string
+    vehicleCategoryId?: string | null
+    pickupLat: number
+    pickupLng: number
+    dropoffLat: number
+    dropoffLng: number
+    pickupBarangayId?: string | null
     pickupDetails: string
-    dropoffBarangayId: string
+    dropoffBarangayId?: string | null
     dropoffDetails: string
-    scheduledAtUtc: string
     notes?: string
-    distanceKm: number
     passengerCount?: number
     paymentMethod: PaymentMethod
     paymentMethodOther?: string
+    distanceKm?: number
   }) => request<RideDetail>('/api/operator/schedule', { method: 'POST', body: JSON.stringify(body) }),
   cancelScheduledBooking: (id: string) =>
     request<RideDetail>(`/api/operator/schedule/${id}/cancel`, { method: 'POST' }),
@@ -1922,6 +1993,80 @@ export const api = {
       themes: { id: string; label: string; accent: string; good: string }[]
     }>('/api/admin/branding/favicon', { method: 'POST', body: data })
   },
+  getRiderApp: () =>
+    request<{
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }>('/api/admin/rider-app'),
+  publishRiderApp: (
+    body: { version: string; notes?: string; file: File },
+    onProgress?: (loaded: number, total: number) => void,
+  ) => {
+    const data = new FormData()
+    data.append('file', body.file)
+    data.append('version', body.version)
+    if (body.notes) data.append('notes', body.notes)
+    type ReleasePayload = {
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }
+    return new Promise<ReleasePayload>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/admin/rider-app')
+      const token = getToken()
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded, event.total)
+      }
+      xhr.onerror = () => reject(new Error('Upload failed before the server accepted the file.'))
+      xhr.onabort = () => reject(new Error('Upload was cancelled.'))
+      xhr.onload = () => {
+        if (xhr.status === 401) {
+          clearAuth()
+          reject(new Error(messageFromFailedResponse(xhr.status, xhr.responseText || 'Session expired. Sign in again.')))
+          return
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(messageFromFailedResponse(xhr.status, xhr.responseText)))
+          return
+        }
+        try {
+          resolve(JSON.parse(xhr.responseText) as ReleasePayload)
+        } catch {
+          reject(new Error('The server did not return the published release.'))
+        }
+      }
+      xhr.send(data)
+    })
+  },
   operatorFleet: () => request<OperatorFleet>('/api/operator/fleet'),
   operatorCompany: () => request<OperatorDetail>('/api/operator/company'),
   saveOperatorDispatchMode: (
@@ -1957,6 +2102,10 @@ export const api = {
     request<RiderRides>(`/api/operator/customers/${id}/rides?${rideQuery(opts)}`),
   opCustomerRide: (id: string, rideId: string) =>
     request<RideDetail>(`/api/operator/customers/${id}/rides/${rideId}`),
+  blockOpCustomer: (id: string) =>
+    request<CustomerDetail>(`/api/operator/customers/${id}/block`, { method: 'POST' }),
+  unblockOpCustomer: (id: string) =>
+    request<CustomerDetail>(`/api/operator/customers/${id}/unblock`, { method: 'POST' }),
   opRiders: (q = '', page = 1, pageSize = 10) =>
     request<Paged<RiderListItem>>(`/api/operator/riders?q=${encodeURIComponent(q)}&page=${page}&pageSize=${pageSize}`),
   opRider: (id: string) => request<RiderDetail>(`/api/operator/riders/${id}`),
@@ -2288,6 +2437,24 @@ export const api = {
       body: data,
     })
   },
+  operatorPabiliBrowseCategories: () =>
+    request<{ items: OperatorPabiliBrowseCategoryItem[] }>('/api/operator/pabili-browse-categories'),
+  createOperatorPabiliBrowseCategory: (body: SaveOperatorPabiliBrowseCategoryBody) =>
+    request<OperatorPabiliBrowseCategoryItem>('/api/operator/pabili-browse-categories', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateOperatorPabiliBrowseCategory: (id: string, body: SaveOperatorPabiliBrowseCategoryBody) =>
+    request<OperatorPabiliBrowseCategoryItem>(`/api/operator/pabili-browse-categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+  toggleOperatorPabiliBrowseCategory: (id: string) =>
+    request<OperatorPabiliBrowseCategoryItem>(`/api/operator/pabili-browse-categories/${id}/toggle`, {
+      method: 'POST',
+    }),
+  deleteOperatorPabiliBrowseCategory: (id: string) =>
+    request<void>(`/api/operator/pabili-browse-categories/${id}`, { method: 'DELETE' }),
   operatorMerchants: () => request<{ items: MerchantListItem[] }>('/api/operator/merchants'),
   operatorMerchant: (id: string) => request<MerchantDetailItem>(`/api/operator/merchants/${id}`),
   createOperatorMerchant: (body: SaveMerchantBody) =>

@@ -91,7 +91,6 @@ function lineTotal(line: CartLine) {
 
 const FALLBACK_LAT = 14.5995
 const FALLBACK_LNG = 120.9842
-const HOME_CATEGORIES = ['Food', 'Groceries', 'Gadgets', 'Drinks', 'Pharmacy', 'Pets'] as const
 const PABILI_CART_KEY = 'yapasakay-pabili-cart'
 
 const ORDER_STATUS_GROUPS: Array<{ key: string; title: string; statuses: string[] }> = [
@@ -116,13 +115,20 @@ function orderStatusLabel(status: string) {
 
 function readPersistedCart(): { storeId: string | null; lines: CartLine[] } {
   try {
-    const raw = sessionStorage.getItem(PABILI_CART_KEY)
+    const raw = localStorage.getItem(PABILI_CART_KEY) ?? sessionStorage.getItem(PABILI_CART_KEY)
     if (!raw) return { storeId: null, lines: [] }
     const parsed = JSON.parse(raw) as { storeId?: unknown; lines?: unknown }
     if (!Array.isArray(parsed.lines)) return { storeId: null, lines: [] }
+    const lines = (parsed.lines as CartLine[]).filter((line) =>
+      line
+      && typeof line.key === 'string'
+      && typeof line.productId === 'string'
+      && typeof line.name === 'string'
+      && typeof line.quantity === 'number'
+      && line.quantity > 0)
     return {
       storeId: typeof parsed.storeId === 'string' ? parsed.storeId : null,
-      lines: parsed.lines as CartLine[],
+      lines,
     }
   } catch {
     return { storeId: null, lines: [] }
@@ -131,11 +137,12 @@ function readPersistedCart(): { storeId: string | null; lines: CartLine[] } {
 
 function writePersistedCart(storeId: string | null, lines: CartLine[]) {
   try {
+    sessionStorage.removeItem(PABILI_CART_KEY)
     if (!lines.length) {
-      sessionStorage.removeItem(PABILI_CART_KEY)
+      localStorage.removeItem(PABILI_CART_KEY)
       return
     }
-    sessionStorage.setItem(PABILI_CART_KEY, JSON.stringify({ storeId, lines }))
+    localStorage.setItem(PABILI_CART_KEY, JSON.stringify({ storeId, lines }))
   } catch {
     /* ignore quota / private mode */
   }
@@ -195,6 +202,7 @@ export function PabiliStorefront({
     merchantOpen: boolean
   }>>([])
   const [ads, setAds] = useState<AdCard[]>([])
+  const [browseCategories, setBrowseCategories] = useState<Array<{ id: string; name: string; sortOrder: number }>>([])
   const [payMethods, setPayMethods] = useState<PayMethodCard[]>([{ method: 'Cash', label: 'Cash', qrImageUrl: null, sortOrder: 0 }])
   const [suggestMerchants, setSuggestMerchants] = useState<SuggestMerchant[]>([])
   const [suggestProducts, setSuggestProducts] = useState<SuggestProduct[]>([])
@@ -244,12 +252,23 @@ export function PabiliStorefront({
   const cartGoods = useMemo(() => cart.reduce((s, x) => s + lineTotal(x), 0), [cart])
   const storeCategories = store?.categories ?? []
 
+  function commitCart(next: CartLine[] | ((prev: CartLine[]) => CartLine[])) {
+    setCart((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next
+      writePersistedCart(store?.id ?? readPersistedCart().storeId, resolved)
+      return resolved
+    })
+  }
+
   useEffect(() => {
     writePersistedCart(store?.id ?? readPersistedCart().storeId, cart)
   }, [cart, store?.id])
 
   useEffect(() => {
     const persisted = readPersistedCart()
+    if (persisted.lines.length && cart.length === 0) {
+      setCart(persisted.lines)
+    }
     if (!persisted.storeId || !persisted.lines.length) return
     let dead = false
     void (async () => {
@@ -263,6 +282,7 @@ export function PabiliStorefront({
     return () => {
       dead = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -506,17 +526,23 @@ export function PabiliStorefront({
   }
 
   async function loadMerchants(term = search) {
+    if (view !== 'home' && view !== 'store') {
+      // Delivery pin changes on checkout must not reload home feeds or overwrite quote errors.
+      return
+    }
     setError('')
     try {
-      const [rows, popular, exclusive, payments] = await Promise.all([
+      const [rows, popular, exclusive, payments, categories] = await Promise.all([
         api.pabiliMerchants({ lat, lng, q: term }),
         api.pabiliPopularProducts({ lat, lng, q: term }),
         api.pabiliAds({ lat, lng }),
         api.pabiliPaymentMethods({ lat, lng }),
+        api.pabiliBrowseCategories({ lat, lng }),
       ])
       setMerchants(rows)
       setPopularProducts(popular)
       setAds(shuffleAds(exclusive))
+      setBrowseCategories(categories)
       const nextPay = payments.length
         ? payments
         : [{ method: 'Cash' as PaymentMethod, label: 'Cash', qrImageUrl: null, sortOrder: 0 }]
@@ -525,7 +551,9 @@ export function PabiliStorefront({
         setPayment(nextPay[0].method)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load stores.')
+      if (view === 'home') {
+        setError(e instanceof Error ? e.message : 'Could not load stores.')
+      }
     }
   }
 
@@ -565,9 +593,10 @@ export function PabiliStorefront({
   }
 
   useEffect(() => {
+    if (view !== 'home') return
     void loadMerchants('')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lat, lng])
+  }, [lat, lng, view])
 
   async function openStore(id: string, focusProductId?: string) {
     setBusy(true)
@@ -627,7 +656,7 @@ export function PabiliStorefront({
       }
     }
     const key = `${sheetProduct.id}:${addons.map((a) => a.optionId).sort().join(',')}`
-    setCart((prev) => {
+    commitCart((prev) => {
       const existing = prev.find((x) => x.key === key)
       if (existing) {
         return prev.map((x) => (x.key === key ? { ...x, quantity: x.quantity + sheetQty } : x))
@@ -652,6 +681,11 @@ export function PabiliStorefront({
   async function refreshQuote() {
     if (!store || !cart.length) {
       setQuote(null)
+      return
+    }
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+      setQuote(null)
+      setError('Set a delivery pin on the map first.')
       return
     }
     setBusy(true)
@@ -707,8 +741,7 @@ export function PabiliStorefront({
       })
       setOrder(row)
       setOrders((prev) => [row, ...prev.filter((x) => x.id !== row.id)])
-      setCart([])
-      writePersistedCart(null, [])
+      commitCart([])
       setPaymentRef('')
       setPaymentRefInvalid(false)
       setView('orders')
@@ -837,7 +870,14 @@ export function PabiliStorefront({
           </button>
         ) : null}
         <div className="pb-mode pb-mode-sm">
-          <button type="button" className="pb-mode-btn" onClick={onSwitchToPasakay}>
+          <button
+            type="button"
+            className="pb-mode-btn"
+            onClick={() => {
+              writePersistedCart(store?.id ?? readPersistedCart().storeId, cart)
+              onSwitchToPasakay()
+            }}
+          >
             Pasakay
           </button>
           <button type="button" className="pb-mode-btn on" aria-current="page">
@@ -936,14 +976,14 @@ export function PabiliStorefront({
             ) : null}
           </div>
           <nav className="pb-quick-cats" aria-label="Shop categories">
-            {HOME_CATEGORIES.map((label) => (
+            {browseCategories.map((cat) => (
               <button
-                key={label}
+                key={cat.id}
                 type="button"
-                className={`pb-quick-cat${search.trim().toLowerCase() === label.toLowerCase() ? ' on' : ''}`}
-                onClick={() => applySearch(label)}
+                className={`pb-quick-cat${search.trim().toLowerCase() === cat.name.toLowerCase() ? ' on' : ''}`}
+                onClick={() => applySearch(cat.name)}
               >
-                {label}
+                {cat.name}
               </button>
             ))}
           </nav>
@@ -1163,7 +1203,7 @@ export function PabiliStorefront({
                       <button
                         type="button"
                         aria-label="Decrease quantity"
-                        onClick={() => setCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))}
+                        onClick={() => commitCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: Math.max(1, x.quantity - 1) } : x)))}
                       >
                         −
                       </button>
@@ -1171,7 +1211,7 @@ export function PabiliStorefront({
                       <button
                         type="button"
                         aria-label="Increase quantity"
-                        onClick={() => setCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: x.quantity + 1 } : x)))}
+                        onClick={() => commitCart((c) => c.map((x) => (x.key === line.key ? { ...x, quantity: x.quantity + 1 } : x)))}
                       >
                         +
                       </button>
@@ -1182,7 +1222,7 @@ export function PabiliStorefront({
                     <button
                       type="button"
                       className="pb-line-remove"
-                      onClick={() => setCart((c) => c.filter((x) => x.key !== line.key))}
+                      onClick={() => commitCart((c) => c.filter((x) => x.key !== line.key))}
                     >
                       Remove
                     </button>
@@ -1409,35 +1449,43 @@ export function PabiliStorefront({
         <div className="pb-sheet" role="dialog" aria-modal="true">
           <div className="pb-sheet-card">
             <button type="button" className="ghost pb-sheet-close" onClick={() => setSheetProduct(null)}>Close</button>
-            <div className="pb-sheet-img">
-              {sheetProduct.imageUrl ? (
-                <img src={mediaUrl(sheetProduct.imageUrl)} alt="" />
-              ) : null}
-            </div>
-            <h3>{sheetProduct.name}</h3>
-            <p className="muted">{sheetProduct.description}</p>
-            <p className="pb-price">{peso(sheetProduct.sellingPrice)}</p>
-            {sheetProduct.addonGroups.map((g) => (
-              <div key={g.id} className="pb-addon-group">
-                <b>{g.name} <span className="muted">({g.minSelect}-{g.maxSelect})</span></b>
-                {g.options.map((o) => {
-                  const on = (sheetPicks[g.id] ?? []).includes(o.id)
-                  return (
-                    <label key={o.id} className={`pb-addon ${on ? 'on' : ''}`}>
-                      <input type="checkbox" checked={on} onChange={() => togglePick(g, o.id)} />
-                      <span>{o.name}</span>
-                      <span>{peso(o.sellingPrice)}</span>
-                    </label>
-                  )
-                })}
+            <div className="pb-sheet-scroll">
+              <div className="pb-sheet-img">
+                {sheetProduct.imageUrl ? (
+                  <img src={mediaUrl(sheetProduct.imageUrl)} alt="" />
+                ) : (
+                  <div className="pb-sheet-img-fallback" aria-hidden="true">{sheetProduct.name.slice(0, 1)}</div>
+                )}
               </div>
-            ))}
-            <div className="pb-qty">
-              <button type="button" onClick={() => setSheetQty((q) => Math.max(1, q - 1))}>−</button>
-              <span>{sheetQty}</span>
-              <button type="button" onClick={() => setSheetQty((q) => q + 1)}>+</button>
+              <div className="pb-sheet-meta">
+                <h3>{sheetProduct.name}</h3>
+                {sheetProduct.description ? <p className="muted">{sheetProduct.description}</p> : null}
+                <p className="pb-price">{peso(sheetProduct.sellingPrice)}</p>
+              </div>
+              {sheetProduct.addonGroups.map((g) => (
+                <div key={g.id} className="pb-addon-group">
+                  <b>{g.name} <span className="muted">({g.minSelect}-{g.maxSelect})</span></b>
+                  {g.options.map((o) => {
+                    const on = (sheetPicks[g.id] ?? []).includes(o.id)
+                    return (
+                      <label key={o.id} className={`pb-addon ${on ? 'on' : ''}`}>
+                        <input type="checkbox" checked={on} onChange={() => togglePick(g, o.id)} />
+                        <span>{o.name}</span>
+                        <span>{peso(o.sellingPrice)}</span>
+                      </label>
+                    )
+                  })}
+                </div>
+              ))}
             </div>
-            <button type="button" className="primary pb-primary" onClick={addSheetToCart}>Add to cart</button>
+            <div className="pb-sheet-footer">
+              <div className="pb-qty">
+                <button type="button" onClick={() => setSheetQty((q) => Math.max(1, q - 1))}>−</button>
+                <span>{sheetQty}</span>
+                <button type="button" onClick={() => setSheetQty((q) => q + 1)}>+</button>
+              </div>
+              <button type="button" className="primary pb-primary" onClick={addSheetToCart}>Add to cart</button>
+            </div>
           </div>
         </div>
       ) : null}

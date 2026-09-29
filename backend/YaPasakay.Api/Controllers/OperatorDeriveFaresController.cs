@@ -85,13 +85,14 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             PolygonJson = GeoPolygon.Serialize(request.Polygon.Select(p => new LatLngPoint(p.Lat, p.Lng))),
         };
         db.DeriveFareZones.Add(zone);
+        IgnoreUnrelatedTrackedEntities(zone);
+        await db.SaveChangesAsync(cancellationToken);
+
         foreach (var (type, rates) in slots)
         {
             var body = VehicleTypeRules.UsesSinglePassengerTier(type) ? SinglePassengerRates(rates) : rates;
-            db.DeriveFareMatrices.Add(BuildMatrix(zone.Id, type, body));
+            await UpsertMatrixRatesSqlAsync(zone.Id, type, body, cancellationToken);
         }
-
-        await db.SaveChangesAsync(cancellationToken);
 
         var saved = await LoadZoneAsync(op.Id, zone.Id, cancellationToken);
         return Ok(MapDetail(op, saved!));
@@ -117,7 +118,8 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = error });
         }
 
-        var zone = await LoadZoneAsync(op.Id, id, cancellationToken);
+        var zone = await db.DeriveFareZones
+            .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op.Id, cancellationToken);
         if (zone is null)
         {
             return NotFound(new { message = "Derive fare zone not found." });
@@ -132,10 +134,17 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
 
         try
         {
+            // Ignore tracked Operator / VehicleOffers so SaveChanges only writes the zone.
+            IgnoreUnrelatedTrackedEntities(zone);
+            await db.SaveChangesAsync(cancellationToken);
+
+            // Rewrite vehicle rates with raw SQL only — never via the EF change tracker.
+            // Tracking passenger tiers (or Operator rows) while inserting Sedan matrices was
+            // throwing DbUpdateConcurrencyException ("rates changed while saving").
             foreach (var (type, rates) in slots)
             {
                 var body = VehicleTypeRules.UsesSinglePassengerTier(type) ? SinglePassengerRates(rates) : rates;
-                await PersistRatesAsync(EnsureMatrix(zone, type), body, cancellationToken);
+                await UpsertMatrixRatesSqlAsync(zone.Id, type, body, cancellationToken);
             }
         }
         catch (DbUpdateException ex)
@@ -164,7 +173,7 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         }
 
         await db.Entry(op).Collection(x => x.VehicleOffers).LoadAsync(cancellationToken);
-        var zone = await LoadZoneAsync(op.Id, id, cancellationToken);
+        var zone = await LoadZoneForEditAsync(op.Id, id, cancellationToken);
         if (zone is null)
         {
             return NotFound(new { message = "Derive fare zone not found." });
@@ -173,7 +182,8 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         zone.IsActive = !zone.IsActive;
         zone.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(MapDetail(op, zone));
+        var saved = await LoadZoneAsync(op.Id, zone.Id, cancellationToken);
+        return Ok(MapDetail(op, saved!));
     }
 
     [HttpDelete("{id:guid}")]
@@ -293,71 +303,27 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         };
     }
 
-    static DeriveFareMatrix BuildMatrix(Guid zoneId, VehicleType vehicleType, FareVehicleRatesBody rates)
+    void IgnoreUnrelatedTrackedEntities(DeriveFareZone zone)
     {
-        var primary = (rates.PassengerTiers ?? []).OrderBy(x => x.PassengerCount).FirstOrDefault()
-            ?? new FarePassengerTierBody(1, rates.BaseFare, rates.PerKm, rates.MinimumFare, rates.IncludedKm);
-        var matrix = new DeriveFareMatrix
+        foreach (var entry in db.ChangeTracker.Entries().ToList())
         {
-            DeriveFareZoneId = zoneId,
-            VehicleType = vehicleType,
-            VehicleCategoryId = VehicleCatalog.IdFor(vehicleType),
-            BaseFare = FareCommissionSplit.Round(primary.BaseFare),
-            PerKm = FareCommissionSplit.Round(primary.PerKm),
-            MinimumFare = FareCommissionSplit.Round(primary.MinimumFare),
-            IncludedKm = FareCommissionSplit.Round(primary.IncludedKm),
-            OperatorCommissionPercent = FareCommissionSplit.Round(rates.OperatorCommissionPercent),
-            DriverCommissionPercent = FareCommissionSplit.Round(rates.DriverCommissionPercent),
-            IsActive = rates.IsActive,
-        };
-        foreach (var tier in (rates.PassengerTiers ?? []).OrderBy(x => x.PassengerCount))
-        {
-            matrix.PassengerTiers.Add(new DeriveFarePassengerTier
+            if (ReferenceEquals(entry.Entity, zone))
             {
-                PassengerCount = tier.PassengerCount,
-                BaseFare = FareCommissionSplit.Round(tier.BaseFare),
-                PerKm = FareCommissionSplit.Round(tier.PerKm),
-                MinimumFare = FareCommissionSplit.Round(tier.MinimumFare),
-                IncludedKm = FareCommissionSplit.Round(tier.IncludedKm),
-            });
-        }
+                continue;
+            }
 
-        if (matrix.PassengerTiers.Count == 0)
-        {
-            matrix.PassengerTiers.Add(new DeriveFarePassengerTier
+            if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
             {
-                PassengerCount = 1,
-                BaseFare = matrix.BaseFare,
-                PerKm = matrix.PerKm,
-                MinimumFare = matrix.MinimumFare,
-                IncludedKm = matrix.IncludedKm,
-            });
+                entry.State = entry.State == EntityState.Added ? EntityState.Detached : EntityState.Unchanged;
+            }
         }
-
-        return matrix;
     }
 
-    static DeriveFareMatrix EnsureMatrix(DeriveFareZone zone, VehicleType vehicleType)
-    {
-        var existing = zone.Matrices.FirstOrDefault(x => x.VehicleType == vehicleType);
-        if (existing is not null)
-        {
-            existing.VehicleCategoryId ??= VehicleCatalog.IdFor(vehicleType);
-            return existing;
-        }
-
-        var created = new DeriveFareMatrix
-        {
-            DeriveFareZoneId = zone.Id,
-            VehicleType = vehicleType,
-            VehicleCategoryId = VehicleCatalog.IdFor(vehicleType),
-            IsActive = true,
-        };
-        zone.Matrices.Add(created);
-        return created;
-    }
-
-    async Task PersistRatesAsync(DeriveFareMatrix matrix, FareVehicleRatesBody rates, CancellationToken cancellationToken)
+    async Task UpsertMatrixRatesSqlAsync(
+        Guid zoneId,
+        VehicleType vehicleType,
+        FareVehicleRatesBody rates,
+        CancellationToken cancellationToken)
     {
         var tiers = NormalizeTiers(
             rates.PassengerTiers,
@@ -366,48 +332,149 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
             rates.MinimumFare,
             rates.IncludedKm);
         var primary = tiers.OrderBy(x => x.PassengerCount).First();
-        matrix.BaseFare = FareCommissionSplit.Round(primary.BaseFare);
-        matrix.PerKm = FareCommissionSplit.Round(primary.PerKm);
-        matrix.MinimumFare = FareCommissionSplit.Round(primary.MinimumFare);
-        matrix.IncludedKm = FareCommissionSplit.Round(primary.IncludedKm);
-        matrix.OperatorCommissionPercent = FareCommissionSplit.Round(rates.OperatorCommissionPercent);
-        matrix.DriverCommissionPercent = FareCommissionSplit.Round(rates.DriverCommissionPercent);
-        matrix.IsActive = rates.IsActive;
-        matrix.UpdatedAtUtc = DateTime.UtcNow;
-        matrix.VehicleCategoryId ??= VehicleCatalog.IdFor(matrix.VehicleType);
+        var baseFare = FareCommissionSplit.Round(primary.BaseFare);
+        var perKm = FareCommissionSplit.Round(primary.PerKm);
+        var minimumFare = FareCommissionSplit.Round(primary.MinimumFare);
+        var includedKm = FareCommissionSplit.Round(primary.IncludedKm);
+        var operatorPct = FareCommissionSplit.Round(rates.OperatorCommissionPercent);
+        var driverPct = FareCommissionSplit.Round(rates.DriverCommissionPercent);
+        var categoryId = VehicleCatalog.IdFor(vehicleType);
+        var now = DateTime.UtcNow;
 
-        var isNew = db.Entry(matrix).State == EntityState.Added;
-        DetachPassengerTiers(matrix);
-        await db.SaveChangesAsync(cancellationToken);
+        var matrixId = await db.DeriveFareMatrices
+            .AsNoTracking()
+            .Where(x => x.DeriveFareZoneId == zoneId && x.VehicleType == vehicleType)
+            .Select(x => (Guid?)x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (!isNew)
+        if (matrixId is Guid existingId)
         {
             await db.Database.ExecuteSqlRawAsync(
-                "DELETE FROM DeriveFarePassengerTiers WHERE DeriveFareMatrixId = {0}",
-                [matrix.Id],
+                """
+                UPDATE DeriveFareMatrices
+                SET BaseFare = {0},
+                    PerKm = {1},
+                    MinimumFare = {2},
+                    IncludedKm = {3},
+                    OperatorCommissionPercent = {4},
+                    DriverCommissionPercent = {5},
+                    IsActive = {6},
+                    UpdatedAtUtc = {7},
+                    VehicleCategoryId = COALESCE(VehicleCategoryId, {8})
+                WHERE Id = {9}
+                """,
+                [
+                    baseFare,
+                    perKm,
+                    minimumFare,
+                    includedKm,
+                    operatorPct,
+                    driverPct,
+                    rates.IsActive,
+                    now,
+                    categoryId,
+                    existingId,
+                ],
+                cancellationToken);
+            matrixId = existingId;
+        }
+        else
+        {
+            matrixId = Guid.NewGuid();
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                INSERT INTO DeriveFareMatrices
+                    (Id, DeriveFareZoneId, VehicleType, VehicleCategoryId, BaseFare, PerKm, MinimumFare, IncludedKm,
+                     OperatorCommissionPercent, DriverCommissionPercent, IsActive, CreatedAtUtc, UpdatedAtUtc)
+                VALUES
+                    ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12})
+                """,
+                [
+                    matrixId.Value,
+                    zoneId,
+                    (int)vehicleType,
+                    categoryId,
+                    baseFare,
+                    perKm,
+                    minimumFare,
+                    includedKm,
+                    operatorPct,
+                    driverPct,
+                    rates.IsActive,
+                    now,
+                    now,
+                ],
                 cancellationToken);
         }
 
-        var now = DateTime.UtcNow;
+        await db.Database.ExecuteSqlRawAsync(
+            "DELETE FROM DeriveFarePassengerTiers WHERE DeriveFareMatrixId = {0}",
+            [matrixId.Value],
+            cancellationToken);
+
         foreach (var tier in tiers)
         {
             await db.Database.ExecuteSqlRawAsync(
-                "INSERT INTO DeriveFarePassengerTiers (Id, DeriveFareMatrixId, PassengerCount, BaseFare, PerKm, MinimumFare, IncludedKm, CreatedAtUtc) VALUES ({0},{1},{2},{3},{4},{5},{6},{7})",
-                [Guid.NewGuid(), matrix.Id, tier.PassengerCount, tier.BaseFare, tier.PerKm, tier.MinimumFare, tier.IncludedKm, now],
+                """
+                INSERT INTO DeriveFarePassengerTiers
+                    (Id, DeriveFareMatrixId, PassengerCount, BaseFare, PerKm, MinimumFare, IncludedKm, CreatedAtUtc)
+                VALUES
+                    ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7})
+                """,
+                [
+                    Guid.NewGuid(),
+                    matrixId.Value,
+                    tier.PassengerCount,
+                    tier.BaseFare,
+                    tier.PerKm,
+                    tier.MinimumFare,
+                    tier.IncludedKm,
+                    now,
+                ],
                 cancellationToken);
         }
+
+        await SyncOfferMaxPassengersFromTiersAsync(zoneId, vehicleType, tiers, cancellationToken);
     }
 
-    void DetachPassengerTiers(DeriveFareMatrix matrix)
+    async Task SyncOfferMaxPassengersFromTiersAsync(
+        Guid zoneId,
+        VehicleType vehicleType,
+        IReadOnlyList<FarePassengerTierBody> tiers,
+        CancellationToken cancellationToken)
     {
-        foreach (var entry in db.ChangeTracker.Entries<DeriveFarePassengerTier>()
-            .Where(e => e.Entity.DeriveFareMatrixId == matrix.Id || ReferenceEquals(e.Entity.Matrix, matrix))
-            .ToList())
+        if (VehicleTypeRules.UsesSinglePassengerTier(vehicleType) || VehicleTypeRules.IsCargo(vehicleType))
         {
-            entry.State = EntityState.Detached;
+            return;
         }
 
-        matrix.PassengerTiers.Clear();
+        var operatorId = await db.DeriveFareZones
+            .AsNoTracking()
+            .Where(x => x.Id == zoneId)
+            .Select(x => x.OperatorId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (operatorId == Guid.Empty)
+        {
+            return;
+        }
+
+        var categoryId = VehicleCatalog.IdFor(vehicleType);
+        var offer = await db.OperatorVehicleOffers
+            .FirstOrDefaultAsync(x => x.OperatorId == operatorId && x.VehicleCategoryId == categoryId, cancellationToken);
+        if (offer is null)
+        {
+            return;
+        }
+
+        var maxSeats = tiers.Count > 0 ? tiers.Max(t => t.PassengerCount) : VehicleTypeRules.MaxPassengers(vehicleType);
+        if (offer.MaxPassengers == maxSeats)
+        {
+            return;
+        }
+
+        offer.MaxPassengers = Math.Max(1, maxSeats);
+        offer.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     static IReadOnlyList<FarePassengerTierBody> NormalizeTiers(
@@ -456,8 +523,13 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
         return $"Could not save derive fare zone. {root}";
     }
 
+    async Task<DeriveFareZone?> LoadZoneForEditAsync(Guid operatorId, Guid id, CancellationToken cancellationToken) =>
+        await db.DeriveFareZones
+            .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == operatorId, cancellationToken);
+
     async Task<DeriveFareZone?> LoadZoneAsync(Guid operatorId, Guid id, CancellationToken cancellationToken) =>
         await db.DeriveFareZones
+            .AsNoTracking()
             .Include(x => x.Matrices)
             .ThenInclude(x => x.PassengerTiers)
             .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == operatorId, cancellationToken);
@@ -482,7 +554,7 @@ public class OperatorDeriveFaresController(AppDbContext db) : ControllerBase
                     preset.Code,
                     offer.DisplayName ?? preset.Name,
                     preset.IsCargo,
-                    offer.MaxPassengers ?? preset.MaxPassengers,
+                    Math.Max(preset.MaxPassengers, offer.MaxPassengers ?? 0),
                     offer.CommissionPercent,
                     MapRates(zone.Matrices.FirstOrDefault(x => x.VehicleType == preset.LegacyEnum)
                         ?? zone.Matrices.FirstOrDefault(x => x.VehicleCategoryId == preset.Id)));

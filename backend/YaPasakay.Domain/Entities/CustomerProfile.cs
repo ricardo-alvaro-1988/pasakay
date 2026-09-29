@@ -18,6 +18,7 @@ public class CustomerProfile : BaseEntity
     public DateTime? DeleteResolvedAtUtc { get; set; }
     public string? DeleteResolutionNote { get; set; }
     public ICollection<Trip> Trips { get; set; } = new List<Trip>();
+    public ICollection<CustomerFavoriteRider> FavoriteRiders { get; set; } = new List<CustomerFavoriteRider>();
     public Guid? HailRiderId { get; set; }
     public RiderProfile? HailRider { get; set; }
     public DateTime? HailAtUtc { get; set; }

@@ -11,6 +11,11 @@ using YaPasakay.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = YaPasakay.Api.Services.UploadStore.MaxApkBytes;
+});
+
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
@@ -30,8 +35,10 @@ builder.Services.AddSingleton<YaPasakay.Api.Services.TripChatRealtime>();
 builder.Services.AddScoped<YaPasakay.Api.Services.OperatorPromoService>();
 builder.Services.AddScoped<YaPasakay.Api.Services.DeriveFarePricingService>();
 builder.Services.AddScoped<YaPasakay.Api.Services.LiveNotify>();
+builder.Services.AddScoped<YaPasakay.Api.Services.RiderNoticeService>();
 builder.Services.AddSingleton<YaPasakay.Api.Services.GoogleDrivingDistance>();
 builder.Services.AddHostedService<YaPasakay.Api.Services.ScheduleBroadcastHostedService>();
+builder.Services.AddHostedService<YaPasakay.Api.Services.RiderNoticeHostedService>();
 builder.Services.AddHostedService<YaPasakay.Api.Services.TripExpiryHostedService>();
 builder.Services.AddScoped<YaPasakay.Api.Services.AdminAccessFilter>();
 builder.Services.AddScoped<YaPasakay.Api.Services.OperatorAccessFilter>();
@@ -94,7 +101,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = 10_000_000;
+    // Rider APK publish uses up to UploadStore.MaxApkBytes; images stay smaller at the action level.
+    options.MultipartBodyLengthLimit = YaPasakay.Api.Services.UploadStore.MaxApkBytes;
     options.ValueCountLimit = 100_000;
 });
 builder.Services.AddAuthorization();
@@ -181,6 +189,8 @@ using (var scope = app.Services.CreateScope())
         await MerchantCatalogBootstrap.EnsurePabiliMatrixAsync(db);
         await MerchantCatalogBootstrap.EnsurePabiliRiderFlagsAsync(db);
         await MerchantCatalogBootstrap.EnsurePabiliOrdersAsync(db);
+        await MerchantCatalogBootstrap.EnsurePabiliBrowseCategoriesAsync(db);
+        await MerchantCatalogBootstrap.EnsureCustomerFavoriteRidersAsync(db);
         await VehicleCatalogBootstrap.EnsureAsync(db);
         migrateLogger.LogInformation("Vehicle catalog categories and offers are ready.");
     }
@@ -210,10 +220,13 @@ using (var scope = app.Services.CreateScope())
 app.UseForwardedHeaders();
 app.UseCors(app.Environment.IsDevelopment() ? "dev" : "site");
 SpaHost.UseStatic(app);
+var uploadContentTypes = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+uploadContentTypes.Mappings[".apk"] = "application/vnd.android.package-archive";
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(uploadRoot),
-    RequestPath = "/uploads"
+    RequestPath = "/uploads",
+    ContentTypeProvider = uploadContentTypes,
 });
 app.UseAuthentication();
 app.UseAuthorization();

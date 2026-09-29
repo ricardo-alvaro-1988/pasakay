@@ -13,6 +13,7 @@ public static class VehicleCatalog
     public static readonly Guid VanId = Guid.Parse("a0000001-0000-4000-8000-000000000006");
     public static readonly Guid PickupL300Id = Guid.Parse("a0000001-0000-4000-8000-000000000007");
     public static readonly Guid PickupCargoId = Guid.Parse("a0000001-0000-4000-8000-000000000008");
+    public static readonly Guid TuktukId = Guid.Parse("a0000001-0000-4000-8000-000000000009");
 
     public sealed record Preset(
         Guid Id,
@@ -36,6 +37,7 @@ public static class VehicleCatalog
         new(VanId, "van", "Van", 12, "van", false, VehicleType.Van, 60, false, 10m),
         new(PickupL300Id, "pickup-l300", "Pickup L300", 10, "pickup", false, VehicleType.PickupL300, 70, false, 10m),
         new(PickupCargoId, "pickup-cargo", "Pickup (Cargo)", 2, "pickup-cargo", true, VehicleType.PickupCargo, 80, false, 10m),
+        new(TuktukId, "tuktuk", "Tuktuk", 5, "tuktuk", false, VehicleType.Tuktuk, 25, false, 10m),
     ];
 
     public static Guid IdFor(VehicleType type) =>

@@ -30,6 +30,14 @@ public class LiveNotify(IHubContext<DeskHub> desk, IHubContext<OpsHub> ops, IPus
             cancellationToken);
     }
 
+    public async Task RiderNoticeAsync(IReadOnlyList<Guid> riderIds, CancellationToken cancellationToken = default)
+    {
+        foreach (var riderId in riderIds.Distinct())
+        {
+            await RiderChangedAsync(riderId, "notice", cancellationToken);
+        }
+    }
+
     public async Task RiderAssignedAsync(Guid riderId, string reference, bool hail, CancellationToken cancellationToken = default)
     {
         var reason = hail ? "hail-booked" : "assigned";

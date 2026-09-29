@@ -6,6 +6,7 @@ import {
   CustomerTrip,
   CustomerTripDetail,
   Desk,
+  FavoriteRider,
   Gender,
   PaymentMethod,
   Quote,
@@ -23,6 +24,7 @@ import {
 } from './api'
 import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
 import { BookingHistoryRating, RateRidePanel } from './rate-ride'
+import { ServiceReceipt } from './service-receipt'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
 
 const PAYMENT_METHODS: PaymentMethod[] = ['Cash', 'GCash', 'Maya', 'Other']
@@ -68,8 +70,15 @@ export function BookingScreen({ desk, onDesk }: { desk: Desk; onDesk: (desk: Des
   const [error, setError] = useState('')
   const [rateTrip, setRateTrip] = useState<CustomerTrip | null>(null)
   const [openHistoryId, setOpenHistoryId] = useState<string | null>(null)
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set())
   const history = desk.recent.filter((trip) => trip.status === 'Completed' || trip.status === 'Cancelled')
   const needsRating = desk.pendingRating ?? desk.recent.find((trip) => trip.canRate) ?? null
+
+  useEffect(() => {
+    api.favorites()
+      .then((rows) => setFavoriteIds(new Set(rows.map((r) => r.riderId))))
+      .catch(() => { /* ignore */ })
+  }, [])
 
   async function cancel(id: string) {
     try { onDesk(await api.cancel(id)); setError('') }
@@ -106,6 +115,8 @@ export function BookingScreen({ desk, onDesk }: { desk: Desk; onDesk: (desk: Des
           onToggle={() => setOpenHistoryId((id) => id === trip.id ? null : trip.id)}
           onRate={trip.canRate ? () => setRateTrip(trip) : undefined}
           onError={setError}
+          favoriteIds={favoriteIds}
+          onFavoriteIds={setFavoriteIds}
         />
       ))}
     </div>
@@ -156,15 +167,22 @@ function HistoryTripCard({
   onToggle,
   onRate,
   onError,
+  favoriteIds,
+  onFavoriteIds,
 }: {
   trip: CustomerTrip
   open: boolean
   onToggle: () => void
   onRate?: () => void
   onError: (text: string) => void
+  favoriteIds: Set<string>
+  onFavoriteIds: (next: Set<string>) => void
 }) {
   const [detail, setDetail] = useState<CustomerTripDetail | null>(null)
   const [busy, setBusy] = useState(false)
+  const [favBusy, setFavBusy] = useState(false)
+  const riderId = trip.riderId || detail?.riderId || null
+  const isFav = riderId ? favoriteIds.has(riderId) : false
 
   useEffect(() => {
     if (!open || detail) return
@@ -176,6 +194,29 @@ function HistoryTripCard({
       .finally(() => { if (!cancelled) setBusy(false) })
     return () => { cancelled = true }
   }, [open, detail, trip.id, onError])
+
+  async function toggleFavorite() {
+    if (!riderId || favBusy) return
+    setFavBusy(true)
+    onError('')
+    try {
+      if (isFav) {
+        await api.removeFavorite(riderId)
+        const next = new Set(favoriteIds)
+        next.delete(riderId)
+        onFavoriteIds(next)
+      } else {
+        await api.addFavorite(riderId)
+        const next = new Set(favoriteIds)
+        next.add(riderId)
+        onFavoriteIds(next)
+      }
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Could not update favorites.')
+    } finally {
+      setFavBusy(false)
+    }
+  }
 
   return (
     <article className={`card history-card${open ? ' open' : ''}`}>
@@ -205,7 +246,14 @@ function HistoryTripCard({
             </>
           ) : null}
           <BookingHistoryRating trip={trip} />
-          {onRate && <button className="secondary" style={{ marginTop: 10 }} type="button" onClick={onRate}>Rate ride</button>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            {onRate ? <button className="secondary" type="button" onClick={onRate}>Rate ride</button> : null}
+            {riderId && String(trip.status).toLowerCase() === 'completed' ? (
+              <button className="secondary" type="button" disabled={favBusy} onClick={() => void toggleFavorite()}>
+                {favBusy ? '…' : isFav ? '★ Favorited' : '☆ Add to Favs'}
+              </button>
+            ) : null}
+          </div>
         </div>
       )}
     </article>
@@ -261,9 +309,10 @@ function BookingRoute({ trip }: { trip: Pick<CustomerTrip, 'pickup' | 'dropoff'>
 function BookingDetailBody({ detail }: { detail: CustomerTripDetail }) {
   const promo = tripPromoLabel(detail)
   const pay = tripPayAmount(detail)
+  const completed = String(detail.status).toLowerCase() === 'completed'
   return (
     <>
-      <BookingRoute trip={detail} />
+      {completed ? <ServiceReceipt trip={detail} /> : <BookingRoute trip={detail} />}
       <div className="booking-meta">
         <div className="booking-meta-row">
           <span>Trip details</span>
@@ -343,6 +392,14 @@ export function ScheduleScreen({
   const [coverageHint, setCoverageHint] = useState(false)
   const noOperator = useNoOperatorNotice(pickup, dropoff, true, coverageHint)
 
+  const selectedOffer = noOperator.listedVehicles.find((v) => v.id === vehicleCategoryId)
+    ?? noOperator.listedVehicles.find((v) => v.vehicleType === vehicle && v.available)
+    ?? noOperator.availableVehicles.find((v) => v.vehicleType === vehicle)
+    ?? null
+  const selectedMaxPassengers = vehicleMaxPassengers(vehicle, selectedOffer?.maxPassengers)
+  const selectedIsCargo = vehicleIsCargo(vehicle, selectedOffer?.isCargo)
+  const showPassengerPicker = !!pickup && !selectedIsCargo && selectedMaxPassengers > 1
+
   useEffect(() => {
     if (!pickup || !dropoff) {
       setQuote(null)
@@ -354,7 +411,7 @@ export function ScheduleScreen({
     async function load() {
       setQuoting(true)
       try {
-        const next = await api.quote(bookBody(vehicle, pickup!, dropoff!, payment, paymentRef, passengers, vehicleCategoryId))
+        const next = await api.quote(bookBody(vehicle, pickup!, dropoff!, payment, paymentRef, passengers, vehicleCategoryId, selectedMaxPassengers, selectedIsCargo))
         if (ignore) return
         setQuote(next)
         setCoverageHint(false)
@@ -375,7 +432,7 @@ export function ScheduleScreen({
     }
     void load()
     return () => { ignore = true }
-  }, [pickup, dropoff, vehicle, vehicleCategoryId, payment, paymentRef, passengers])
+  }, [pickup, dropoff, vehicle, vehicleCategoryId, payment, paymentRef, passengers, selectedMaxPassengers, selectedIsCargo])
 
   useEffect(() => {
     if (noOperator.useOffers) {
@@ -396,6 +453,14 @@ export function ScheduleScreen({
       return current
     })
   }, [noOperator.availableTypes, noOperator.availableVehicles, noOperator.useOffers, vehicleCategoryId])
+
+  useEffect(() => {
+    if (!showPassengerPicker) {
+      setPassengers(1)
+      return
+    }
+    setPassengers((n) => Math.min(selectedMaxPassengers, Math.max(1, n)))
+  }, [showPassengerPicker, selectedMaxPassengers, vehicle, vehicleCategoryId])
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -421,7 +486,7 @@ export function ScheduleScreen({
     setNote('')
     try {
       onDesk(await api.book({
-        ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, passengers, vehicleCategoryId),
+        ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, passengers, vehicleCategoryId, selectedMaxPassengers, selectedIsCargo),
         scheduledAtUtc,
       }))
       setNote('Scheduled. Riders are notified about an hour before pickup.')
@@ -482,6 +547,8 @@ export function ScheduleScreen({
           </button>
         </div>
       </div>
+      {pickup && (
+        <>
       <p className="section-title">Vehicle</p>
       <div className="vehicles">
         {(noOperator.useOffers
@@ -490,13 +557,15 @@ export function ScheduleScreen({
               id: t,
               vehicleType: t,
               name: vehicleLabel(t),
+              available: true,
               maxPassengers: vehicleMaxPassengers(t),
               isCargo: vehicleIsCargo(t),
             }))
         ).map((item) => {
           const type = item.vehicleType as VehicleType
           const categoryId = 'id' in item && item.id !== type ? item.id : null
-          const selected = categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId
+          const canSelect = !('available' in item) || item.available !== false
+          const selected = canSelect && (categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId)
           const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
             ? item.maxPassengers
             : vehicleMaxPassengers(type)
@@ -508,8 +577,11 @@ export function ScheduleScreen({
             <button
               key={categoryId ?? type}
               type="button"
-              className={`vehicle ${selected ? 'on' : ''}`}
+              disabled={!canSelect}
+              className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
+              title={!canSelect ? 'Not offered for bookings in this area yet' : undefined}
               onClick={() => {
+                if (!canSelect) return
                 setVehicle(type)
                 setVehicleCategoryId(categoryId)
                 setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))
@@ -526,9 +598,17 @@ export function ScheduleScreen({
           )
         })}
       </div>
-      {!vehicleIsCargo(vehicle) && vehicleMaxPassengers(vehicle) > 1 && (
+      {!noOperator.vehiclesReady && (
+        <p className="muted">Checking available vehicles…</p>
+      )}
+      {noOperator.vehiclesReady && noOperator.availableTypes.length === 0 && (
+        <p className="muted">No vehicle types are offered for bookings in this municipality yet.</p>
+      )}
+        </>
+      )}
+      {showPassengerPicker && (
         <div className="passenger-picker" role="group" aria-label="Number of passengers">
-          <span className="passenger-label">Passengers</span>
+          <span className="passenger-label">Passengers (max {selectedMaxPassengers})</span>
           <div className="passenger-controls">
             <button
               type="button"
@@ -543,25 +623,24 @@ export function ScheduleScreen({
               className="passenger-input"
               type="number"
               min={1}
-              max={vehicleMaxPassengers(vehicle)}
+              max={selectedMaxPassengers}
               inputMode="numeric"
               value={passengers}
               onChange={(e) => {
-                const max = vehicleMaxPassengers(vehicle)
                 const next = Math.floor(Number(e.target.value))
                 if (!Number.isFinite(next) || next < 1) {
                   setPassengers(1)
                   return
                 }
-                setPassengers(Math.min(max, next))
+                setPassengers(Math.min(selectedMaxPassengers, next))
               }}
               aria-label="Passenger count"
             />
             <button
               type="button"
               className="passenger-btn"
-              disabled={passengers >= vehicleMaxPassengers(vehicle)}
-              onClick={() => setPassengers((n) => Math.min(vehicleMaxPassengers(vehicle), n + 1))}
+              disabled={passengers >= selectedMaxPassengers}
+              onClick={() => setPassengers((n) => Math.min(selectedMaxPassengers, n + 1))}
               aria-label="More passengers"
             >
               +
@@ -623,8 +702,9 @@ export function ScheduleScreen({
   )
 }
 
-function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', passengerCount = 1, categoryId?: string | null): BookBody {
-  const max = vehicleMaxPassengers(vehicle)
+function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: PaymentMethod, refNo = '', passengerCount = 1, categoryId?: string | null, maxPassengers?: number, isCargo?: boolean): BookBody {
+  const max = vehicleMaxPassengers(vehicle, maxPassengers)
+  const cargo = vehicleIsCargo(vehicle, isCargo)
   return {
     vehicleType: vehicle,
     vehicleCategoryId: categoryId ?? undefined,
@@ -638,7 +718,7 @@ function bookBody(vehicle: VehicleType, pickup: Stop, dropoff: Stop, payment: Pa
     dropoffLng: dropoff.lng,
     paymentMethod: payment,
     paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
-    passengerCount: vehicleIsCargo(vehicle) || max <= 1 ? 1 : Math.min(max, Math.max(1, passengerCount)),
+    passengerCount: cargo || max <= 1 ? 1 : Math.min(max, Math.max(1, passengerCount)),
   }
 }
 
@@ -669,6 +749,99 @@ function toPhInput(value: string | null | undefined) {
   }).formatToParts(new Date(value))
   const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
   return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
+}
+
+export function FavoritesScreen({
+  onBook,
+}: {
+  onBook: (rider: FavoriteRider) => void
+}) {
+  const [items, setItems] = useState<FavoriteRider[] | null>(null)
+  const [error, setError] = useState('')
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  function reload() {
+    api.favorites()
+      .then((rows) => { setItems(rows); setError('') })
+      .catch((err: Error) => setError(err.message))
+  }
+
+  useEffect(() => { reload() }, [])
+
+  async function remove(riderId: string) {
+    if (!window.confirm('Remove this rider from Favs?')) return
+    setBusyId(riderId)
+    try {
+      await api.removeFavorite(riderId)
+      setItems((prev) => (prev ?? []).filter((r) => r.riderId !== riderId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove favorite.')
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  function statusLabel(r: FavoriteRider) {
+    if (r.isBusy) return 'Busy'
+    if (r.isOnline) return 'Online'
+    return 'Offline'
+  }
+
+  return (
+    <div className="page favorites-page">
+      <h2>Favs</h2>
+      <p className="muted">Saved riders you can book directly when they are online.</p>
+      {error ? <p className="error">{error}</p> : null}
+      {!items ? <p className="muted">Loading favorites…</p> : null}
+      {items && items.length === 0 ? (
+        <p className="muted">No favorites yet. Open a completed trip in Booking and tap Add to Favs.</p>
+      ) : null}
+      <div className="favorites-list">
+        {(items ?? []).map((rider) => (
+          <article key={rider.riderId} className="card fav-card">
+            <div className="fav-card-head">
+              {rider.photoUrl ? (
+                <img src={mediaUrl(rider.photoUrl) ?? undefined} alt="" className="fav-avatar" />
+              ) : (
+                <span className="fav-avatar fav-avatar-fallback" aria-hidden="true">★</span>
+              )}
+              <div className="fav-card-meta">
+                <b>{rider.fullName}</b>
+                <small className="muted">
+                  {rider.plateNumber}
+                  {rider.vehicleModel ? ` · ${rider.vehicleModel}` : ` · ${rider.vehicleType}`}
+                </small>
+                <span className={`tag fav-status ${rider.canBook ? 'online' : rider.isBusy ? 'busy' : 'offline'}`}>
+                  {statusLabel(rider)}
+                </span>
+              </div>
+            </div>
+            <div className="fav-card-actions">
+              {rider.phoneNumber ? (
+                <a className="secondary" href={`tel:${rider.phoneNumber}`}>Call</a>
+              ) : null}
+              <button
+                type="button"
+                className="primary"
+                disabled={!rider.canBook}
+                onClick={() => onBook(rider)}
+              >
+                {rider.canBook ? 'Book' : 'Unavailable'}
+              </button>
+              <button
+                type="button"
+                className="danger"
+                disabled={busyId === rider.riderId}
+                onClick={() => void remove(rider.riderId)}
+              >
+                Remove
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export type AccountPage = 'menu' | 'profile' | 'pin' | 'mobile' | 'delete' | 'terms' | 'privacy'

@@ -9,17 +9,20 @@ export function useNoOperatorNotice(
 ) {
   const [searching, setSearching] = useState(false)
   const [uncovered, setUncovered] = useState(false)
-  const [motorcycleAvailable, setMotorcycleAvailable] = useState(true)
-  const [tricycleAvailable, setTricycleAvailable] = useState(true)
+  const [motorcycleAvailable, setMotorcycleAvailable] = useState(false)
+  const [tricycleAvailable, setTricycleAvailable] = useState(false)
   const [vehicles, setVehicles] = useState<VehicleOffer[]>([])
+  const [vehiclesReady, setVehiclesReady] = useState(false)
 
   useEffect(() => {
     setSearching(false)
     setUncovered(false)
-    setMotorcycleAvailable(true)
-    setTricycleAvailable(true)
+    setMotorcycleAvailable(false)
+    setTricycleAvailable(false)
     setVehicles([])
-    if (!enabled || !pickup || !dropoff) return
+    setVehiclesReady(false)
+    // Load offered vehicles from pickup municipality (do not wait for drop-off).
+    if (!enabled || !pickup) return
 
     let cancelled = false
     let timer: number | undefined
@@ -38,18 +41,21 @@ export function useNoOperatorNotice(
       pickupDetails: pickup.details,
       pickupLat: pickup.lat,
       pickupLng: pickup.lng,
-      dropoffBarangayId: dropoff.barangayId,
-      dropoffDetails: dropoff.details,
+      dropoffBarangayId: dropoff?.barangayId,
+      dropoffDetails: dropoff?.details ?? '',
     }).then((result) => {
       if (cancelled) return
       setMotorcycleAvailable(!!result.motorcycleAvailable)
       setTricycleAvailable(!!result.tricycleAvailable)
       const list = Array.isArray(result.vehicles) ? result.vehicles : []
       setVehicles(list)
-      if (!result.municipalityHasOperator) startWait()
+      setVehiclesReady(true)
+      // Only warn about uncovered area once both stops are chosen.
+      if (dropoff && !result.municipalityHasOperator) startWait()
     }).catch(() => {
       if (cancelled) return
-      if (coverageHint) startWait()
+      setVehiclesReady(true)
+      if (dropoff && coverageHint) startWait()
     })
 
     return () => {
@@ -71,19 +77,24 @@ export function useNoOperatorNotice(
 
   // Memoize so quote effects that depend on these do not re-run every render
   // (new [] identity would keep "Getting fare…" stuck in a loop).
+  const hasPickup = !!pickup
+  const listedVehicles = useMemo(() => vehicles, [vehicles])
   const availableVehicles = useMemo(
     () => vehicles.filter((v) => v.available),
     [vehicles],
   )
-  const useOffers = availableVehicles.length > 0
+  const useOffers = listedVehicles.length > 0
   const availableTypes = useMemo(
-    () => (useOffers
-      ? availableVehicles.map((v) => v.vehicleType as VehicleType)
-      : ([
-          motorcycleAvailable ? 'Motorcycle' : null,
-          tricycleAvailable ? 'Tricycle' : null,
-        ].filter(Boolean) as VehicleType[])),
-    [availableVehicles, motorcycleAvailable, tricycleAvailable, useOffers],
+    () => {
+      if (!hasPickup || !vehiclesReady) return []
+      return useOffers
+        ? availableVehicles.map((v) => v.vehicleType as VehicleType)
+        : ([
+            motorcycleAvailable ? 'Motorcycle' : null,
+            tricycleAvailable ? 'Tricycle' : null,
+          ].filter(Boolean) as VehicleType[])
+    },
+    [availableVehicles, hasPickup, motorcycleAvailable, tricycleAvailable, useOffers, vehiclesReady],
   )
 
   return {
@@ -92,9 +103,11 @@ export function useNoOperatorNotice(
     motorcycleAvailable,
     tricycleAvailable,
     vehicles,
+    listedVehicles,
     availableVehicles,
     useOffers,
     availableTypes,
+    vehiclesReady: hasPickup && vehiclesReady,
     isTypeAvailable: (type: VehicleType) => availableTypes.includes(type),
   }
 }

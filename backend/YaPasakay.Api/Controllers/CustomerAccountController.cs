@@ -49,6 +49,11 @@ public class CustomerAccountController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = "That email already has an account." });
         }
 
+        if (await LoginBlocks.IsBlockedAsync(db, email, null, cancellationToken))
+        {
+            return BadRequest(new { message = "That email is blocked and cannot be used." });
+        }
+
         customer.FirstName = first;
         customer.LastName = last;
         customer.Gender = request.Gender;
@@ -141,6 +146,11 @@ public class CustomerAccountController(AppDbContext db) : ControllerBase
         if (await db.Users.AnyAsync(x => x.PhoneNumber == phone && x.Id != customer.AppUserId, cancellationToken))
         {
             return BadRequest(new { message = "That phone number already has an account." });
+        }
+
+        if (await LoginBlocks.IsBlockedAsync(db, null, phone, cancellationToken))
+        {
+            return BadRequest(new { message = "That mobile number is blocked and cannot be used." });
         }
 
         customer.AppUser.PhoneNumber = phone;

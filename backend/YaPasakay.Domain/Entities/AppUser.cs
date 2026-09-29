@@ -19,5 +19,6 @@ public class AppUser : BaseEntity
     public Guid? AccessGroupId { get; set; }
     public AccessGroup? AccessGroup { get; set; }
     public bool IsActive { get; set; } = true;
+    public bool IsLoginBlocked { get; set; }
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }

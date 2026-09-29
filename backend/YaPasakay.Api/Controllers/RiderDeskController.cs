@@ -185,7 +185,7 @@ public class RiderDeskController(
                 x.CustomerName,
                 x.VehicleType,
                 x.Status,
-                x.Fare,
+                RideCommissionCalculator.SettlementFare(x),
                 x.DistanceKm,
                 Math.Max(1, x.PassengerCount),
                 x.PaymentMethod,
@@ -196,7 +196,8 @@ public class RiderDeskController(
                 x.IsPromoSponsored,
                 x.DiscountPercent,
                 x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
-                x.CustomerBoostAmount);
+                x.CustomerBoostAmount,
+                FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount));
         }).ToList();
 
         return Ok(trips.Select(x => x with
@@ -557,6 +558,86 @@ public class RiderDeskController(
         return Ok(await BuildDeskAsync(rider.Id, cancellationToken));
     }
 
+    [HttpPost("trips/{id:guid}/discount")]
+    public async Task<ActionResult<RiderDeskResponse>> ApplyDiscount(
+        Guid id,
+        [FromBody] RiderFareDiscountRequest request,
+        CancellationToken cancellationToken)
+    {
+        var (rider, status, message) = await RiderContext.RequireAsync(db, User, cancellationToken);
+        if (rider is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var trip = await db.Trips.FirstOrDefaultAsync(x => x.Id == id && x.RiderId == rider.Id, cancellationToken);
+        if (trip is null)
+        {
+            return NotFound();
+        }
+
+        if (trip.Status is not (TripStatus.Waiting or TripStatus.Ongoing))
+        {
+            return BadRequest(new { message = "Apply the discount while the trip is with you." });
+        }
+
+        if (!FareDiscountRules.TryParse(request.Kind, out var kind) || kind == FareDiscountKind.None)
+        {
+            return BadRequest(new { message = "Choose Senior citizen, PWD, or Others." });
+        }
+
+        var payable = FareBeforeRiderDiscount(trip);
+        var (pay, amount, percent, error) = FareDiscountRules.Apply(
+            payable,
+            kind,
+            request.Note,
+            requireNote: true,
+            request.Mode,
+            request.Value);
+        if (error is not null)
+        {
+            return BadRequest(new { message = error });
+        }
+
+        trip.Fare = pay;
+        trip.CustomerFare = pay;
+        trip.FareDiscountKind = kind;
+        trip.FareDiscountAmount = amount;
+        trip.FareDiscountPercent = percent;
+        trip.FareDiscountNote = kind == FareDiscountKind.Other ? request.Note?.Trim() : null;
+        trip.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (trip.CustomerId is Guid customerId)
+        {
+            var label = FareDiscountRules.Label(kind, trip.FareDiscountNote, percent, amount);
+            await live.CustomerTripAsync(
+                customerId,
+                "discount",
+                "Discount applied",
+                $"{label}. You pay {pay:0.##}.",
+                cancellationToken);
+        }
+
+        return Ok(await BuildDeskAsync(rider.Id, cancellationToken));
+    }
+
+    /// <summary>Fare before the current rider discount, so a change replaces it instead of stacking.</summary>
+    private static decimal FareBeforeRiderDiscount(Trip trip)
+    {
+        if (trip.FareDiscountAmount <= 0)
+        {
+            return trip.Fare;
+        }
+
+        if (trip.CustomerFare > 0 && trip.Fare <= trip.CustomerFare)
+        {
+            return trip.Fare + trip.FareDiscountAmount;
+        }
+
+        return trip.Fare;
+    }
+
     [HttpGet("trips/{id:guid}/chat")]
     public async Task<ActionResult<IReadOnlyList<RideChatMessageItem>>> Chat(
         Guid id,
@@ -817,6 +898,39 @@ public class RiderDeskController(
             offers = rows.Select(x => TripBroadcastService.MapOffer(x, x.Trip)).ToArray();
         }
 
+        var noticeSince = now.AddHours(-24);
+        var noticeRows = await db.RiderNotices.AsNoTracking()
+            .Where(x => x.OperatorId == rider.OperatorId
+                && x.CancelledAtUtc == null
+                && x.SentAtUtc != null
+                && x.SentAtUtc >= noticeSince)
+            .OrderByDescending(x => x.SentAtUtc)
+            .Take(5)
+            .Select(x => new { x.Id, x.Title, x.Body, SentAtUtc = x.SentAtUtc!.Value })
+            .ToListAsync(cancellationToken);
+        var notices = noticeRows
+            .Select(x =>
+            {
+                var sent = DateTime.SpecifyKind(x.SentAtUtc, DateTimeKind.Utc);
+                var day = YaPasakay.Application.Common.PhilippineTime.ToPh(sent);
+                return new RiderNoticeItem(
+                    $"{x.Id:N}:{day:yyyyMMdd}",
+                    x.Title,
+                    x.Body,
+                    sent);
+            })
+            .ToList();
+
+        var scheduledRows = await db.RiderNotices.AsNoTracking()
+            .Where(x => x.OperatorId == rider.OperatorId && x.IsActive && x.CancelledAtUtc == null)
+            .OrderBy(x => x.NotifyMinuteOfDay)
+            .Take(8)
+            .Select(x => new { x.Id, x.Title, x.Body, x.NotifyMinuteOfDay })
+            .ToListAsync(cancellationToken);
+        var scheduledNotices = scheduledRows
+            .Select(x => new RiderScheduledNoticeItem(x.Id.ToString("N"), x.Title, x.Body, x.NotifyMinuteOfDay))
+            .ToList();
+
         RiderPendingHail? pendingHail = null;
         if (active is null)
         {
@@ -865,7 +979,9 @@ public class RiderDeskController(
             rider.FullAddress,
             rider.IsActive,
             rider.CredibilityScore,
-            rider.RiderCancelCount);
+            rider.RiderCancelCount,
+            notices,
+            scheduledNotices);
     }
 
     private async Task ClearRiderHailsAsync(Guid riderId, CancellationToken cancellationToken)

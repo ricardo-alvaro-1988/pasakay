@@ -138,6 +138,7 @@ public static class BookingReport
                 ? trip.CustomerName
                 : trip.Customer?.AppUser.FullName ?? "—";
 
+            var payable = trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare;
             return new BookingReportItem(
                 trip.Id,
                 DateTime.SpecifyKind(when, DateTimeKind.Utc),
@@ -150,8 +151,10 @@ public static class BookingReport
                 breakdown?.SystemAmount ?? 0,
                 breakdown?.OperatorAmount ?? 0,
                 CommissionCut.Round(trip.PromoDiscountAmount),
-                CommissionCut.Round(trip.Fare),
-                trip.Status);
+                CommissionCut.Round(RideCommissionCalculator.QuotedFare(trip)),
+                trip.Status,
+                CommissionCut.Round(payable),
+                FareDiscountRules.LabelOrNull(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount));
         }).ToList();
     }
 
@@ -162,5 +165,5 @@ public static class BookingReport
             CommissionCut.Round(rows.Sum(x => x.SystemCommission)),
             CommissionCut.Round(rows.Sum(x => x.OperatorCommission)),
             CommissionCut.Round(rows.Sum(x => x.Promo)),
-            CommissionCut.Round(rows.Sum(x => x.Fare)));
+            CommissionCut.Round(rows.Sum(x => x.CustomerFare > 0 ? x.CustomerFare : x.Fare)));
 }

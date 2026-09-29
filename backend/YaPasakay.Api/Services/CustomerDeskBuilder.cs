@@ -168,7 +168,7 @@ public static class CustomerDeskBuilder
             trip.PickupLng,
             trip.DropoffLat,
             trip.DropoffLng,
-            trip.Fare,
+            RideCommissionCalculator.QuotedFare(trip),
             trip.DistanceKm,
             Math.Max(1, trip.PassengerCount),
             trip.VehicleType,
@@ -199,6 +199,11 @@ public static class CustomerDeskBuilder
             trip.IsPromoSponsored && trip.DiscountPercent is int pct
                 ? OperatorPromoRules.DisplayCode(pct)
                 : null,
-            trip.CustomerBoostAmount);
+            trip.CustomerBoostAmount,
+            showRider ? rider!.Id : trip.RiderId,
+            trip.FareDiscountKind == FareDiscountKind.None
+                ? null
+                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount),
+            trip.FareDiscountAmount);
     }
 }

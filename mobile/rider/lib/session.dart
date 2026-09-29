@@ -61,7 +61,9 @@ class RiderSession extends ChangeNotifier {
   double? _lastGpsLat;
   double? _lastGpsLng;
   final AudioPlayer _offerAlarm = AudioPlayer();
+  final AudioPlayer _noticeTone = AudioPlayer();
   static const _alarmKey = 'offerAlarmEnabled';
+  static const _noticeSeenKey = 'seenRiderNotices';
 
   /// Fast fallback when live desk hub is down.
   static const _pollFallback = Duration(seconds: 8);
@@ -198,6 +200,10 @@ class RiderSession extends ChangeNotifier {
       await _syncChat();
       await _syncOnlineService();
       await _syncOfferAlarm(previous);
+      final alarmsSet = await RiderAlerts.syncNotices(desk?.scheduledNotices ?? const []);
+      if (!alarmsSet) {
+        await _syncNotices();
+      }
       if (desk?.isOnline == true) {
         _scheduleGps();
       } else {
@@ -259,6 +265,12 @@ class RiderSession extends ChangeNotifier {
     desk = await api.decline(offerId);
     _deskSignature = _signature(desk);
     _shownOfferId = null;
+    notifyListeners();
+  }
+
+  Future<void> applyDiscount(String tripId, String kind, {required String mode, required int value, String? note}) async {
+    desk = await api.applyDiscount(tripId, kind, mode: mode, value: value, note: note);
+    _deskSignature = _signature(desk);
     notifyListeners();
   }
 
@@ -415,6 +427,61 @@ class RiderSession extends ChangeNotifier {
       await _offerAlarm.setReleaseMode(ReleaseMode.release);
       await _offerAlarm.setVolume(1);
       await _offerAlarm.play(AssetSource('offer-alarm.wav'));
+    } catch (_) {}
+  }
+
+  Future<void> _syncNotices() async {
+    final notices = desk?.notices ?? const <RiderNotice>[];
+    if (notices.isEmpty) {
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getStringList(_noticeSeenKey)?.toSet() ?? <String>{};
+    String stampOf(RiderNotice notice) {
+      final sent = notice.sentAt?.toUtc().toIso8601String() ?? '';
+      return '${notice.id}|$sent';
+    }
+    final fresh = notices.where((notice) => notice.id.isNotEmpty && !seen.contains(stampOf(notice)) && !seen.contains(notice.id)).toList();
+    if (fresh.isEmpty) {
+      return;
+    }
+    seen.addAll(fresh.map(stampOf));
+    final kept = seen.toList();
+    if (kept.length > 80) {
+      kept.removeRange(0, kept.length - 80);
+    }
+    await prefs.setStringList(_noticeSeenKey, kept);
+    final newest = fresh.reduce((a, b) {
+      final aAt = a.sentAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final bAt = b.sentAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return aAt.isAfter(bAt) ? a : b;
+    });
+    final sentAt = newest.sentAt;
+    if (sentAt != null && DateTime.now().difference(sentAt) > const Duration(minutes: 45)) {
+      return;
+    }
+    await _playNotice(newest);
+  }
+
+  Future<void> _playNotice(RiderNotice notice) async {
+    final native = await RiderAlerts.pingNotice(title: notice.title, body: notice.body);
+    if (native) {
+      return;
+    }
+    try {
+      await _noticeTone.stop();
+      await _noticeTone.setAudioContext(
+        AudioContext(
+          android: AudioContextAndroid(
+            contentType: AndroidContentType.sonification,
+            usageType: AndroidUsageType.notification,
+            audioFocus: AndroidAudioFocus.gainTransientMayDuck,
+          ),
+        ),
+      );
+      await _noticeTone.setReleaseMode(ReleaseMode.release);
+      await _noticeTone.setVolume(0.35);
+      await _noticeTone.play(AssetSource('notice-tone.wav'));
     } catch (_) {}
   }
 
@@ -695,6 +762,8 @@ class RiderSession extends ChangeNotifier {
       hail?.customerId,
       desk.credibilityScore,
       desk.riderCancelCount,
+      desk.notices.map((notice) => notice.id).join(','),
+      desk.scheduledNotices.map((notice) => '${notice.id}:${notice.minuteOfDay}').join(','),
     ].join('|');
   }
 

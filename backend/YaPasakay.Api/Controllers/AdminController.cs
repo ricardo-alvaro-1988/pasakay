@@ -43,9 +43,12 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             .Include(x => x.Operator)
             .ThenInclude(o => o.VehicleOffers)
             .Where(x => x.Status == TripStatus.Completed && x.CompletedAtUtc >= DateTime.UtcNow.Date)
-            .Select(x => new { x.Fare, x.VehicleType, x.Operator })
+            .Select(x => new { x.Fare, x.CustomerFare, x.FareDiscountAmount, x.VehicleType, x.Operator })
             .ToListAsync(cancellationToken);
-        var adminCutToday = completedTodayTrips.Sum(x => CommissionCut.Of(x.Fare, x.VehicleType, x.Operator));
+        var adminCutToday = completedTodayTrips.Sum(x => CommissionCut.Of(
+            RideCommissionCalculator.SettlementFare(x.Fare, x.CustomerFare, x.FareDiscountAmount),
+            x.VehicleType,
+            x.Operator));
         var openSos = await db.SupportTickets.CountAsync(
             x => x.Kind == SupportKind.Sos && x.Status == SupportStatus.Open,
             cancellationToken);
@@ -1029,48 +1032,15 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var rows = await query
-            .OrderBy(x => x.Status == TripStatus.Completed || x.Status == TripStatus.Cancelled ? 2 : 0)
-            .ThenByDescending(x => x.ScheduledAtUtc ?? x.RequestedAtUtc)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(x => new OperatorBookingListItem(
-                x.Id,
-                x.Reference,
-                x.RequestedAtUtc,
-                x.ScheduledAtUtc,
-                x.CustomerName,
-                x.CustomerPhone,
-                x.Rider.AppUser.FullName,
-                x.Rider.PlateNumber,
-                x.Rider.VehicleType,
-                x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
-                x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
-                x.Status,
-                x.Fare,
-                x.PaymentMethod,
-                x.PaymentMethodOther,
-                x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
-                x.PromoDiscountAmount,
-                x.IsPromoSponsored,
-                x.DiscountPercent,
-                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null,
-                x.CustomerBoostAmount))
-            .ToListAsync(cancellationToken);
+        var rows = await OperatorMaps.LoadBookingListAsync(
+            query
+                .OrderBy(x => x.Status == TripStatus.Completed || x.Status == TripStatus.Cancelled ? 2 : 0)
+                .ThenByDescending(x => x.ScheduledAtUtc ?? x.RequestedAtUtc)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize),
+            cancellationToken);
 
-        return Ok(new PagedResult<OperatorBookingListItem>(
-            rows.Select(x => x with
-            {
-                RequestedAtUtc = DateTime.SpecifyKind(x.RequestedAtUtc, DateTimeKind.Utc),
-                ScheduledAtUtc = x.ScheduledAtUtc is DateTime scheduled
-                    ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc)
-                    : null,
-                Pickup = TripAddress.Clean(x.Pickup),
-                Dropoff = TripAddress.Clean(x.Dropoff)
-            }).ToList(),
-            page,
-            pageSize,
-            total));
+        return Ok(new PagedResult<OperatorBookingListItem>(rows, page, pageSize, total));
     }
 
     [HttpGet("operators/{id:guid}/bookings/{bookingId:guid}")]
@@ -1548,7 +1518,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             TripAddress.Display(trip.PickupDetails, trip.Pickup),
             TripAddress.Display(trip.DropoffDetails, trip.Dropoff),
             trip.Notes,
-            trip.Fare,
+            RideCommissionCalculator.QuotedFare(trip),
             trip.DistanceKm,
             Math.Max(1, trip.PassengerCount),
             duration,
@@ -1582,7 +1552,11 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             trip.IsPromoSponsored,
             trip.DiscountPercent,
             trip.IsPromoSponsored && trip.DiscountPercent is int pct ? $"Save{pct}" : null,
-            trip.CustomerBoostAmount);
+            trip.CustomerBoostAmount,
+            trip.FareDiscountKind == FareDiscountKind.None
+                ? null
+                : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount),
+            trip.FareDiscountAmount);
     }
 
     private static RideStopItem MapRideStop(string details, string fullAddress, Barangay? barangay)
@@ -1671,7 +1645,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             await query.CountAsync(x => x.Status == TripStatus.Completed, cancellationToken),
             await query.CountAsync(x => x.Status == TripStatus.Cancelled, cancellationToken),
             await query.CountAsync(x => x.Status == TripStatus.Ongoing, cancellationToken),
-            completedTrips.Sum(x => x.Fare),
+            completedTrips.Sum(RideCommissionCalculator.SettlementFare),
             systemAmount,
             operatorAmount,
             driverAmount);
@@ -1716,7 +1690,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                     x.CustomerName,
                     x.VehicleType,
                     x.Status,
-                    x.Fare,
+                    RideCommissionCalculator.QuotedFare(x),
                     x.DistanceKm,
                     Math.Max(1, x.PassengerCount),
                     x.PaymentMethod,
@@ -1727,7 +1701,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                     x.IsPromoSponsored,
                     x.DiscountPercent,
                     x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
-                    x.CustomerBoostAmount);
+                    x.CustomerBoostAmount,
+                    FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount));
             })
             .ToList();
 
@@ -1744,7 +1719,8 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             customer.CreatedAtUtc,
             customer.AppUser.IsActive,
             UploadUrls.FromPath(customer.PhotoPath),
-            customer.DeleteStatus);
+            customer.DeleteStatus,
+            customer.AppUser.IsLoginBlocked);
 
     private static CustomerDetailResponse MapCustomerDetail(CustomerProfile customer) =>
         new(
@@ -1761,7 +1737,9 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
                 customer.DeleteRequestedAtUtc,
                 customer.DeleteRequestReason,
                 customer.DeleteResolvedAtUtc,
-                customer.DeleteResolutionNote));
+                customer.DeleteResolutionNote),
+            customer.AppUser.Email,
+            customer.AppUser.IsLoginBlocked);
 
     private static string CustomerDisplayName(CustomerProfile customer)
     {

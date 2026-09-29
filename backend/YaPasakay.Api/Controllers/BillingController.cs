@@ -47,14 +47,14 @@ public class BillingController(AppDbContext db) : ControllerBase
                     t.OperatorId == op.Id && t.Status == TripStatus.Completed && t.BillId == null),
                 PendingMotorcycleFare = db.Trips
                     .Where(t => t.OperatorId == op.Id && t.Status == TripStatus.Completed && t.BillId == null && t.VehicleType == VehicleType.Motorcycle)
-                    .Sum(t => (decimal?)t.Fare) ?? 0,
+                    .Sum(t => (decimal?)(t.FareDiscountAmount > 0 && t.CustomerFare > 0 && t.CustomerFare < t.Fare ? t.CustomerFare : t.Fare)) ?? 0,
                 PendingTricycleFare = db.Trips
                     .Where(t => t.OperatorId == op.Id && t.Status == TripStatus.Completed && t.BillId == null && t.VehicleType == VehicleType.Tricycle)
-                    .Sum(t => (decimal?)t.Fare) ?? 0,
+                    .Sum(t => (decimal?)(t.FareDiscountAmount > 0 && t.CustomerFare > 0 && t.CustomerFare < t.Fare ? t.CustomerFare : t.Fare)) ?? 0,
                 PendingOtherFare = db.Trips
                     .Where(t => t.OperatorId == op.Id && t.Status == TripStatus.Completed && t.BillId == null
                         && t.VehicleType != VehicleType.Motorcycle && t.VehicleType != VehicleType.Tricycle)
-                    .Sum(t => (decimal?)t.Fare) ?? 0,
+                    .Sum(t => (decimal?)(t.FareDiscountAmount > 0 && t.CustomerFare > 0 && t.CustomerFare < t.Fare ? t.CustomerFare : t.Fare)) ?? 0,
                 OldestUnbilledUtc = db.Trips
                     .Where(t => t.OperatorId == op.Id && t.Status == TripStatus.Completed && t.BillId == null)
                     .Min(t => t.CompletedAtUtc),
@@ -75,7 +75,7 @@ public class BillingController(AppDbContext db) : ControllerBase
             ? []
             : await db.Trips
                 .Where(t => operatorIds.Contains(t.OperatorId) && t.Status == TripStatus.Completed && t.BillId == null)
-                .Select(t => new { t.OperatorId, t.VehicleType, t.VehicleCategoryId, t.Fare })
+                .Select(t => new { t.OperatorId, t.VehicleType, t.VehicleCategoryId, t.Fare, t.CustomerFare, t.FareDiscountAmount })
                 .ToListAsync(cancellationToken);
         var pendingByOp = pendingTrips.GroupBy(t => t.OperatorId).ToDictionary(g => g.Key, g => g.ToList());
 
@@ -106,7 +106,10 @@ public class BillingController(AppDbContext db) : ControllerBase
                 };
                 var trips = pendingByOp.GetValueOrDefault(op.Id) ?? [];
                 var pendingLines = BuildPendingVehicleLines(
-                    trips.Select(t => (t.VehicleType, t.VehicleCategoryId, t.Fare)),
+                    trips.Select(t => (
+                        t.VehicleType,
+                        t.VehicleCategoryId,
+                        RideCommissionCalculator.SettlementFare(t.Fare, t.CustomerFare, t.FareDiscountAmount))),
                     opStub,
                     categoryMeta);
                 var motorcycle = pendingLines.FirstOrDefault(x => x.VehicleCode == "motorcycle")?.Amount ?? 0;
@@ -208,7 +211,7 @@ public class BillingController(AppDbContext db) : ControllerBase
                 var sample = g.First();
                 var categoryId = g.Key;
                 var amount = CommissionCut.Round(g.Sum(t =>
-                    CommissionCut.Of(t.Fare, FareCommissionSplit.SystemPercent(op, categoryId, t.VehicleType))));
+                    CommissionCut.Of(RideCommissionCalculator.SettlementFare(t), FareCommissionSplit.SystemPercent(op, categoryId, t.VehicleType))));
                 var (code, name) = ResolveLineLabel(categoryId, sample.VehicleType, categoryMeta);
                 return new
                 {
@@ -321,7 +324,7 @@ public class BillingController(AppDbContext db) : ControllerBase
 
         var trips = await db.Trips
             .Where(x => x.OperatorId == operatorId && x.Status == TripStatus.Completed && x.BillId == null)
-            .Select(x => new { x.VehicleType, x.VehicleCategoryId, x.Fare, x.CompletedAtUtc })
+            .Select(x => new { x.VehicleType, x.VehicleCategoryId, x.Fare, x.CustomerFare, x.FareDiscountAmount, x.CompletedAtUtc })
             .ToListAsync(cancellationToken);
 
         var categoryIds = trips
@@ -340,7 +343,10 @@ public class BillingController(AppDbContext db) : ControllerBase
         }
 
         var pendingLines = BuildPendingVehicleLines(
-            trips.Select(t => (t.VehicleType, t.VehicleCategoryId, t.Fare)),
+            trips.Select(t => (
+                t.VehicleType,
+                t.VehicleCategoryId,
+                RideCommissionCalculator.SettlementFare(t.Fare, t.CustomerFare, t.FareDiscountAmount))),
             op,
             categoryMeta);
 
@@ -366,6 +372,8 @@ public class BillingController(AppDbContext db) : ControllerBase
                     RiderName = x.Rider.AppUser.FullName,
                     x.Reference,
                     x.Fare,
+                    x.CustomerFare,
+                    x.FareDiscountAmount,
                     x.VehicleType,
                     x.VehicleCategoryId
                 })
@@ -376,14 +384,18 @@ public class BillingController(AppDbContext db) : ControllerBase
             var tripLines = billedTrips
                 .Where(t => t.BillId == x.Id)
                 .OrderBy(t => t.AtUtc)
-                .Select(t => new BillTripItem(
+                .Select(t =>
+                {
+                    var fare = RideCommissionCalculator.SettlementFare(t.Fare, t.CustomerFare, t.FareDiscountAmount);
+                    return new BillTripItem(
                     DateTime.SpecifyKind(t.AtUtc, DateTimeKind.Utc),
                     t.RiderName,
                     t.Reference,
-                    t.Fare,
+                    fare,
                     CommissionCut.Round(CommissionCut.Of(
-                        t.Fare,
-                        FareCommissionSplit.SystemPercent(op, t.VehicleCategoryId, t.VehicleType)))))
+                        fare,
+                        FareCommissionSplit.SystemPercent(op, t.VehicleCategoryId, t.VehicleType))));
+                })
                 .ToList();
             var vehicleLines = x.VehicleLines
                 .Select(l => new OperatorBillVehicleLineItem(l.VehicleCode, l.VehicleName, l.Amount))

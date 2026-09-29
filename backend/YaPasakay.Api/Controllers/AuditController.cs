@@ -77,6 +77,8 @@ public class AuditController(AppDbContext db) : ControllerBase
         AuditAction.OperatorActivated => "Activated",
         AuditAction.OperatorDeactivated => "Deactivated",
         AuditAction.BillIssued => "Billed",
+        AuditAction.CustomerBlocked => "Customer blocked",
+        AuditAction.CustomerUnblocked => "Customer unblocked",
         _ => action.ToString()
     };
 }

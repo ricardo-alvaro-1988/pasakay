@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Operator> Operators => Set<Operator>();
     public DbSet<RiderProfile> RiderProfiles => Set<RiderProfile>();
     public DbSet<CustomerProfile> CustomerProfiles => Set<CustomerProfile>();
+    public DbSet<CustomerFavoriteRider> CustomerFavoriteRiders => Set<CustomerFavoriteRider>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<Province> Provinces => Set<Province>();
     public DbSet<Municipality> Municipalities => Set<Municipality>();
@@ -35,12 +36,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<AccessGroupPage> AccessGroupPages => Set<AccessGroupPage>();
     public DbSet<DeviceRegistration> DeviceRegistrations => Set<DeviceRegistration>();
     public DbSet<PlatformBrandSettings> PlatformBrandSettings => Set<PlatformBrandSettings>();
+    public DbSet<RiderAppRelease> RiderAppReleases => Set<RiderAppRelease>();
     public DbSet<RiderInviteLink> RiderInviteLinks => Set<RiderInviteLink>();
     public DbSet<RiderApplication> RiderApplications => Set<RiderApplication>();
     public DbSet<OperatorCashInBankAccount> OperatorCashInBankAccounts => Set<OperatorCashInBankAccount>();
     public DbSet<OperatorPromo> OperatorPromos => Set<OperatorPromo>();
     public DbSet<OperatorAd> OperatorAds => Set<OperatorAd>();
     public DbSet<OperatorPabiliPaymentMethod> OperatorPabiliPaymentMethods => Set<OperatorPabiliPaymentMethod>();
+    public DbSet<OperatorPabiliBrowseCategory> OperatorPabiliBrowseCategories => Set<OperatorPabiliBrowseCategory>();
     public DbSet<PromoRedemption> PromoRedemptions => Set<PromoRedemption>();
     public DbSet<DeriveFareZone> DeriveFareZones => Set<DeriveFareZone>();
     public DbSet<DeriveFareMatrix> DeriveFareMatrices => Set<DeriveFareMatrix>();
@@ -62,6 +65,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<OperatorVehicleOffer> OperatorVehicleOffers => Set<OperatorVehicleOffer>();
     public DbSet<OperatorBillVehicleLine> OperatorBillVehicleLines => Set<OperatorBillVehicleLine>();
     public DbSet<VehicleOfferingLog> VehicleOfferingLogs => Set<VehicleOfferingLog>();
+    public DbSet<CustomerLoginBlock> CustomerLoginBlocks => Set<CustomerLoginBlock>();
+    public DbSet<RiderNotice> RiderNotices => Set<RiderNotice>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -76,6 +81,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.Email).HasMaxLength(160);
             entity.Property(x => x.GoogleSubject).HasMaxLength(64);
             entity.Property(x => x.PasswordHash).HasMaxLength(200);
+            entity.Property(x => x.IsLoginBlocked).HasDefaultValue(false);
             entity.HasOne(x => x.Operator)
                 .WithMany(x => x.Users)
                 .HasForeignKey(x => x.OperatorId)
@@ -234,6 +240,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasIndex(x => x.HailRiderId);
         });
 
+        modelBuilder.Entity<CustomerFavoriteRider>(entity =>
+        {
+            entity.HasIndex(x => new { x.CustomerId, x.RiderId }).IsUnique();
+            entity.HasIndex(x => x.RiderId);
+            entity.HasOne(x => x.Customer)
+                .WithMany(x => x.FavoriteRiders)
+                .HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Rider)
+                .WithMany()
+                .HasForeignKey(x => x.RiderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<RefreshToken>(entity =>
         {
             entity.HasIndex(x => x.Token).IsUnique();
@@ -302,6 +322,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.CustomerFare).HasColumnType("decimal(18,2)");
             entity.Property(x => x.CustomerBoostAmount).HasColumnType("decimal(18,2)");
             entity.Property(x => x.PromoDiscountAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.FareDiscountAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.FareDiscountNote).HasMaxLength(80);
             entity.Property(x => x.DistanceKm).HasColumnType("decimal(8,2)");
             entity.HasOne(x => x.Promo)
                 .WithMany()
@@ -522,6 +544,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.Body).HasMaxLength(2000).IsRequired();
         });
 
+        modelBuilder.Entity<RiderNotice>(entity =>
+        {
+            entity.HasIndex(x => new { x.OperatorId, x.ScheduledAtUtc });
+            entity.HasIndex(x => new { x.IsActive, x.ScheduledAtUtc });
+            entity.Property(x => x.Title).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Body).HasMaxLength(400).IsRequired();
+            entity.HasOne(x => x.Operator)
+                .WithMany()
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<SupportTicket>(entity =>
         {
             entity.HasIndex(x => new { x.Status, x.Kind, x.CreatedAtUtc });
@@ -636,6 +670,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.ThemeId).HasMaxLength(40).IsRequired();
         });
 
+        modelBuilder.Entity<RiderAppRelease>(entity =>
+        {
+            entity.HasIndex(x => x.Version).IsUnique();
+            entity.HasIndex(x => x.IsLatest);
+            entity.Property(x => x.Version).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ApkPath).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.ReleaseNotes).HasMaxLength(2000);
+        });
+
         modelBuilder.Entity<RiderInviteLink>(entity =>
         {
             entity.HasIndex(x => x.Token).IsUnique();
@@ -728,6 +771,17 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.QrImagePath).HasMaxLength(500);
             entity.HasOne(x => x.Operator)
                 .WithMany(x => x.PabiliPaymentMethods)
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OperatorPabiliBrowseCategory>(entity =>
+        {
+            entity.HasIndex(x => new { x.OperatorId, x.Name }).IsUnique();
+            entity.HasIndex(x => new { x.OperatorId, x.SortOrder });
+            entity.Property(x => x.Name).HasMaxLength(40).IsRequired();
+            entity.HasOne(x => x.Operator)
+                .WithMany(x => x.PabiliBrowseCategories)
                 .HasForeignKey(x => x.OperatorId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
@@ -1006,6 +1060,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.Rider)
                 .WithMany()
                 .HasForeignKey(x => x.RiderId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CustomerLoginBlock>(entity =>
+        {
+            entity.HasIndex(x => x.Email);
+            entity.HasIndex(x => x.PhoneNumber);
+            entity.HasIndex(x => x.AppUserId);
+            entity.Property(x => x.Email).HasMaxLength(160);
+            entity.Property(x => x.PhoneNumber).HasMaxLength(20);
+            entity.Property(x => x.Reason).HasMaxLength(400);
+            entity.HasOne(x => x.AppUser)
+                .WithMany()
+                .HasForeignKey(x => x.AppUserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Operator)
+                .WithMany()
+                .HasForeignKey(x => x.OperatorId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.BlockedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.BlockedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }

@@ -19,7 +19,9 @@ public static class BookingReportExcel
         sheet.Cell(1, 7).Value = "Operator comm";
         sheet.Cell(1, 8).Value = "Promo";
         sheet.Cell(1, 9).Value = "Fare";
-        sheet.Range(1, 1, 1, 9).Style.Font.Bold = true;
+        sheet.Cell(1, 10).Value = "Discount";
+        sheet.Cell(1, 11).Value = "Original fare";
+        sheet.Range(1, 1, 1, 11).Style.Font.Bold = true;
 
         var ph = TimeSpan.FromHours(8);
         for (var i = 0; i < rows.Count; i++)
@@ -40,8 +42,12 @@ public static class BookingReportExcel
             sheet.Cell(excelRow, 7).Style.NumberFormat.Format = "#,##0.00";
             sheet.Cell(excelRow, 8).Value = row.Promo;
             sheet.Cell(excelRow, 8).Style.NumberFormat.Format = "#,##0.00";
-            sheet.Cell(excelRow, 9).Value = row.Fare;
+            var payable = row.CustomerFare > 0 ? row.CustomerFare : row.Fare;
+            sheet.Cell(excelRow, 9).Value = payable;
             sheet.Cell(excelRow, 9).Style.NumberFormat.Format = "#,##0.00";
+            sheet.Cell(excelRow, 10).Value = row.FareDiscountLabel ?? "";
+            sheet.Cell(excelRow, 11).Value = payable < row.Fare ? row.Fare : 0;
+            sheet.Cell(excelRow, 11).Style.NumberFormat.Format = "#,##0.00";
         }
 
         sheet.Columns().AdjustToContents();

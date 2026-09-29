@@ -10,6 +10,7 @@ export type VehicleType =
   | 'Van'
   | 'PickupL300'
   | 'PickupCargo'
+  | 'Tuktuk'
   | 'Custom'
 
 export const PLATFORM_VEHICLE_TYPES: VehicleType[] = [
@@ -21,6 +22,7 @@ export const PLATFORM_VEHICLE_TYPES: VehicleType[] = [
   'Van',
   'PickupL300',
   'PickupCargo',
+  'Tuktuk',
 ]
 
 export type VehicleOffer = {
@@ -95,6 +97,24 @@ export type CustomerTrip = {
   discountPercent?: number | null
   promoCode?: string | null
   customerBoostAmount?: number
+  riderId?: string | null
+  fareDiscountLabel?: string | null
+  fareDiscountAmount?: number
+}
+
+export type FavoriteRider = {
+  riderId: string
+  fullName: string
+  plateNumber: string
+  vehicleType: VehicleType
+  vehicleModel: string | null
+  photoUrl: string | null
+  phoneNumber: string | null
+  isOnline: boolean
+  isBusy: boolean
+  canBook: boolean
+  companyName: string
+  paymentMethods: PaymentMethod[]
 }
 
 export type Desk = {
@@ -134,6 +154,8 @@ export type Quote = {
   promoCode?: string | null
   hasActivePromos?: boolean
   customerBoostAmount?: number
+  fareDiscountLabel?: string | null
+  fareDiscountPercent?: number | null
 }
 
 export type BookingDispatchMode = 'Broadcast' | 'Selection' | 'Both'
@@ -195,6 +217,8 @@ export type BookBody = {
   passengerCount?: number
   promoCode?: string
   customerBoostAmount?: number
+  fareDiscount?: string
+  fareDiscountNote?: string
 }
 
 export type HailRider = {
@@ -270,6 +294,8 @@ export type CustomerTripDetail = {
   discountPercent?: number | null
   promoCode?: string | null
   customerBoostAmount?: number
+  fareDiscountLabel?: string | null
+  fareDiscountAmount?: number
 }
 
 export function chatFromRider(sender: unknown) {
@@ -457,7 +483,11 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
   const res = await fetch(path, { ...init, headers })
-  if (res.status === 401) {
+  const isSignIn = path.startsWith('/api/auth/google')
+    || path.startsWith('/api/auth/login')
+    || path.startsWith('/api/auth/verify-otp')
+    || path.startsWith('/api/auth/request-otp')
+  if (res.status === 401 && !isSignIn) {
     if (!retried && shouldAttemptRefresh(path) && (await refreshSession())) {
       return request<T>(path, init, true)
     }
@@ -469,9 +499,18 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
       ? 'This action is not available yet. Restart the API and try again.'
       : 'Request failed.'
     try {
-      const body = (await res.json()) as { message?: string; title?: string; detail?: string }
+      const body = (await res.json()) as {
+        message?: string
+        title?: string
+        detail?: string
+        errors?: Record<string, string[] | string>
+      }
       if (body.message) message = body.message
       else if (body.detail) message = body.detail
+      else if (body.errors) {
+        const first = Object.values(body.errors).flatMap((v) => (Array.isArray(v) ? v : [v])).find(Boolean)
+        if (typeof first === 'string' && first.trim()) message = first
+      }
       else if (body.title && res.status !== 404) message = body.title
     } catch {
       /* ignore */
@@ -519,6 +558,22 @@ export const api = {
       accent: string
       good: string
     }>('/api/public/branding'),
+  riderAppLatest: () =>
+    request<{
+      version: string
+      downloadUrl: string
+      releasedAtUtc: string
+      notes: string | null
+    }>('/api/public/rider-app'),
+  riderAppReleases: () =>
+    request<
+      {
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+      }[]
+    >('/api/public/rider-app/releases'),
   googleSignIn: (idToken: string) =>
     request<AuthResponse>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
   mapsConfig: () => request<{ googleMapsBrowserKey: string }>('/api/public/maps'),
@@ -558,7 +613,7 @@ export const api = {
     pickupLat: number
     pickupLng: number
     dropoffBarangayId?: string
-    dropoffDetails: string
+    dropoffDetails?: string
   }) => request<{
     municipalityHasOperator: boolean
     municipalityName: string | null
@@ -571,6 +626,11 @@ export const api = {
   }),
   book: (body: BookBody) => request<Desk>('/api/customer/book', { method: 'POST', body: JSON.stringify(body) }),
   clearHail: () => request<Desk>('/api/customer/hail/clear', { method: 'POST' }),
+  favorites: () => request<FavoriteRider[]>('/api/customer/favorites'),
+  addFavorite: (riderId: string) =>
+    request<FavoriteRider>(`/api/customer/favorites/${riderId}`, { method: 'POST' }),
+  removeFavorite: (riderId: string) =>
+    request<void>(`/api/customer/favorites/${riderId}`, { method: 'DELETE' }),
   cancel: (id: string) => request<Desk>(`/api/customer/trips/${id}/cancel`, { method: 'POST' }),
   tripDetail: (id: string) => request<CustomerTripDetail>(`/api/customer/trips/${id}`),
   rate: (id: string, rating: number, comment?: string) =>
@@ -639,6 +699,18 @@ export const api = {
       imageUrl: string | null
       redirectUrl: string
     }>>(`/api/customer/pabili/ads?${params}`)
+  },
+  pabiliBrowseCategories: (opts: { lat: number; lng: number; barangayId?: string }) => {
+    const params = new URLSearchParams({
+      lat: String(opts.lat),
+      lng: String(opts.lng),
+    })
+    if (opts.barangayId) params.set('barangayId', opts.barangayId)
+    return request<Array<{
+      id: string
+      name: string
+      sortOrder: number
+    }>>(`/api/customer/pabili/browse-categories?${params}`)
   },
   pabiliPaymentMethods: (opts: { lat: number; lng: number; barangayId?: string }) => {
     const params = new URLSearchParams({

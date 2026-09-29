@@ -18,7 +18,8 @@ public static class RideCommissionCalculator
 
     public static RideCommissionBreakdown? ForTrip(Trip trip, Operator op, FareMatrix? fareMatrix, DeriveFareMatrix? deriveMatrix = null)
     {
-        if (trip.Status == TripStatus.Cancelled || trip.Fare <= 0)
+        var fare = SettlementFare(trip);
+        if (trip.Status == TripStatus.Cancelled || fare <= 0)
         {
             return null;
         }
@@ -45,11 +46,41 @@ public static class RideCommissionCalculator
 
         return new RideCommissionBreakdown(
             systemPercent,
-            CommissionCut.Round(trip.Fare * systemPercent / 100m),
+            CommissionCut.Round(fare * systemPercent / 100m),
             operatorPercent,
-            CommissionCut.Round(trip.Fare * operatorPercent / 100m),
+            CommissionCut.Round(fare * operatorPercent / 100m),
             driverPercent,
-            CommissionCut.Round(trip.Fare * driverPercent / 100m));
+            CommissionCut.Round(fare * driverPercent / 100m));
+    }
+
+    /// <summary>
+    /// Fare after a rider discount. Older rows kept the original in Fare and the net in CustomerFare.
+    /// </summary>
+    public static decimal SettlementFare(Trip trip) =>
+        SettlementFare(trip.Fare, trip.CustomerFare, trip.FareDiscountAmount);
+
+    public static decimal SettlementFare(decimal fare, decimal customerFare, decimal fareDiscountAmount)
+    {
+        if (fareDiscountAmount > 0 && customerFare > 0 && customerFare < fare)
+        {
+            return customerFare;
+        }
+
+        return fare;
+    }
+
+    /// <summary>Price before a rider discount. Fare may already have been rewritten down to the net amount.</summary>
+    public static decimal QuotedFare(Trip trip) =>
+        QuotedFare(trip.Fare, trip.CustomerFare, trip.FareDiscountAmount);
+
+    public static decimal QuotedFare(decimal fare, decimal customerFare, decimal fareDiscountAmount)
+    {
+        if (fareDiscountAmount > 0 && !(customerFare > 0 && customerFare < fare))
+        {
+            return fare + fareDiscountAmount;
+        }
+
+        return fare;
     }
 
     /// <summary>Rider wallet debit: admin + operator share (matches rider "System" view).</summary>

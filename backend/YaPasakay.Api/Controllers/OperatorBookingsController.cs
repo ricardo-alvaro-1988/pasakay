@@ -91,48 +91,15 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         }
 
         var total = await query.CountAsync(cancellationToken);
-        var rows = await query
-            .OrderBy(x => x.Status == TripStatus.Completed || x.Status == TripStatus.Cancelled ? 2 : 0)
-            .ThenByDescending(x => x.ScheduledAtUtc ?? x.RequestedAtUtc)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(x => new OperatorBookingListItem(
-                x.Id,
-                x.Reference,
-                x.RequestedAtUtc,
-                x.ScheduledAtUtc,
-                x.CustomerName,
-                x.CustomerPhone,
-                x.Rider.AppUser.FullName,
-                x.Rider.PlateNumber,
-                x.Rider.VehicleType,
-                x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
-                x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
-                x.Status,
-                x.Fare,
-                x.PaymentMethod,
-                x.PaymentMethodOther,
-                x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
-                x.PromoDiscountAmount,
-                x.IsPromoSponsored,
-                x.DiscountPercent,
-                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null,
-                x.CustomerBoostAmount))
-            .ToListAsync(cancellationToken);
+        var rows = await OperatorMaps.LoadBookingListAsync(
+            query
+                .OrderBy(x => x.Status == TripStatus.Completed || x.Status == TripStatus.Cancelled ? 2 : 0)
+                .ThenByDescending(x => x.ScheduledAtUtc ?? x.RequestedAtUtc)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize),
+            cancellationToken);
 
-        return Ok(new PagedResult<OperatorBookingListItem>(
-            rows.Select(x => x with
-            {
-                RequestedAtUtc = DateTime.SpecifyKind(x.RequestedAtUtc, DateTimeKind.Utc),
-                ScheduledAtUtc = x.ScheduledAtUtc is DateTime scheduled
-                    ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc)
-                    : null,
-                Pickup = TripAddress.Clean(x.Pickup),
-                Dropoff = TripAddress.Clean(x.Dropoff)
-            }).ToList(),
-            page,
-            pageSize,
-            total));
+        return Ok(new PagedResult<OperatorBookingListItem>(rows, page, pageSize, total));
     }
 
     [HttpGet("{id:guid}")]
@@ -228,6 +195,37 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         var loaded = await OperatorMaps.RideDetailQuery(db)
             .FirstAsync(x => x.Id == trip.Id, cancellationToken);
         return Ok(await OperatorMaps.RideDetailAsync(loaded, db, cancellationToken));
+    }
+
+    [HttpPost("{id:guid}/cancel")]
+    public async Task<ActionResult<RideDetailResponse>> Cancel(Guid id, CancellationToken cancellationToken)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var trip = await OperatorMaps.RideDetailQuery(db)
+            .FirstOrDefaultAsync(x => x.OperatorId == op!.Id && x.Id == id, cancellationToken);
+        if (trip is null)
+        {
+            return NotFound();
+        }
+
+        if (trip.Status is not (TripStatus.Pending or TripStatus.Waiting))
+        {
+            return BadRequest(new { message = "This booking can no longer be cancelled." });
+        }
+
+        trip.Status = TripStatus.Cancelled;
+        trip.CancelledAtUtc = DateTime.UtcNow;
+        trip.CancelReason = "Operator cancelled the booking.";
+        trip.CancelledBy = CancelledBy.Operator;
+        trip.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        await broadcast.ExpireTripAsync(trip.Id, cancellationToken);
+        return Ok(await OperatorMaps.RideDetailAsync(trip, db, cancellationToken));
     }
 
     [HttpPost("{id:guid}/complete")]
@@ -342,38 +340,9 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         }
 
         var total = await filtered.CountAsync(cancellationToken);
-        var items = await filtered
-            .OrderByDescending(x => x.RequestedAtUtc)
-            .Take(ColumnSize)
-            .Select(x => new RideListItem(
-                x.Id,
-                x.Reference,
-                x.RequestedAtUtc,
-                x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
-                x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
-                x.CustomerName,
-                x.Rider != null ? x.Rider.VehicleType : x.VehicleType,
-                x.Status,
-                x.Fare,
-                x.DistanceKm,
-                x.PassengerCount < 1 ? 1 : x.PassengerCount,
-                x.PaymentMethod,
-                x.PaymentMethodOther,
-                null,
-                x.CustomerFare > 0 ? x.CustomerFare : x.Fare,
-                x.PromoDiscountAmount,
-                x.IsPromoSponsored,
-                x.DiscountPercent,
-                x.IsPromoSponsored && x.DiscountPercent != null ? "Save" + x.DiscountPercent : null,
-                x.CustomerBoostAmount))
-            .ToListAsync(cancellationToken);
-        return new OperatorBookingColumn(
-            total,
-            items.Select(x => x with
-            {
-                RequestedAtUtc = DateTime.SpecifyKind(x.RequestedAtUtc, DateTimeKind.Utc),
-                Pickup = TripAddress.Clean(x.Pickup),
-                Dropoff = TripAddress.Clean(x.Dropoff)
-            }).ToList());
+        var items = await OperatorMaps.LoadBoardItemsAsync(
+            filtered.OrderByDescending(x => x.RequestedAtUtc).Take(ColumnSize),
+            cancellationToken);
+        return new OperatorBookingColumn(total, items);
     }
 }

@@ -184,7 +184,8 @@ public record RideListItem(
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
     string? PromoCode = null,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    string? FareDiscountLabel = null);
 
 public record RideDetailResponse(
     Guid Id,
@@ -228,7 +229,9 @@ public record RideDetailResponse(
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
     string? PromoCode = null,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    string? FareDiscountLabel = null,
+    decimal FareDiscountAmount = 0);
 
 public record RideChatMessageItem(
     Guid Id,
@@ -263,7 +266,8 @@ public record CustomerListItem(
     DateTime RegisteredAtUtc,
     bool IsActive,
     string? PhotoUrl,
-    DeleteAccountStatus DeleteStatus);
+    DeleteAccountStatus DeleteStatus,
+    bool IsBlocked);
 
 public record CustomerDeleteRequestItem(
     DeleteAccountStatus Status,
@@ -281,7 +285,9 @@ public record CustomerDetailResponse(
     DateTime RegisteredAtUtc,
     bool IsActive,
     string? PhotoUrl,
-    CustomerDeleteRequestItem DeleteRequest);
+    CustomerDeleteRequestItem DeleteRequest,
+    string? Email,
+    bool IsBlocked);
 
 public record RecordDeleteRequest(string? Reason);
 
@@ -603,7 +609,7 @@ public record ScheduledBookingItem(
     DateTime ScheduledAtUtc,
     string CustomerName,
     string CustomerPhone,
-    Guid RiderId,
+    Guid? RiderId,
     string RiderName,
     string PlateNumber,
     VehicleType VehicleType,
@@ -612,22 +618,33 @@ public record ScheduledBookingItem(
     TripStatus Status,
     decimal Fare,
     PaymentMethod PaymentMethod,
-    string? PaymentMethodOther);
+    string? PaymentMethodOther,
+    decimal CustomerFare = 0,
+    string? FareDiscountLabel = null);
 
 public record CreateScheduledBookingRequest(
     string CustomerName,
     string Phone,
-    Guid RiderId,
-    Guid PickupBarangayId,
+    /// <summary>When set, dispatch is Select (that rider). When null, Broadcast to fleet.</summary>
+    Guid? RiderId,
+    /// <summary>True = live now (no ScheduledAtUtc). False = scheduled datetime required.</summary>
+    bool IsImmediate,
+    DateTime? ScheduledAtUtc,
+    VehicleType VehicleType,
+    Guid? VehicleCategoryId,
+    double PickupLat,
+    double PickupLng,
+    double DropoffLat,
+    double DropoffLng,
+    Guid? PickupBarangayId,
     string PickupDetails,
-    Guid DropoffBarangayId,
+    Guid? DropoffBarangayId,
     string DropoffDetails,
-    DateTime ScheduledAtUtc,
     string? Notes,
-    decimal DistanceKm,
     PaymentMethod PaymentMethod,
     string? PaymentMethodOther,
-    int PassengerCount = 1);
+    int PassengerCount = 1,
+    decimal DistanceKm = 0);
 
 public record ReassignBookingRequest(Guid RiderId);
 
@@ -652,7 +669,8 @@ public record OperatorBookingListItem(
     bool IsPromoSponsored = false,
     int? DiscountPercent = null,
     string? PromoCode = null,
-    decimal CustomerBoostAmount = 0);
+    decimal CustomerBoostAmount = 0,
+    string? FareDiscountLabel = null);
 
 public record CommissionReportItem(
     Guid Id,
@@ -738,7 +756,9 @@ public record BookingReportItem(
     decimal OperatorCommission,
     decimal Promo,
     decimal Fare,
-    TripStatus Status);
+    TripStatus Status,
+    decimal CustomerFare = 0,
+    string? FareDiscountLabel = null);
 
 public record BookingReportSummary(
     int Count,
@@ -1049,6 +1069,25 @@ public record SaveOperatorPabiliPaymentMethodRequest(
     int SortOrder);
 
 public record OperatorPabiliPaymentMethodListResponse(IReadOnlyList<OperatorPabiliPaymentMethodItem> Items);
+
+public record OperatorPabiliBrowseCategoryItem(
+    Guid Id,
+    string Name,
+    bool IsActive,
+    int SortOrder,
+    DateTime CreatedAtUtc);
+
+public record SaveOperatorPabiliBrowseCategoryRequest(
+    string Name,
+    bool IsActive,
+    int SortOrder);
+
+public record OperatorPabiliBrowseCategoryListResponse(IReadOnlyList<OperatorPabiliBrowseCategoryItem> Items);
+
+public record CustomerPabiliBrowseCategoryCard(
+    Guid Id,
+    string Name,
+    int SortOrder);
 
 public record CustomerPabiliPaymentMethodCard(
     PaymentMethod Method,
@@ -1530,6 +1569,22 @@ public record RiderPabiliOrderDetail(
     string AdjustmentLabel,
     decimal CustomerTotal,
     IReadOnlyList<CustomerPabiliOrderLineItem> Items);
+
+public record RiderNoticeListItem(
+    Guid Id,
+    string Title,
+    string Body,
+    string NotifyAt,
+    DateTime NextFireUtc,
+    DateTime? LastSentAtUtc,
+    bool IsActive,
+    string Status,
+    DateTime CreatedAtUtc);
+
+public record CreateRiderNoticeRequest(
+    string? Title,
+    string? Body,
+    string? NotifyAt);
 
 public static class UploadUrls
 {

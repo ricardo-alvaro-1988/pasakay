@@ -147,13 +147,27 @@ export function loadGoogleMaps(key: string) {
   return loader
 }
 
-const STREET_TYPES = ['street_address', 'premise', 'subpremise', 'route', 'intersection', 'plus_code']
+const STREET_TYPES = ['street_address', 'premise', 'subpremise', 'route', 'intersection']
 
 function pickGeocodeAddress(
   results: { formatted_address: string; types?: string[] }[] | null,
 ) {
   if (!results?.length) return null
-  return results.find((item) => item.types?.some((type) => STREET_TYPES.includes(type))) ?? results[0]
+  // Prefer real street/locality addresses over bare Plus Codes (e.g. "QXJ9+JWF"),
+  // which break municipality matching and hide Offered types like Sedan.
+  const ranked = [...results].sort((a, b) => geocodeScore(b) - geocodeScore(a))
+  return ranked[0] ?? null
+}
+
+function geocodeScore(item: { formatted_address: string; types?: string[] }) {
+  const types = item.types ?? []
+  const addr = item.formatted_address ?? ''
+  let score = Math.min(addr.length, 100)
+  if (types.some((t) => STREET_TYPES.includes(t))) score += 80
+  if (types.includes('neighborhood') || types.includes('sublocality') || types.includes('sublocality_level_1')) score += 40
+  if (types.includes('locality') || types.includes('administrative_area_level_2')) score += 50
+  if (types.includes('plus_code')) score -= addr.includes(',') ? 10 : 120
+  return score
 }
 
 function around(maps: MapsApi, near: { lat: number; lng: number }, delta = 0.12) {

@@ -46,6 +46,11 @@ String vehicleLabel(dynamic value) {
     case 'PickupCargo':
     case 'pickup-cargo':
       return 'Pickup (Cargo)';
+    case '9':
+    case 'Tuktuk':
+    case 'tuktuk':
+    case 'tuk-tuk':
+      return 'Tuktuk';
     default:
       return asText(value);
   }
@@ -181,6 +186,8 @@ class RiderDesk {
     this.isActive = true,
     this.credibilityScore = 100,
     this.riderCancelCount = 0,
+    this.notices = const [],
+    this.scheduledNotices = const [],
   });
 
   final String riderId;
@@ -208,6 +215,8 @@ class RiderDesk {
   final bool isActive;
   final int credibilityScore;
   final int riderCancelCount;
+  final List<RiderNotice> notices;
+  final List<RiderScheduledNotice> scheduledNotices;
 
   String get vehicleLine => formatVehicleLine(
         vehicleType,
@@ -250,6 +259,58 @@ class RiderDesk {
         isActive: asFlag(json['isActive'], true),
         credibilityScore: asInt(json['credibilityScore'], 100),
         riderCancelCount: asInt(json['riderCancelCount']),
+        notices: (json['notices'] as List? ?? [])
+            .map(asJsonMap)
+            .whereType<Map<String, dynamic>>()
+            .map(RiderNotice.fromJson)
+            .toList(),
+        scheduledNotices: (json['scheduledNotices'] as List? ?? [])
+            .map(asJsonMap)
+            .whereType<Map<String, dynamic>>()
+            .map(RiderScheduledNotice.fromJson)
+            .toList(),
+      );
+}
+
+class RiderScheduledNotice {
+  RiderScheduledNotice({
+    required this.id,
+    required this.title,
+    required this.body,
+    required this.minuteOfDay,
+  });
+
+  final String id;
+  final String title;
+  final String body;
+  final int minuteOfDay;
+
+  factory RiderScheduledNotice.fromJson(Map<String, dynamic> json) => RiderScheduledNotice(
+        id: asText(json['id']),
+        title: asText(json['title']),
+        body: asText(json['body']),
+        minuteOfDay: asInt(json['notifyMinuteOfDay']),
+      );
+}
+
+class RiderNotice {
+  RiderNotice({
+    required this.id,
+    required this.title,
+    required this.body,
+    this.sentAt,
+  });
+
+  final String id;
+  final String title;
+  final String body;
+  final DateTime? sentAt;
+
+  factory RiderNotice.fromJson(Map<String, dynamic> json) => RiderNotice(
+        id: asText(json['id']),
+        title: asText(json['title']),
+        body: asText(json['body']),
+        sentAt: parseUtc(json['sentAtUtc']),
       );
 }
 
@@ -299,6 +360,8 @@ class JobOffer {
     this.isPromoSponsored = false,
     this.discountPercent,
     this.customerBoostAmount = 0,
+    this.fareDiscountLabel,
+    this.fareDiscountAmount = 0,
   });
 
   final String offerId;
@@ -324,16 +387,23 @@ class JobOffer {
   final bool isPromoSponsored;
   final int? discountPercent;
   final double customerBoostAmount;
+  final String? fareDiscountLabel;
+  final double fareDiscountAmount;
 
   double get collectFromCustomer =>
       customerFare > 0 ? customerFare : fare;
 
   double get collectFromOperator {
-    if (!isPromoSponsored) return 0;
-    if (promoDiscountAmount > 0) return promoDiscountAmount;
-    final diff = fare - collectFromCustomer;
-    if (diff <= 0) return 0;
-    return diff > fare ? fare : diff;
+    var owed = 0.0;
+    if (isPromoSponsored) {
+      if (promoDiscountAmount > 0) {
+        owed += promoDiscountAmount;
+      } else {
+        final diff = fare - collectFromCustomer;
+        if (diff > 0) owed += diff > fare ? fare : diff;
+      }
+    }
+    return owed;
   }
 
   factory JobOffer.fromJson(Map<String, dynamic> json) => JobOffer(
@@ -360,6 +430,8 @@ class JobOffer {
         isPromoSponsored: asFlag(json['isPromoSponsored']),
         discountPercent: json['discountPercent'] is num ? (json['discountPercent'] as num).toInt() : null,
         customerBoostAmount: (json['customerBoostAmount'] as num?)?.toDouble() ?? 0,
+        fareDiscountLabel: asTextOrNull(json['fareDiscountLabel']),
+        fareDiscountAmount: (json['fareDiscountAmount'] as num?)?.toDouble() ?? 0,
       );
 }
 
@@ -396,6 +468,8 @@ class RiderTrip {
     this.isPromoSponsored = false,
     this.discountPercent,
     this.customerBoostAmount = 0,
+    this.fareDiscountLabel,
+    this.fareDiscountAmount = 0,
   });
 
   final String tripId;
@@ -429,6 +503,8 @@ class RiderTrip {
   final bool isPromoSponsored;
   final int? discountPercent;
   final double customerBoostAmount;
+  final String? fareDiscountLabel;
+  final double fareDiscountAmount;
 
   bool get isNewCustomer => previousBookingCount == 0;
 
@@ -438,11 +514,16 @@ class RiderTrip {
       customerFare > 0 ? customerFare : fare;
 
   double get collectFromOperator {
-    if (!isPromoSponsored) return 0;
-    if (promoDiscountAmount > 0) return promoDiscountAmount;
-    final diff = fare - collectFromCustomer;
-    if (diff <= 0) return 0;
-    return diff > fare ? fare : diff;
+    var owed = 0.0;
+    if (isPromoSponsored) {
+      if (promoDiscountAmount > 0) {
+        owed += promoDiscountAmount;
+      } else {
+        final diff = fare - collectFromCustomer;
+        if (diff > 0) owed += diff > fare ? fare : diff;
+      }
+    }
+    return owed;
   }
 
   factory RiderTrip.fromJson(Map<String, dynamic> json) => RiderTrip(
@@ -481,6 +562,8 @@ class RiderTrip {
         isPromoSponsored: asFlag(json['isPromoSponsored']),
         discountPercent: json['discountPercent'] is num ? (json['discountPercent'] as num).toInt() : null,
         customerBoostAmount: (json['customerBoostAmount'] as num?)?.toDouble() ?? 0,
+        fareDiscountLabel: asTextOrNull(json['fareDiscountLabel']),
+        fareDiscountAmount: (json['fareDiscountAmount'] as num?)?.toDouble() ?? 0,
       );
 }
 
@@ -506,6 +589,7 @@ class RiderTripListItem {
     this.paymentMethodOther,
     this.driverAmount,
     this.platformFee,
+    this.customerFare = 0,
   });
 
   final String id;
@@ -523,6 +607,9 @@ class RiderTripListItem {
   final DateTime? requestedAt;
   final double? driverAmount;
   final double? platformFee;
+  final double customerFare;
+
+  double get fareToShow => customerFare > 0 ? customerFare : fare;
 
   factory RiderTripListItem.fromJson(Map<String, dynamic> json) {
     final commission = asJsonMap(json['commission']);
@@ -546,6 +633,7 @@ class RiderTripListItem {
       requestedAt: parseUtc(json['requestedAtUtc']),
       driverAmount: driver,
       platformFee: platform,
+      customerFare: (json['customerFare'] as num?)?.toDouble() ?? 0,
     );
   }
 }
@@ -799,6 +887,9 @@ class RiderTripDetail {
     this.paymentMethodOther,
     this.vehicleModel,
     this.riderPhotoUrl,
+    this.customerFare = 0,
+    this.fareDiscountAmount = 0,
+    this.fareDiscountLabel,
   });
 
   final String id;
@@ -834,6 +925,17 @@ class RiderTripDetail {
   final String? vehicleModel;
   final String? riderPhotoUrl;
   final List<ChatMessage> chat;
+  final double customerFare;
+  final double fareDiscountAmount;
+  final String? fareDiscountLabel;
+
+  double get fareToShow => customerFare > 0 ? customerFare : fare;
+
+  double get originalFare {
+    if (fareDiscountAmount > 0 && customerFare > 0 && customerFare < fare) return fare;
+    if (fareDiscountAmount > 0) return fare + fareDiscountAmount;
+    return fare;
+  }
 
   bool get canViewChat {
     final value = status.toLowerCase();
@@ -864,6 +966,9 @@ class RiderTripDetail {
         dropoff: asText(json['dropoff']),
         notes: asTextOrNull(json['notes']),
         fare: (json['fare'] as num?)?.toDouble() ?? 0,
+        customerFare: (json['customerFare'] as num?)?.toDouble() ?? 0,
+        fareDiscountAmount: (json['fareDiscountAmount'] as num?)?.toDouble() ?? 0,
+        fareDiscountLabel: asTextOrNull(json['fareDiscountLabel']),
         distanceKm: (json['distanceKm'] as num?)?.toDouble() ?? 0,
         passengerCount: asInt(json['passengerCount'], 1).clamp(1, 999),
         durationMinutes: json['durationMinutes'] == null ? null : asInt(json['durationMinutes']),
