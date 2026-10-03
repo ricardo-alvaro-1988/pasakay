@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import {
   api,
   PLATFORM_VEHICLE_TYPES,
@@ -7,6 +7,10 @@ import {
 import {
   geocodeText,
   loadGoogleMaps,
+  MapHandle,
+  MarkerHandle,
+  PH,
+  pinIcon,
   placeDetails,
   Prediction,
   reverseGeocode,
@@ -29,30 +33,32 @@ const DAYS: { key: DayKey; label: string; form: string }[] = [
   { key: 'sun', label: 'Sun', form: 'availableSunday' },
 ]
 
-function tomorrowLocalIso() {
-  const d = new Date()
-  d.setHours(0, 0, 0, 0)
-  d.setDate(d.getDate() + 1)
-  return d.toISOString().slice(0, 10)
+function pad(n: number) {
+  return String(n).padStart(2, '0')
+}
+
+/** Local datetime-local value: now + daysAhead, keeping current hour/minute. */
+function localDateTimePlusDays(daysAhead: number, from?: Date) {
+  const d = from ? new Date(from.getTime()) : new Date()
+  d.setDate(d.getDate() + daysAhead)
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function parseLocalDateTime(value: string) {
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
 }
 
 function VehiclePicker({
   value,
   onChange,
-  filter,
 }: {
   value: VehicleType
   onChange: (type: VehicleType) => void
-  filter: string
 }) {
-  const q = filter.trim().toLowerCase()
-  const options = PLATFORM_VEHICLE_TYPES.filter((type) => {
-    if (!q) return true
-    return vehicleLabel(type).toLowerCase().includes(q) || type.toLowerCase().includes(q)
-  })
   return (
     <div className="rental-vehicles">
-      {options.map((type) => (
+      {PLATFORM_VEHICLE_TYPES.map((type) => (
         <button
           key={type}
           type="button"
@@ -65,7 +71,6 @@ function VehiclePicker({
           <span>{vehicleLabel(type)}</span>
         </button>
       ))}
-      {options.length === 0 ? <p className="muted">No vehicle matches.</p> : null}
     </div>
   )
 }
@@ -73,15 +78,105 @@ function VehiclePicker({
 function LocationPicker({
   location,
   onLocation,
+  initialLat,
+  initialLng,
 }: {
   location: StopResult | null
   onLocation: (stop: StopResult | null) => void
+  initialLat?: number | null
+  initialLng?: number | null
 }) {
+  const mapEl = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<MapHandle | null>(null)
+  const markerRef = useRef<MarkerHandle | null>(null)
+  const mapsRef = useRef<Awaited<ReturnType<typeof loadGoogleMaps>> | null>(null)
   const [query, setQuery] = useState('')
   const [hints, setHints] = useState<Prediction[]>([])
   const [geoHits, setGeoHits] = useState<StopResult[]>([])
   const [locating, setLocating] = useState(false)
   const [error, setError] = useState('')
+  const [mapReady, setMapReady] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const { googleMapsBrowserKey } = await api.mapsConfig()
+        const maps = await loadGoogleMaps(googleMapsBrowserKey)
+        if (cancelled || !mapEl.current) return
+        mapsRef.current = maps
+        const center = {
+          lat: location?.lat ?? initialLat ?? PH.lat,
+          lng: location?.lng ?? initialLng ?? PH.lng,
+        }
+        const map = new maps.Map(mapEl.current, {
+          center,
+          zoom: location || (initialLat != null && initialLng != null) ? 15 : 6,
+          disableDefaultUI: true,
+          zoomControl: true,
+          gestureHandling: 'greedy',
+        })
+        mapRef.current = map
+        map.addListener('click', (event) => {
+          const latLng = event.latLng
+          if (!latLng) return
+          const lat = latLng.lat()
+          const lng = latLng.lng()
+          void reverseGeocode(maps, lat, lng).then((details) => {
+            onLocation({
+              label: details.split(',')[0]?.trim() || 'Pinned location',
+              details,
+              lat,
+              lng,
+            })
+          })
+        })
+        if (!cancelled) setMapReady(true)
+      } catch {
+        if (!cancelled) setError('Could not load the map.')
+      }
+    })()
+    return () => {
+      cancelled = true
+      markerRef.current?.setMap(null)
+      markerRef.current = null
+      mapRef.current = null
+      mapsRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const maps = mapsRef.current
+    const map = mapRef.current
+    if (!maps || !map || !location) return
+    map.panTo({ lat: location.lat, lng: location.lng })
+    map.setZoom(16)
+    if (!markerRef.current) {
+      markerRef.current = new maps.Marker({
+        map,
+        position: { lat: location.lat, lng: location.lng },
+        draggable: true,
+        icon: pinIcon(maps, '#e30613'),
+      })
+      markerRef.current.addListener('dragend', () => {
+        const pos = markerRef.current?.getPosition()
+        if (!pos) return
+        const lat = pos.lat()
+        const lng = pos.lng()
+        void reverseGeocode(maps, lat, lng).then((details) => {
+          onLocation({
+            label: details.split(',')[0]?.trim() || 'Pinned location',
+            details,
+            lat,
+            lng,
+          })
+        })
+      })
+    } else {
+      markerRef.current.setPosition({ lat: location.lat, lng: location.lng })
+    }
+  }, [location, onLocation])
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -93,10 +188,15 @@ function LocationPicker({
     const handle = window.setTimeout(() => {
       void (async () => {
         try {
-          const maps = await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
+          const maps = mapsRef.current ?? await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
+          const near = location
+            ? { lat: location.lat, lng: location.lng }
+            : initialLat != null && initialLng != null
+              ? { lat: initialLat, lng: initialLng }
+              : undefined
           const [places, geos] = await Promise.all([
-            searchPlaces(maps, query.trim()),
-            geocodeText(maps, query.trim()),
+            searchPlaces(maps, query.trim(), near),
+            geocodeText(maps, query.trim(), near),
           ])
           if (cancelled) return
           setHints(places)
@@ -110,13 +210,13 @@ function LocationPicker({
       cancelled = true
       window.clearTimeout(handle)
     }
-  }, [query])
+  }, [query, location, initialLat, initialLng])
 
   async function useCurrent() {
     setLocating(true)
     setError('')
     try {
-      const maps = await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
+      const maps = mapsRef.current ?? await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
       let lat: number
       let lng: number
       try {
@@ -137,6 +237,8 @@ function LocationPicker({
         lng,
       })
       setQuery('')
+      setHints([])
+      setGeoHits([])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not use current location.')
     } finally {
@@ -144,30 +246,32 @@ function LocationPicker({
     }
   }
 
+  function pickStop(stop: StopResult) {
+    onLocation(stop)
+    setQuery('')
+    setHints([])
+    setGeoHits([])
+  }
+
   return (
     <div className="rental-location">
-      {location ? (
-        <div className="rental-loc-card">
-          <strong>{location.label}</strong>
-          <div className="muted">{location.details}</div>
-          <button type="button" className="ghost" onClick={() => onLocation(null)}>
-            Change
-          </button>
-        </div>
-      ) : null}
-      {!location ? (
-        <>
-          <button type="button" className="picker-item" disabled={locating} onClick={() => void useCurrent()}>
-            <b>{locating ? 'Getting location…' : 'Use current location'}</b>
-            <div className="muted">GPS pin</div>
-          </button>
-          <input
-            placeholder="Search a place"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+      <div className="rental-map-wrap">
+        <div className="rental-map" ref={mapEl} />
+        {!mapReady ? <div className="rental-map-loading muted">Loading map…</div> : null}
+      </div>
+      <p className="muted rental-hint">Search a place, tap the map, or drag the pin.</p>
+      <button type="button" className="secondary rental-gps" disabled={locating} onClick={() => void useCurrent()}>
+        {locating ? 'Getting location…' : 'Use current location'}
+      </button>
+      <input
+        placeholder="Search a place"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+      {(geoHits.length > 0 || hints.length > 0) && (
+        <div className="rental-suggest">
           {geoHits.map((item) => (
-            <button key={`${item.details}-${item.lat}`} className="picker-item" type="button" onClick={() => onLocation(item)}>
+            <button key={`${item.details}-${item.lat}`} className="picker-item" type="button" onClick={() => pickStop(item)}>
               <b>{item.label}</b>
               <div className="muted">{item.details}</div>
             </button>
@@ -180,9 +284,9 @@ function LocationPicker({
               onClick={() => {
                 void (async () => {
                   try {
-                    const maps = await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
-                    const stop = await placeDetails(maps, item.place_id)
-                    onLocation({
+                    const maps = mapsRef.current ?? await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
+                    const stop = await placeDetails(maps, item.place_id, mapRef.current)
+                    pickStop({
                       label: stop.address.split(',')[0]?.trim() || item.description,
                       details: stop.address,
                       lat: stop.lat,
@@ -198,7 +302,13 @@ function LocationPicker({
               <div className="muted">{item.structured_formatting?.secondary_text}</div>
             </button>
           ))}
-        </>
+        </div>
+      )}
+      {location ? (
+        <div className="rental-loc-card">
+          <strong>{location.label}</strong>
+          <div className="muted">{location.details}</div>
+        </div>
       ) : null}
       {error ? <p className="error">{error}</p> : null}
     </div>
@@ -214,11 +324,11 @@ export function RentalScreen({
   mapLat?: number | null
   mapLng?: number | null
 }) {
+  const minFrom = useMemo(() => localDateTimePlusDays(1), [])
   const [mode, setMode] = useState<Mode>('chooser')
-  const [vehicleFilter, setVehicleFilter] = useState('')
   const [vehicle, setVehicle] = useState<VehicleType>('Motorcycle')
-  const [from, setFrom] = useState(tomorrowLocalIso())
-  const [to, setTo] = useState(tomorrowLocalIso())
+  const [from, setFrom] = useState(() => localDateTimePlusDays(1))
+  const [to, setTo] = useState(() => localDateTimePlusDays(2))
   const [location, setLocation] = useState<StopResult | null>(null)
   const [notes, setNotes] = useState('')
   const [mobile, setMobile] = useState(deskMobile || '')
@@ -243,34 +353,10 @@ export function RentalScreen({
   const [doneMessage, setDoneMessage] = useState('')
 
   const maxSeats = vehicleMaxPassengers(vehicle)
-  const minDate = tomorrowLocalIso()
 
   useEffect(() => {
     setSeater((n) => Math.min(Math.max(1, n), maxSeats))
   }, [maxSeats])
-
-  useEffect(() => {
-    if (location || mapLat == null || mapLng == null) return
-    let cancelled = false
-    void (async () => {
-      try {
-        const maps = await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
-        const details = await reverseGeocode(maps, mapLat, mapLng)
-        if (cancelled) return
-        setLocation({
-          label: details.split(',')[0]?.trim() || 'Nearby',
-          details,
-          lat: mapLat,
-          lng: mapLng,
-        })
-      } catch {
-        /* optional prefill */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [mapLat, mapLng, location])
 
   const weekdayHint = useMemo(() => {
     const on = DAYS.filter((d) => days[d.key]).map((d) => d.label)
@@ -287,10 +373,11 @@ export function RentalScreen({
 
   function resetForms() {
     setError('')
-    setVehicleFilter('')
     setVehicle('Motorcycle')
-    setFrom(minDate)
-    setTo(minDate)
+    const nextFrom = localDateTimePlusDays(1)
+    const fromDate = parseLocalDateTime(nextFrom) ?? new Date()
+    setFrom(nextFrom)
+    setTo(localDateTimePlusDays(1, fromDate))
     setNotes('')
     setMobile(deskMobile || '')
     setPlate('')
@@ -301,12 +388,23 @@ export function RentalScreen({
     setLeft(null)
     setRight(null)
     setInside(null)
+    setLocation(null)
   }
 
   async function submitRent(e: FormEvent) {
     e.preventDefault()
     if (!location?.details || !location.lat || !location.lng) {
-      setError('Set a location on the map search.')
+      setError('Pin a location on the map or search a place.')
+      return
+    }
+    const fromDate = parseLocalDateTime(from)
+    const toDate = parseLocalDateTime(to)
+    if (!fromDate || !toDate) {
+      setError('Choose a valid From and To date/time.')
+      return
+    }
+    if (toDate.getTime() < fromDate.getTime()) {
+      setError('To must be on or after From.')
       return
     }
     setBusy(true)
@@ -411,7 +509,7 @@ export function RentalScreen({
       <section className="panel page-panel rental-panel">
         <h2>Thank you</h2>
         <p className="rental-done">{doneMessage || 'We will come back to you soonest.'}</p>
-        <button type="button" className="btn" onClick={() => setMode('chooser')}>
+        <button type="button" className="primary" onClick={() => setMode('chooser')}>
           Back to Rental
         </button>
       </section>
@@ -425,28 +523,49 @@ export function RentalScreen({
         <h2>Rental Car</h2>
         <form className="rental-form" onSubmit={(e) => void submitRent(e)}>
           <label className="field">
-            <span>Find vehicle type</span>
-            <input value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} placeholder="Motorcycle, Tricycle…" />
+            <span>Select vehicle type</span>
           </label>
-          <VehiclePicker value={vehicle} onChange={setVehicle} filter={vehicleFilter} />
+          <VehiclePicker value={vehicle} onChange={setVehicle} />
           <div className="rental-dates">
             <label className="field">
               <span>From</span>
-              <input type="date" min={minDate} value={from} onChange={(e) => {
-                setFrom(e.target.value)
-                if (to < e.target.value) setTo(e.target.value)
-              }} required />
+              <input
+                type="datetime-local"
+                min={minFrom}
+                value={from}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setFrom(next)
+                  const nextFrom = parseLocalDateTime(next)
+                  const toDate = parseLocalDateTime(to)
+                  if (nextFrom && (!toDate || toDate.getTime() < nextFrom.getTime())) {
+                    setTo(localDateTimePlusDays(1, nextFrom))
+                  }
+                }}
+                required
+              />
             </label>
             <label className="field">
               <span>To</span>
-              <input type="date" min={from || minDate} value={to} onChange={(e) => setTo(e.target.value)} required />
+              <input
+                type="datetime-local"
+                min={from || minFrom}
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                required
+              />
             </label>
           </div>
-          <p className="muted rental-hint">Schedule must start at least 1 day from today.</p>
+          <p className="muted rental-hint">From must be at least 1 day from now. To defaults to From + 1 day.</p>
           <label className="field">
             <span>Location</span>
           </label>
-          <LocationPicker location={location} onLocation={setLocation} />
+          <LocationPicker
+            location={location}
+            onLocation={setLocation}
+            initialLat={mapLat}
+            initialLng={mapLng}
+          />
           <label className="field">
             <span>Notes</span>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={1000} placeholder="Optional details" />
@@ -456,7 +575,9 @@ export function RentalScreen({
             <input value={mobile} onChange={(e) => setMobile(e.target.value)} required inputMode="tel" placeholder="09xxxxxxxxx" />
           </label>
           {error ? <p className="error">{error}</p> : null}
-          <button className="btn" type="submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit'}</button>
+          <button className="primary rental-submit" type="submit" disabled={busy}>
+            {busy ? 'Submitting…' : 'Submit'}
+          </button>
         </form>
       </section>
     )
@@ -468,10 +589,9 @@ export function RentalScreen({
       <h2>List Your Car</h2>
       <form className="rental-form" onSubmit={(e) => void submitList(e)}>
         <label className="field">
-          <span>Find vehicle type</span>
-          <input value={vehicleFilter} onChange={(e) => setVehicleFilter(e.target.value)} placeholder="Motorcycle, Tricycle…" />
+          <span>Select vehicle type</span>
         </label>
-        <VehiclePicker value={vehicle} onChange={setVehicle} filter={vehicleFilter} />
+        <VehiclePicker value={vehicle} onChange={setVehicle} />
         <label className="field">
           <span>Plate</span>
           <input value={plate} onChange={(e) => setPlate(e.target.value)} required maxLength={40} placeholder="ABC 1234" />
@@ -515,33 +635,35 @@ export function RentalScreen({
         </div>
         <div className="rental-days">
           <p>Availability</p>
-          <p className="muted rental-hint">{weekdayHint}. Tap days to toggle.</p>
-          <div className="chips">
+          <p className="muted rental-hint">{weekdayHint}</p>
+          <div className="rental-day-checks" role="group" aria-label="Available days">
             {DAYS.map((day) => (
-              <button
-                key={day.key}
-                type="button"
-                className={days[day.key] ? 'on' : ''}
-                onClick={() => setDays((prev) => ({ ...prev, [day.key]: !prev[day.key] }))}
-              >
-                {day.label}
-              </button>
+              <label key={day.key} className={`rental-day-check${days[day.key] ? ' on' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={days[day.key]}
+                  onChange={() => setDays((prev) => ({ ...prev, [day.key]: !prev[day.key] }))}
+                />
+                <span>{day.label}</span>
+              </label>
             ))}
           </div>
-          <div className="chips" style={{ marginTop: 8 }}>
-            <button type="button" className="ghost" onClick={() => setDays({ mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false })}>
+          <div className="rental-day-presets">
+            <button type="button" className="secondary" onClick={() => setDays({ mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false })}>
               Weekdays
             </button>
-            <button type="button" className="ghost" onClick={() => setDays({ mon: false, tue: false, wed: false, thu: false, fri: false, sat: true, sun: true })}>
+            <button type="button" className="secondary" onClick={() => setDays({ mon: false, tue: false, wed: false, thu: false, fri: false, sat: true, sun: true })}>
               Weekends
             </button>
-            <button type="button" className="ghost" onClick={() => setDays({ mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: true })}>
+            <button type="button" className="secondary" onClick={() => setDays({ mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: true })}>
               Every day
             </button>
           </div>
         </div>
         {error ? <p className="error">{error}</p> : null}
-        <button className="btn" type="submit" disabled={busy}>{busy ? 'Submitting…' : 'Submit'}</button>
+        <button className="primary rental-submit" type="submit" disabled={busy}>
+          {busy ? 'Submitting…' : 'Submit'}
+        </button>
       </form>
     </section>
   )

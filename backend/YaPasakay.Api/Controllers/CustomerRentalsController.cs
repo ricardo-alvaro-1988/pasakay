@@ -58,20 +58,20 @@ public class CustomerRentalsController(AppDbContext db, UploadStore uploads) : C
             return BadRequest(new { message = "Pick a vehicle type." });
         }
 
-        if (!TryParseLocalDate(scheduleFrom, out var fromLocal) || !TryParseLocalDate(scheduleTo, out var toLocal))
+        if (!TryParseLocalDateTime(scheduleFrom, out var fromLocal) || !TryParseLocalDateTime(scheduleTo, out var toLocal))
         {
-            return BadRequest(new { message = "Choose a valid schedule From and To date." });
+            return BadRequest(new { message = "Choose a valid schedule From and To date/time." });
         }
 
-        if (toLocal.Date < fromLocal.Date)
+        if (toLocal < fromLocal)
         {
             return BadRequest(new { message = "Schedule To must be on or after From." });
         }
 
-        var todayPh = DateTime.UtcNow.Add(PhilippinesOffset).Date;
-        if (fromLocal.Date < todayPh.AddDays(1))
+        var minFromPh = DateTime.UtcNow.Add(PhilippinesOffset).AddDays(1).AddMinutes(-2);
+        if (fromLocal < minFromPh)
         {
-            return BadRequest(new { message = "Schedule must start at least 1 day from today." });
+            return BadRequest(new { message = "Schedule From must be at least 1 day from now." });
         }
 
         var details = (locationDetails ?? string.Empty).Trim();
@@ -110,8 +110,8 @@ public class CustomerRentalsController(AppDbContext db, UploadStore uploads) : C
             CustomerId = customer.Id,
             VehicleType = type,
             VehicleCategoryId = VehicleCatalog.IdFor(type),
-            ScheduleFromUtc = ToUtcFromPhDate(fromLocal.Date),
-            ScheduleToUtc = ToUtcFromPhDate(toLocal.Date).AddDays(1).AddTicks(-1),
+            ScheduleFromUtc = ToUtcFromPhLocal(fromLocal),
+            ScheduleToUtc = ToUtcFromPhLocal(toLocal),
             LocationDetails = details,
             LocationLat = locationLat,
             LocationLng = locationLng,
@@ -276,16 +276,27 @@ public class CustomerRentalsController(AppDbContext db, UploadStore uploads) : C
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    private static bool TryParseLocalDate(string? value, out DateTime date)
+    private static bool TryParseLocalDateTime(string? value, out DateTime date)
     {
         date = default;
         if (string.IsNullOrWhiteSpace(value)) return false;
+        // datetime-local: 2026-10-05T14:30
+        if (DateTime.TryParseExact(
+                value.Trim(),
+                ["yyyy-MM-dd'T'HH:mm", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd HH:mm", "yyyy-MM-dd"],
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out date))
+        {
+            return true;
+        }
+
         return DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeLocal, out date)
                || DateTime.TryParse(value, out date);
     }
 
-    private static DateTime ToUtcFromPhDate(DateTime phDate) =>
-        DateTime.SpecifyKind(phDate.Date - PhilippinesOffset, DateTimeKind.Utc);
+    private static DateTime ToUtcFromPhLocal(DateTime phLocal) =>
+        DateTime.SpecifyKind(phLocal - PhilippinesOffset, DateTimeKind.Utc);
 
     private static string? NormalizeMobile(string? raw)
     {

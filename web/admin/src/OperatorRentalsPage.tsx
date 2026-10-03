@@ -41,14 +41,6 @@ function fmt(value: string) {
   }
 }
 
-function fmtDay(value: string) {
-  try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(new Date(value))
-  } catch {
-    return value
-  }
-}
-
 export function OperatorRentalsPage() {
   const [status, setStatus] = useState('')
   const [inquiries, setInquiries] = useState<Inquiry[]>([])
@@ -148,7 +140,7 @@ export function OperatorRentalsPage() {
                       {row.customerName} · {row.vehicleType}
                     </strong>
                     <div className="muted">
-                      {fmtDay(row.scheduleFromUtc)} → {fmtDay(row.scheduleToUtc)} · {row.mobileNumber}
+                      {fmt(row.scheduleFromUtc)} → {fmt(row.scheduleToUtc)} · {row.mobileNumber}
                     </div>
                     <div>{row.locationDetails}</div>
                     {row.notes ? <div className="muted">{row.notes}</div> : null}
