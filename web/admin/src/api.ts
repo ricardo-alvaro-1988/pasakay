@@ -64,6 +64,7 @@ export type PageId =
   | 'dashboard'
   | 'bookings'
   | 'schedule'
+  | 'rentals'
   | 'inbox'
   | 'rider-notices'
   | 'company'
@@ -1348,6 +1349,7 @@ export type OperatorNavAlerts = {
   openSos: number
   unreadBilling: number
   pendingAccountDeletes: number
+  pendingRentals?: number
 }
 
 export type AdminAlertItem = {
@@ -1445,7 +1447,7 @@ export type OperatorBookingListItem = {
 
 export type OperatorInboxItem = {
   id: string
-  kind: 'Billing' | 'Announcement' | 'Sos' | 'AccountDelete'
+  kind: 'Billing' | 'Announcement' | 'Sos' | 'AccountDelete' | 'Rental'
   title: string
   body: string
   billId: string | null
@@ -2946,6 +2948,51 @@ export const api = {
     request<OperatorInboxItem>(`/api/operator/inbox/${id}/read`, { method: 'POST' }),
   readOperatorBillingInbox: () =>
     request<{ message: string }>('/api/operator/inbox/read-billing', { method: 'POST' }),
+  operatorRentals: (status?: string) =>
+    request<{
+      inquiries: {
+        id: string
+        customerName: string
+        mobileNumber: string
+        vehicleType: string
+        scheduleFromUtc: string
+        scheduleToUtc: string
+        locationDetails: string
+        locationLat: number
+        locationLng: number
+        notes: string | null
+        status: string
+        createdAtUtc: string
+      }[]
+      listings: {
+        id: string
+        customerName: string
+        mobileNumber: string
+        vehicleType: string
+        plateNumber: string
+        seater: number
+        frontImageUrl: string | null
+        backImageUrl: string | null
+        leftImageUrl: string | null
+        rightImageUrl: string | null
+        insideImageUrl: string | null
+        availableDays: string[]
+        status: string
+        createdAtUtc: string
+      }[]
+      pendingInquiries: number
+      pendingListings: number
+    }>(`/api/operator/rentals${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  setRentalInquiryStatus: (id: string, status: string) =>
+    request<{ id: string; status: string }>(`/api/operator/rentals/inquiries/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    }),
+  setRentalListingStatus: (id: string, status: string) =>
+    request<{ id: string; status: string }>(`/api/operator/rentals/listings/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    }),
   operatorAlerts: () => request<OperatorNavAlerts>('/api/operator/alerts'),
   operatorBilling: () => request<BillingOperatorDetail>('/api/operator/billing'),
   operatorProvinces: () => request<IdName[]>('/api/operator/territories/provinces'),

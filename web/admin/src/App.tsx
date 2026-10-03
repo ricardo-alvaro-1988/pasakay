@@ -153,6 +153,7 @@ import {
 } from './side-nav'
 import { BrandingSettingsPage } from './BrandingSettings'
 import { RiderAppSettingsPage } from './RiderAppSettings'
+import { OperatorRentalsPage } from './OperatorRentalsPage'
 import {
   applyBrand,
   DEFAULT_BRAND_NAME,
@@ -7643,6 +7644,7 @@ function OperatorShell({
     openSos: 0,
     unreadBilling: 0,
     pendingAccountDeletes: 0,
+    pendingRentals: 0,
   })
   const [sosFlash, setSosFlash] = useState<OpsAlert | null>(null)
 
@@ -7655,7 +7657,7 @@ function OperatorShell({
   const loadAlerts = useCallback(() => {
     api.operatorAlerts()
       .then(setAlerts)
-      .catch(() => setAlerts({ pendingWalletRequests: 0, openSos: 0, unreadBilling: 0, pendingAccountDeletes: 0 }))
+      .catch(() => setAlerts({ pendingWalletRequests: 0, openSos: 0, unreadBilling: 0, pendingAccountDeletes: 0, pendingRentals: 0 }))
   }, [])
 
   useEffect(() => {
@@ -7712,6 +7714,7 @@ function OperatorShell({
             if (id === 'support') return <NavBadge count={alerts.openSos} tone="sos" />
             if (id === 'billing') return <NavBadge count={alerts.unreadBilling} tone="billing" />
             if (id === 'customers') return <NavBadge count={alerts.pendingAccountDeletes} tone="delete" />
+            if (id === 'rentals') return <NavBadge count={alerts.pendingRentals ?? 0} tone="wallet" />
             return null
           }}
         />
@@ -7759,6 +7762,7 @@ function OperatorShell({
         {page === 'bookings' && <OperatorBookingsPage />}
         {page === 'overview' && <OperatorOverviewPage onOpen={(next) => setPage(next)} />}
         {page === 'schedule' && <OperatorSchedulePage />}
+        {page === 'rentals' && <OperatorRentalsPage />}
         {page === 'riders' && <OperatorRidersPage />}
         {page === 'customers' && <OperatorCustomersPage />}
         {page === 'fleet' && <OperatorFleetPage theme={theme} />}
@@ -7772,6 +7776,7 @@ function OperatorShell({
           <OperatorInboxPage
             onOpenBilling={() => setPage('billing')}
             onOpenCustomers={() => setPage('customers')}
+            onOpenRentals={() => setPage('rentals')}
           />
         )}
         {page === 'billing' && <OperatorBillingPage />}
@@ -12762,9 +12767,11 @@ function OperatorSupportDetail({ ticketId, onBack }: { ticketId: string; onBack:
 function OperatorInboxPage({
   onOpenBilling,
   onOpenCustomers,
+  onOpenRentals,
 }: {
   onOpenBilling: () => void
   onOpenCustomers: () => void
+  onOpenRentals: () => void
 }) {
   const [items, setItems] = useState<OperatorInboxItem[]>([])
   const [error, setError] = useState('')
@@ -12781,7 +12788,7 @@ function OperatorInboxPage({
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Inbox</h2>
-      <p className="muted">Billing records, account deletion requests, and platform announcements for your company.</p>
+      <p className="muted">Billing records, rentals, account deletion requests, and platform announcements for your company.</p>
       {error ? <p className="error">{error}</p> : null}
       {items.length === 0 ? <p>No notifications yet.</p> : (
         <div className="list">
@@ -12796,6 +12803,7 @@ function OperatorInboxPage({
                 {!item.readAtUtc ? <button className="btn tiny" type="button" onClick={() => void markRead(item.id)}>Mark read</button> : null}
                 {item.billId ? <button className="btn tiny" type="button" onClick={onOpenBilling}>Open billing</button> : null}
                 {item.kind === 'AccountDelete' ? <button className="btn tiny" type="button" onClick={onOpenCustomers}>Open customers</button> : null}
+                {item.kind === 'Rental' ? <button className="btn tiny" type="button" onClick={onOpenRentals}>Open rentals</button> : null}
               </div>
             </div>
           ))}

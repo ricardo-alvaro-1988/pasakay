@@ -48,6 +48,7 @@ import { PabiliStorefront } from './PabiliStorefront'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
 import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
 import { ShowQrButton, ShowQrOverlay } from './scan-qr'
+import { RentalScreen } from './RentalScreen'
 import { TripChatPanel } from './trip-chat'
 import { createDeskConnection, startDeskHub, stopDeskHub, emitDeskChat } from './desk-hub'
 import type { HubConnection } from '@microsoft/signalr'
@@ -58,7 +59,7 @@ import { lastKnownGps, readBootGps, readPickupGps, readGps, watchTripGps } from 
 import { applyBrand, DEFAULT_BRAND_NAME, type BrandingConfig } from './brand-themes'
 import { isRiderDownloadPath, RiderDownloadPage } from './RiderDownloadPage'
 
-type Tab = 'home' | 'booking' | 'favorites' | 'account'
+type Tab = 'home' | 'booking' | 'favorites' | 'account' | 'rental'
 
 function favoriteAsHail(rider: FavoriteRider): HailRider {
   return {
@@ -1380,6 +1381,9 @@ function Home({
             />
           </section>
         )}
+        {tab === 'rental' && (
+          <RentalScreen deskMobile={desk.phoneNumber} mapLat={desk.mapLat} mapLng={desk.mapLng} />
+        )}
         {tab === 'account' && (
           <section className="panel page-panel">
             <AccountHub desk={desk} page={accountPage} onPage={onAccountPage} onDesk={onDesk} onLogout={onLogout} />
@@ -1404,17 +1408,16 @@ function Home({
             <span className="ico"><SosIcon /></span>
             {sosBusy ? '…' : 'SOS'}
           </button>
+          <button className={tab === 'rental' ? 'on' : ''} type="button" onClick={() => onTab('rental')}>
+            <span className="ico"><RentalIcon /></span>
+            Rental
+          </button>
           {pabiliEnabled ? (
             <button type="button" onClick={onSwitchToPabili}>
               <span className="ico"><PabiliIcon /></span>
               Pabili
             </button>
-          ) : (
-            <button type="button" onClick={() => setShowQr(true)}>
-              <span className="ico"><ScanIcon /></span>
-              Scan
-            </button>
-          )}
+          ) : null}
           <button className={tab === 'favorites' ? 'on' : ''} onClick={() => onTab('favorites')}>
             <span className="ico"><FavsIcon /></span>
             Favs
@@ -1793,11 +1796,13 @@ function PabiliIcon() {
   )
 }
 
-function ScanIcon() {
+function RentalIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3" {...navStroke()} />
-      <path d="M7 12h10" {...navStroke()} />
+      <path d="M4 15h16l-1.2-5.2A2 2 0 0 0 16.9 8H7.1a2 2 0 0 0-1.9 1.8L4 15z" {...navStroke()} />
+      <circle cx="7.5" cy="16.5" r="1.6" {...navStroke()} />
+      <circle cx="16.5" cy="16.5" r="1.6" {...navStroke()} />
+      <path d="M8 8.2 9.4 5.8h5.2L16 8.2" {...navStroke()} />
     </svg>
   )
 }

@@ -4237,6 +4237,120 @@ button.where-toggle .where { pointer-events: none; }
   color: color-mix(in srgb, var(--accent) 55%, #6b7280);
 }
 
+.rental-panel {
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+.rental-chooser {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+.rental-choice {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow);
+}
+.rental-choice strong {
+  font-size: 17px;
+}
+.rental-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+.rental-form .field {
+  display: grid;
+  gap: 6px;
+}
+.rental-form .field input,
+.rental-form .field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: var(--input);
+}
+.rental-vehicles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.rental-vehicles button {
+  display: grid;
+  gap: 6px;
+  place-items: center;
+  padding: 10px 6px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--chip);
+  font-size: 11px;
+  font-weight: 700;
+}
+.rental-vehicles button.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, #fff);
+  color: var(--accent);
+}
+.rental-vehicles .icon {
+  width: 54px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+}
+.rental-vehicles .icon img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.rental-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.rental-hint {
+  margin: 0;
+  font-size: 12px;
+}
+.rental-location {
+  display: grid;
+  gap: 8px;
+}
+.rental-loc-card {
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  display: grid;
+  gap: 4px;
+}
+.rental-photos {
+  display: grid;
+  gap: 10px;
+}
+.rental-photos > p,
+.rental-days > p:first-child {
+  margin: 0;
+  font-weight: 700;
+}
+.rental-thumb {
+  width: 100%;
+  max-height: 120px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-top: 6px;
+}
+.rental-done {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--good);
+}
+
 .rider-dl {
   min-height: 100%;
   display: grid;

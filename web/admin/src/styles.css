@@ -202,6 +202,19 @@ input:-webkit-autofill:focus {
 .btn.tiny.danger { background: var(--accent); color: #fff; }
 .error { color: #ff6b75; font-size: 13px; }
 .ok { color: var(--good); font-size: 13px; font-weight: 600; }
+.rental-op-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+.rental-op-thumbs img {
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
 .upload-progress { display: grid; gap: 6px; margin-top: 12px; }
 .upload-progress progress { width: 100%; height: 10px; }
 

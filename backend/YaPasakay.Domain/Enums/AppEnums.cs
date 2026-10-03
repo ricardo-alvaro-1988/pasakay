@@ -87,7 +87,15 @@ public enum NotificationKind
     Billing = 1,
     Announcement = 2,
     Sos = 3,
-    AccountDelete = 4
+    AccountDelete = 4,
+    Rental = 5
+}
+
+public enum RentalLeadStatus
+{
+    Pending = 1,
+    Contacted = 2,
+    Closed = 3
 }
 
 public enum SurchargeKind

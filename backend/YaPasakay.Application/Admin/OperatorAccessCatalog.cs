@@ -8,6 +8,7 @@ public static class OperatorAccessCatalog
         new("bookings", "Booking"),
         new("overview", "Overview"),
         new("schedule", "Schedule booking"),
+        new("rentals", "Rentals"),
         new("riders", "Riders"),
         new("customers", "Customers"),
         new("fleet", "Fleet"),
