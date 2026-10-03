@@ -221,13 +221,14 @@ public static class OperatorAccess
 
         if (value.StartsWith("/api/operator/company")
             || value.StartsWith("/api/operator/dispatch")
-            || value.StartsWith("/api/operator/territories")
             || value.StartsWith("/api/operator/password"))
         {
             return "company";
         }
 
-        if (value.StartsWith("/api/operator/alerts"))
+        // Shared address lookups used by Add Rider and other forms — any operator employee.
+        if (value.StartsWith("/api/operator/territories")
+            || value.StartsWith("/api/operator/alerts"))
         {
             return null;
         }
