@@ -29,15 +29,27 @@ class OnlineService : Service() {
         const val ACTION_STOP_RING = "stop_ring"
         const val ACTION_CHAT = "chat"
         private const val ONLINE_CHANNEL = "yp_online"
-        private const val OFFER_CHANNEL = "yp_job_offers_v3"
+        /** Bumped so one-shot alert settings apply on devices that already had older channels. */
+        private const val OFFER_CHANNEL = "yp_job_offers_v5"
         private const val CHAT_CHANNEL = "yp_chat"
+        private const val NOTICE_CHANNEL = "yp_rider_push_v1"
+        /** Soft double-tap; no long continuous buzz. */
+        private val OFFER_VIBE_TIMINGS = longArrayOf(0, 90, 70, 120)
+        private val OFFER_VIBE_AMPS = intArrayOf(0, 110, 0, 150)
         private const val ONLINE_ID = 1001
         private const val OFFER_ID = 1002
         private const val CHAT_ID = 1003
+        private const val NOTICE_ID = 1004
 
         @Volatile
         var running = false
             private set
+
+        @Volatile
+        private var lastPushAt = 0L
+
+        @Volatile
+        private var lastPushKey = ""
 
         fun start(context: Context): Boolean {
             return startCommand(context, Intent(context, OnlineService::class.java).setAction(ACTION_START))
@@ -65,6 +77,39 @@ class OnlineService : Service() {
             try {
                 context.startService(Intent(context, OnlineService::class.java).setAction(ACTION_STOP_RING))
             } catch (_: Throwable) {
+            }
+        }
+
+        fun pingNotice(context: Context, title: String, body: String): Boolean {
+            val app = context.applicationContext
+            ensureChannels(app)
+            val key = "$title|$body"
+            val now = android.os.SystemClock.elapsedRealtime()
+            if (key == lastPushKey && now - lastPushAt < 60_000L) {
+                return true
+            }
+            lastPushKey = key
+            lastPushAt = now
+            return try {
+                val nm = app.getSystemService(NotificationManager::class.java)
+                val launch = Intent(app, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                val open = PendingIntent.getActivity(app, 4, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+                val notification = NotificationCompat.Builder(app, NOTICE_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_stat_notify)
+                    .setContentTitle(title)
+                    .setContentText(body)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                    .setAutoCancel(true)
+                    .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+                    .setContentIntent(open)
+                    .build()
+                nm.notify(NOTICE_ID, notification)
+                true
+            } catch (_: Throwable) {
+                false
             }
         }
 
@@ -111,17 +156,26 @@ class OnlineService : Service() {
                         setSound(null, null)
                     },
                 )
-                val sound = Uri.parse("android.resource://${context.packageName}/${R.raw.offer_alarm}")
-                val attrs = AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ALARM)
+                nm.createNotificationChannel(
+                    NotificationChannel(OFFER_CHANNEL, "Job offers", NotificationManager.IMPORTANCE_HIGH).apply {
+                        description = "Alerts when a new booking is waiting."
+                        // Sound is played once by OnlineService; channel stays silent to avoid a double ring.
+                        setSound(null, null)
+                        enableVibration(false)
+                        lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+                    },
+                )
+                val noticeSound = Uri.parse("android.resource://${context.packageName}/${R.raw.notice_tone}")
+                val noticeAudio = AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                     .build()
                 nm.createNotificationChannel(
-                    NotificationChannel(OFFER_CHANNEL, "Job offers", NotificationManager.IMPORTANCE_HIGH).apply {
-                        description = "Rings when a new booking is waiting."
-                        setSound(sound, attrs)
+                    NotificationChannel(NOTICE_CHANNEL, "Announcements", NotificationManager.IMPORTANCE_HIGH).apply {
+                        description = "Push notifications from your operator."
+                        setSound(noticeSound, noticeAudio)
                         enableVibration(true)
-                        vibrationPattern = longArrayOf(0, 600, 200, 600, 200, 600)
+                        vibrationPattern = longArrayOf(0, 80, 60, 80)
                         lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                     },
                 )
@@ -252,8 +306,8 @@ class OnlineService : Service() {
     private fun startRing(title: String, body: String) {
         try {
             acquireWake()
-            playAlarm()
-            vibrate()
+            playAlarmOnce()
+            softPulse()
             val open = openAppIntent()
             val notification = NotificationCompat.Builder(this, OFFER_CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_notify)
@@ -265,6 +319,7 @@ class OnlineService : Service() {
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setOngoing(true)
                 .setAutoCancel(false)
+                .setOnlyAlertOnce(true)
                 .setFullScreenIntent(open, true)
                 .setContentIntent(open)
                 .build()
@@ -293,6 +348,7 @@ class OnlineService : Service() {
 
     private fun stopRingInternal() {
         try {
+            player?.setOnCompletionListener(null)
             player?.stop()
         } catch (_: Throwable) {
         }
@@ -312,9 +368,11 @@ class OnlineService : Service() {
         }
     }
 
-    private fun playAlarm() {
+    /** Play offer sound once — never loop. Notification stays until stopRing. */
+    private fun playAlarmOnce() {
         try {
-            if (player?.isPlaying == true) return
+            player?.setOnCompletionListener(null)
+            player?.stop()
         } catch (_: Throwable) {
         }
         try {
@@ -331,8 +389,18 @@ class OnlineService : Service() {
                     .build(),
             )
             next.setDataSource(this, Uri.parse("android.resource://$packageName/${R.raw.offer_alarm}"))
-            next.isLooping = true
-            next.setVolume(1f, 1f)
+            next.isLooping = false
+            next.setVolume(0.9f, 0.9f)
+            next.setOnCompletionListener {
+                try {
+                    it.release()
+                } catch (_: Throwable) {
+                }
+                if (player === it) {
+                    player = null
+                }
+                releaseWake()
+            }
             next.prepare()
             next.start()
             player = next
@@ -342,18 +410,21 @@ class OnlineService : Service() {
             } catch (_: Throwable) {
             }
             player = null
+            releaseWake()
         }
     }
 
-    private fun vibrate() {
+    /** Short soft double-tap once. */
+    private fun softPulse() {
         try {
-            val pattern = longArrayOf(0, 700, 300, 700, 300, 700)
             val vibe = vibrator() ?: return
             if (Build.VERSION.SDK_INT >= 26) {
-                vibe.vibrate(VibrationEffect.createWaveform(pattern, 0))
+                vibe.vibrate(
+                    VibrationEffect.createWaveform(OFFER_VIBE_TIMINGS, OFFER_VIBE_AMPS, -1),
+                )
             } else {
                 @Suppress("DEPRECATION")
-                vibe.vibrate(pattern, 0)
+                vibe.vibrate(OFFER_VIBE_TIMINGS, -1)
             }
         } catch (_: Throwable) {
         }

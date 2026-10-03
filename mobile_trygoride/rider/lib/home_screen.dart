@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
@@ -36,6 +37,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _liveKey = '';
   RiderEarningsSummary? _summary;
   List<RiderTripListItem> _recent = const [];
+  Set<String> _dismissedNotices = {};
+  bool _dismissedReady = false;
+  static const _dismissedNoticeKey = 'dismissedRiderNotices';
 
   @override
   void initState() {
@@ -44,6 +48,37 @@ class _HomeScreenState extends State<HomeScreen> {
     _liveKey = _deskLiveKey(widget.session.desk);
     widget.session.addListener(_onDesk);
     unawaited(_loadExtras());
+    unawaited(_loadDismissedNotices());
+  }
+
+  Future<void> _loadDismissedNotices() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _dismissedNotices = prefs.getStringList(_dismissedNoticeKey)?.toSet() ?? {};
+      _dismissedReady = true;
+    });
+  }
+
+  Future<void> _dismissNotice(String id) async {
+    if (id.isEmpty) return;
+    setState(() => _dismissedNotices.add(id));
+    final prefs = await SharedPreferences.getInstance();
+    final kept = _dismissedNotices.where((item) => item.isNotEmpty).toList();
+    if (kept.length > 40) {
+      kept.removeRange(0, kept.length - 40);
+    }
+    await prefs.setStringList(_dismissedNoticeKey, kept);
+  }
+
+  RiderNotice? _visibleNotice(RiderDesk desk) {
+    if (!_dismissedReady) return null;
+    for (final notice in desk.notices) {
+      if (notice.id.isNotEmpty && !_dismissedNotices.contains(notice.id)) {
+        return notice;
+      }
+    }
+    return null;
   }
 
   @override
@@ -244,6 +279,13 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 108),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
+                  if (_visibleNotice(desk) case final notice?) ...[
+                    _NoticeBanner(
+                      notice: notice,
+                      onClose: () => unawaited(_dismissNotice(notice.id)),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   RepaintBoundary(
                     child: _RiderHeaderCard(
                       desk: desk,
@@ -456,6 +498,78 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 void _noop() {}
+
+class _NoticeBanner extends StatelessWidget {
+  const _NoticeBanner({required this.notice, required this.onClose});
+
+  final RiderNotice notice;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: brandRed,
+      elevation: 8,
+      shadowColor: const Color(0x66E30613),
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.campaign_rounded, color: Colors.white, size: 28),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'ANNOUNCEMENT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    notice.title,
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18, height: 1.2),
+                  ),
+                  if (notice.body.trim().isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      notice.body,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15, height: 1.3),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                onTap: onClose,
+                borderRadius: BorderRadius.circular(10),
+                child: const SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: Icon(Icons.close_rounded, color: brandRed, size: 22),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _RiderHeaderCard extends StatelessWidget {
   const _RiderHeaderCard({
@@ -911,7 +1025,9 @@ class _BookingSection extends StatelessWidget {
         pickup: activeTrip.pickup,
         dropoff: activeTrip.dropoff,
         passengers: passengerLabel(activeTrip.passengerCount),
-        fareLine: '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
+        fareLine: activeTrip.fareDiscountAmount > 0
+            ? '${peso(activeTrip.collectFromCustomer)} · ${activeTrip.fareDiscountLabel ?? 'Discount'} · ${paymentLabel(activeTrip.paymentMethod)}'
+            : '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
         distanceKm: activeTrip.distanceKm,
         tinted: unread > 0,
         detailsLabel: 'Booking details',
@@ -976,7 +1092,9 @@ class _BookingSection extends StatelessWidget {
         pickup: offer.pickup,
         dropoff: offer.dropoff,
         passengers: passengerLabel(offer.passengerCount),
-        fareLine: '${peso(offer.fare)} · ${paymentLabel(offer.paymentMethod)}',
+        fareLine: offer.fareDiscountAmount > 0
+            ? '${peso(offer.collectFromCustomer)} · ${offer.fareDiscountLabel ?? 'Discount'} · ${paymentLabel(offer.paymentMethod)}'
+            : '${peso(offer.fare)} · ${paymentLabel(offer.paymentMethod)}',
         distanceKm: offer.distanceKm,
         etaMinutes: mins,
         tinted: true,
@@ -1230,11 +1348,11 @@ class _RecentTripsBlock extends StatelessWidget {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: _MoneyBit(label: 'Fare', value: peso(trip.fare))),
+                        Expanded(child: _MoneyBit(label: 'Fare', value: peso(trip.fareToShow))),
                         Expanded(
                           child: _MoneyBit(
                             label: 'Your Earnings',
-                            value: peso(trip.driverAmount ?? trip.fare),
+                            value: peso(trip.driverAmount ?? trip.fareToShow),
                             color: brandSuccess,
                           ),
                         ),

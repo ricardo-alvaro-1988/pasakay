@@ -241,6 +241,17 @@ class _OfferCard extends StatelessWidget {
               ],
             ],
           ),
+          if (offer.fareDiscountAmount > 0) ...[
+            const SizedBox(height: 10),
+            Text(
+              offer.fareDiscountLabel ?? 'Discount',
+              style: const TextStyle(
+                color: Color(0xFFB45309),
+                fontWeight: FontWeight.w900,
+                fontSize: 13,
+              ),
+            ),
+          ],
           if (offer.isPromoSponsored) ...[
             const SizedBox(height: 10),
             Text(
@@ -303,6 +314,22 @@ class _OfferCard extends StatelessWidget {
             Text(
               whenLabel!,
               style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600, fontSize: 12),
+            ),
+          ],
+          if (offer.fareDiscountAmount > 0) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF3C7),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFCD34D)),
+              ),
+              child: Text(
+                'Collect ${peso(offer.collectFromCustomer)} from customer · ${peso(offer.fareDiscountAmount)} is the discount',
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+              ),
             ),
           ],
           if (offer.isPromoSponsored) ...[

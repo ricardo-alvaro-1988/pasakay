@@ -1,6 +1,7 @@
 package com.pricebadz.rider
 
 import android.Manifest
+import android.app.AlarmManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -8,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import org.json.JSONArray
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -55,6 +57,35 @@ class MainActivity : FlutterActivity() {
                         OnlineService.stopRing(this)
                         result.success(true)
                     }
+                    "syncNotices" -> {
+                        val raw = call.arguments as? String ?: "[]"
+                        val items = mutableListOf<NoticeScheduler.Item>()
+                        val array = JSONArray(raw)
+                        for (i in 0 until array.length()) {
+                            val obj = array.optJSONObject(i) ?: continue
+                            val id = obj.optString("id")
+                            val minute = obj.optInt("minute", -1)
+                            if (id.isBlank() || minute !in 0..1439) continue
+                            items.add(
+                                NoticeScheduler.Item(
+                                    id,
+                                    obj.optString("title"),
+                                    obj.optString("body"),
+                                    minute,
+                                ),
+                            )
+                        }
+                        val scheduled = NoticeScheduler.sync(this, items)
+                        if (scheduled) {
+                            requestExactAlarm()
+                        }
+                        result.success(scheduled)
+                    }
+                    "pingNotice" -> {
+                        val title = call.argument<String>("title") ?: "Announcement"
+                        val body = call.argument<String>("body") ?: "Open Pricebadz to read it."
+                        result.success(OnlineService.pingNotice(this, title, body))
+                    }
                     "pingChat" -> {
                         val title = call.argument<String>("title") ?: "New chat"
                         val body = call.argument<String>("body") ?: "Open Pricebadz to reply."
@@ -70,6 +101,22 @@ class MainActivity : FlutterActivity() {
             } catch (_: Throwable) {
                 result.success(false)
             }
+        }
+    }
+
+    private fun requestExactAlarm() {
+        if (Build.VERSION.SDK_INT < 31) return
+        try {
+            val alarm = getSystemService(AlarmManager::class.java) ?: return
+            if (alarm.canScheduleExactAlarms()) return
+            val prefs = getSharedPreferences("yp_notice_alarms", MODE_PRIVATE)
+            if (prefs.getBoolean("askedExact", false)) return
+            prefs.edit().putBoolean("askedExact", true).apply()
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                    .setData(Uri.parse("package:$packageName")),
+            )
+        } catch (_: Throwable) {
         }
     }
 

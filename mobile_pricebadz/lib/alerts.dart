@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
+
+import 'models.dart';
 
 class RiderAlerts {
   static const _channel = MethodChannel('pricebadz.rider/alerts');
@@ -30,6 +34,30 @@ class RiderAlerts {
     try {
       await _channel.invokeMethod('stopRing');
     } catch (_) {}
+  }
+
+  static Future<bool> syncNotices(List<RiderScheduledNotice> notices) async {
+    try {
+      final payload = jsonEncode(notices
+          .map((notice) => {
+                'id': notice.id,
+                'title': notice.title,
+                'body': notice.body,
+                'minute': notice.minuteOfDay,
+              })
+          .toList());
+      return await _channel.invokeMethod<bool>('syncNotices', payload) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> pingNotice({required String title, required String body}) async {
+    try {
+      return await _channel.invokeMethod<bool>('pingNotice', {'title': title, 'body': body}) == true;
+    } catch (_) {
+      return false;
+    }
   }
 
   static Future<bool> pingChat({required String title, required String body}) async {

@@ -154,11 +154,11 @@ class _EarningsScreenState extends State<EarningsScreen> {
                           const SizedBox(height: 10),
                           Row(
                             children: [
-                              Expanded(child: _MoneyCol(label: 'Fare', value: peso(trip.fare))),
+                              Expanded(child: _MoneyCol(label: 'Fare', value: peso(trip.fareToShow))),
                               Expanded(
                                 child: _MoneyCol(
                                   label: 'Your earnings',
-                                  value: peso(trip.driverAmount ?? trip.fare),
+                                  value: peso(trip.driverAmount ?? trip.fareToShow),
                                   color: brandSuccess,
                                 ),
                               ),

@@ -218,6 +218,21 @@ class RiderApi {
     return RiderDesk.fromJson(await _json(response));
   }
 
+  Future<RiderDesk> applyDiscount(
+    String tripId,
+    String kind, {
+    required String mode,
+    required int value,
+    String? note,
+  }) async {
+    final response = await _post(
+      _uri('/api/rider/trips/$tripId/discount'),
+      headers: _headers(),
+      body: jsonEncode({'kind': kind, 'mode': mode, 'value': value, 'note': note}),
+    );
+    return RiderDesk.fromJson(await _json(response, fallback: 'Could not apply the discount.'));
+  }
+
   Future<RiderDesk> startTrip(String tripId) async {
     final response = await _post(
       _uri('/api/rider/trips/$tripId/start'),
