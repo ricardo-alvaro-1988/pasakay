@@ -2068,6 +2068,80 @@ export const api = {
       xhr.send(data)
     })
   },
+  getPassengerApp: () =>
+    request<{
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }>('/api/admin/passenger-app'),
+  publishPassengerApp: (
+    body: { version: string; notes?: string; file: File },
+    onProgress?: (loaded: number, total: number) => void,
+  ) => {
+    const data = new FormData()
+    data.append('file', body.file)
+    data.append('version', body.version)
+    if (body.notes) data.append('notes', body.notes)
+    type ReleasePayload = {
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }
+    return new Promise<ReleasePayload>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/admin/passenger-app')
+      const token = getToken()
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded, event.total)
+      }
+      xhr.onerror = () => reject(new Error('Upload failed before the server accepted the file.'))
+      xhr.onabort = () => reject(new Error('Upload was cancelled.'))
+      xhr.onload = () => {
+        if (xhr.status === 401) {
+          clearAuth()
+          reject(new Error(messageFromFailedResponse(xhr.status, xhr.responseText || 'Session expired. Sign in again.')))
+          return
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(messageFromFailedResponse(xhr.status, xhr.responseText)))
+          return
+        }
+        try {
+          resolve(JSON.parse(xhr.responseText) as ReleasePayload)
+        } catch {
+          reject(new Error('The server did not return the published release.'))
+        }
+      }
+      xhr.send(data)
+    })
+  },
   operatorFleet: () => request<OperatorFleet>('/api/operator/fleet'),
   operatorCompany: () => request<OperatorDetail>('/api/operator/company'),
   saveOperatorDispatchMode: (

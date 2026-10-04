@@ -574,6 +574,22 @@ export const api = {
         notes: string | null
       }[]
     >('/api/public/rider-app/releases'),
+  passengerAppLatest: () =>
+    request<{
+      version: string
+      downloadUrl: string
+      releasedAtUtc: string
+      notes: string | null
+    }>('/api/public/passenger-app'),
+  passengerAppReleases: () =>
+    request<
+      {
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+      }[]
+    >('/api/public/passenger-app/releases'),
   googleSignIn: (idToken: string) =>
     request<AuthResponse>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
   mapsConfig: () => request<{ googleMapsBrowserKey: string }>('/api/public/maps'),
