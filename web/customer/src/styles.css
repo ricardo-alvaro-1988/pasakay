@@ -4349,29 +4349,21 @@ button.where-toggle .where { pointer-events: none; }
 .rental-form .field input[type='datetime-local'] {
   font-size: 16px; /* avoid mobile zoom + keep control readable */
 }
+/* Match home booking: strict 2-column grid, no horizontal scroll / clipped cards */
 .rental-vehicle-list.vehicles {
-  display: flex;
-  grid-template-columns: none;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin: 0;
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: 4px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  overscroll-behavior-x: contain;
-}
-.rental-vehicle-list.vehicles::-webkit-scrollbar {
-  display: none;
+  overflow: visible;
 }
 .rental-vehicle-list .vehicle {
-  flex: 0 0 150px;
-  width: 150px;
-  max-width: 150px;
-  min-width: 150px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 .rental-vehicle-list .vehicle .price {
@@ -4383,6 +4375,7 @@ button.where-toggle .where { pointer-events: none; }
   text-overflow: unset;
   font-size: 12px;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 /* From/To always stacked — datetime-local is too wide for 2 columns on phones */
 .rental-dates {
