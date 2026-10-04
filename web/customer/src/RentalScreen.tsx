@@ -16,13 +16,16 @@ import {
   PH,
   placeDetails,
   Prediction,
-  searchPlaces,
+  reverseGeocode,
   StopResult,
+  searchPlaces,
 } from './maps'
-import { lastKnownGps } from './gps'
+import { lastKnownGps, readPickupGps } from './gps'
 import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
 
 const PH_TZ = 'Asia/Manila'
+
+type SearchTarget = 'pickup' | 'dropoff' | null
 
 function peso(n: number) {
   return `₱${n.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`
@@ -35,6 +38,10 @@ function kmLabel(km: number) {
 
 function isOperatorCoverageError(message: string) {
   return /no operator|not covered|outside|municipality/i.test(message)
+}
+
+function addressLabel(details: string) {
+  return details.split(',')[0]?.trim() || details
 }
 
 function fromPhInput(value: string) {
@@ -90,131 +97,17 @@ function bookBody(
   }
 }
 
-function stopFromResult(hit: StopResult): Stop {
-  return {
-    label: hit.label,
-    details: hit.details,
-    lat: hit.lat,
-    lng: hit.lng,
-  }
-}
-
-function StopSearch({
-  label,
-  value,
-  near,
-  onPick,
-}: {
-  label: string
-  value: Stop | null
-  near?: { lat: number; lng: number } | null
-  onPick: (stop: Stop | null) => void
-}) {
-  const [query, setQuery] = useState('')
-  const [hints, setHints] = useState<Prediction[]>([])
-  const [geoHits, setGeoHits] = useState<StopResult[]>([])
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-
-  async function runSearch() {
-    const q = query.trim()
-    if (q.length < 2) return
-    setBusy(true)
-    setError('')
-    try {
-      const { googleMapsBrowserKey } = await api.mapsConfig()
-      const maps = await loadGoogleMaps(googleMapsBrowserKey)
-      const center = near ?? lastKnownGps(300_000) ?? PH
-      const [predictions, geos] = await Promise.all([
-        searchPlaces(maps, q, center),
-        geocodeText(maps, q, center),
-      ])
-      setHints(predictions.slice(0, 6))
-      setGeoHits(geos.slice(0, 4))
-      if (!predictions.length && !geos.length) setError('No places found.')
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Search failed.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function pickPrediction(item: Prediction) {
-    setBusy(true)
-    setError('')
-    try {
-      const { googleMapsBrowserKey } = await api.mapsConfig()
-      const maps = await loadGoogleMaps(googleMapsBrowserKey)
-      const details = await placeDetails(maps, item.place_id)
-      onPick({
-        label: item.structured_formatting?.main_text || details.address.split(',')[0] || item.description,
-        details: details.address,
-        lat: details.lat,
-        lng: details.lng,
-      })
-      setQuery('')
-      setHints([])
-      setGeoHits([])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load place.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="rental-stop-search">
-      <label className="field">
-        <span>{label}</span>
-        {value ? (
-          <div className="rental-stop-picked">
-            <strong>{value.label}</strong>
-            <small className="muted">{value.details}</small>
-            <button type="button" className="ghost tiny" onClick={() => onPick(null)}>
-              Change
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="rental-stop-row">
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    void runSearch()
-                  }
-                }}
-                placeholder={`Search ${label.toLowerCase()}`}
-              />
-              <button type="button" className="secondary" disabled={busy || query.trim().length < 2} onClick={() => void runSearch()}>
-                {busy ? '…' : 'Search'}
-              </button>
-            </div>
-            {error ? <p className="error">{error}</p> : null}
-            {hints.length || geoHits.length ? (
-              <div className="rental-suggest">
-                {hints.map((item) => (
-                  <button key={item.place_id} type="button" onClick={() => void pickPrediction(item)}>
-                    <b>{item.structured_formatting?.main_text || item.description}</b>
-                    <small className="muted">{item.structured_formatting?.secondary_text || item.description}</small>
-                  </button>
-                ))}
-                {geoHits.map((hit) => (
-                  <button key={`${hit.lat},${hit.lng},${hit.details}`} type="button" onClick={() => { onPick(stopFromResult(hit)); setQuery(''); setHints([]); setGeoHits([]) }}>
-                    <b>{hit.label}</b>
-                    <small className="muted">{hit.details}</small>
-                  </button>
-                ))}
-              </div>
-            ) : null}
-          </>
-        )}
-      </label>
-    </div>
-  )
-}
+const FALLBACK_VEHICLES: Array<{
+  id: VehicleType
+  vehicleType: VehicleType
+  name: string
+  available: boolean
+  maxPassengers: number
+  isCargo: boolean
+}> = [
+  { id: 'Motorcycle', vehicleType: 'Motorcycle', name: vehicleLabel('Motorcycle'), available: true, maxPassengers: vehicleMaxPassengers('Motorcycle'), isCargo: vehicleIsCargo('Motorcycle') },
+  { id: 'Tricycle', vehicleType: 'Tricycle', name: vehicleLabel('Tricycle'), available: true, maxPassengers: vehicleMaxPassengers('Tricycle'), isCargo: vehicleIsCargo('Tricycle') },
+]
 
 export function RentalScreen({
   desk,
@@ -227,6 +120,11 @@ export function RentalScreen({
 }) {
   const [pickup, setPickup] = useState<Stop | null>(null)
   const [dropoff, setDropoff] = useState<Stop | null>(null)
+  const [searchFor, setSearchFor] = useState<SearchTarget>(null)
+  const [query, setQuery] = useState('')
+  const [hints, setHints] = useState<Prediction[]>([])
+  const [geoHits, setGeoHits] = useState<StopResult[]>([])
+  const [locating, setLocating] = useState(false)
   const [vehicle, setVehicle] = useState<VehicleType>('Motorcycle')
   const [vehicleCategoryId, setVehicleCategoryId] = useState<string | null>(null)
   const [passengers, setPassengers] = useState(1)
@@ -249,6 +147,40 @@ export function RentalScreen({
   const selectedIsCargo = vehicleIsCargo(vehicle, selectedOffer?.isCargo)
   const showPassengerPicker = !!pickup && !selectedIsCargo && selectedMaxPassengers > 1
   const near = pickup ?? (desk.mapLat != null && desk.mapLng != null ? { lat: desk.mapLat, lng: desk.mapLng } : lastKnownGps(300_000))
+
+  useEffect(() => {
+    if (!query.trim() || !searchFor) {
+      setHints([])
+      setGeoHits([])
+      return
+    }
+    let ignore = false
+    const handle = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const { googleMapsBrowserKey } = await api.mapsConfig()
+          const maps = await loadGoogleMaps(googleMapsBrowserKey)
+          const center = near ?? PH
+          const [predictions, geos] = await Promise.all([
+            searchPlaces(maps, query, center),
+            geocodeText(maps, query, center),
+          ])
+          if (ignore) return
+          setHints(predictions.slice(0, 8))
+          setGeoHits(geos.slice(0, 6))
+        } catch {
+          if (!ignore) {
+            setHints([])
+            setGeoHits([])
+          }
+        }
+      })()
+    }, 180)
+    return () => {
+      ignore = true
+      window.clearTimeout(handle)
+    }
+  }, [query, searchFor, near?.lat, near?.lng])
 
   useEffect(() => {
     if (!pickup || !dropoff) {
@@ -311,6 +243,114 @@ export function RentalScreen({
     setPassengers((n) => Math.min(selectedMaxPassengers, Math.max(1, n)))
   }, [showPassengerPicker, selectedMaxPassengers, vehicle, vehicleCategoryId])
 
+  function openSearch(target: 'pickup' | 'dropoff') {
+    setSearchFor(target)
+    setQuery('')
+    setHints([])
+    setGeoHits([])
+    setError('')
+  }
+
+  function applyStop(target: 'pickup' | 'dropoff', stop: Stop) {
+    if (target === 'pickup') setPickup(stop)
+    else setDropoff(stop)
+    setSearchFor(null)
+    setQuery('')
+    setHints([])
+    setGeoHits([])
+  }
+
+  async function choosePrediction(item: Prediction) {
+    if (!searchFor) return
+    try {
+      const { googleMapsBrowserKey } = await api.mapsConfig()
+      const maps = await loadGoogleMaps(googleMapsBrowserKey)
+      const place = await placeDetails(maps, item.place_id)
+      applyStop(searchFor, {
+        label: item.structured_formatting?.main_text || place.address.split(',')[0] || item.description,
+        details: place.address,
+        lat: place.lat,
+        lng: place.lng,
+      })
+    } catch {
+      setError('Could not load that place. Search again.')
+    }
+  }
+
+  async function confirmTyped() {
+    if (!searchFor) return
+    const text = query.trim()
+    if (!text) return
+    try {
+      const { googleMapsBrowserKey } = await api.mapsConfig()
+      const maps = await loadGoogleMaps(googleMapsBrowserKey)
+      const hits = await geocodeText(maps, text, near ?? PH)
+      if (hits[0]) applyStop(searchFor, hits[0])
+      else setError('No matching place. Try another search.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Search failed.')
+    }
+  }
+
+  async function useCurrentLocation() {
+    setLocating(true)
+    setError('')
+    try {
+      const cached = lastKnownGps(180_000)
+      if (cached) {
+        applyStop('pickup', {
+          label: 'Getting address…',
+          details: 'Current location',
+          lat: cached.lat,
+          lng: cached.lng,
+        })
+      }
+      const pos = await readPickupGps()
+      const here = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+      applyStop('pickup', {
+        label: 'Getting address…',
+        details: 'Current location',
+        lat: here.lat,
+        lng: here.lng,
+      })
+      const { googleMapsBrowserKey } = await api.mapsConfig()
+      const maps = await loadGoogleMaps(googleMapsBrowserKey)
+      const details = await reverseGeocode(maps, here.lat, here.lng)
+      applyStop('pickup', {
+        label: addressLabel(details),
+        details,
+        lat: here.lat,
+        lng: here.lng,
+      })
+    } catch (err) {
+      const cached = lastKnownGps(300_000)
+      if (cached) {
+        try {
+          const { googleMapsBrowserKey } = await api.mapsConfig()
+          const maps = await loadGoogleMaps(googleMapsBrowserKey)
+          const details = await reverseGeocode(maps, cached.lat, cached.lng)
+          applyStop('pickup', {
+            label: addressLabel(details),
+            details,
+            lat: cached.lat,
+            lng: cached.lng,
+          })
+        } catch {
+          applyStop('pickup', {
+            label: 'Current location',
+            details: 'Current location',
+            lat: cached.lat,
+            lng: cached.lng,
+          })
+        }
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not get GPS location.')
+      }
+    } finally {
+      setLocating(false)
+    }
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault()
     if (!pickup?.lat || !dropoff?.lat) {
@@ -359,6 +399,19 @@ export function RentalScreen({
   const canSubmit = !!pickup?.lat && !!dropoff?.lat && !!quote && !quoting && !busy && !noOperator.searching && !noOperator.uncovered
     && (payment !== 'Other' || !!paymentRef.trim())
 
+  const vehicleOptions = noOperator.useOffers
+    ? noOperator.availableVehicles
+    : (noOperator.availableTypes.length
+        ? noOperator.availableTypes.map((t) => ({
+            id: t,
+            vehicleType: t,
+            name: vehicleLabel(t),
+            available: true,
+            maxPassengers: vehicleMaxPassengers(t),
+            isCargo: vehicleIsCargo(t),
+          }))
+        : FALLBACK_VEHICLES)
+
   return (
     <div className="rental-sheet">
       <div className="rental-sheet-body">
@@ -377,69 +430,70 @@ export function RentalScreen({
               required
             />
           </label>
-          <StopSearch
-            label="Pickup"
-            value={pickup}
-            near={near}
-            onPick={setPickup}
-          />
-          <StopSearch
-            label="Drop-off"
-            value={dropoff}
-            near={near}
-            onPick={setDropoff}
-          />
-          {pickup?.lat ? (
-            <>
-              <p className="section-title">Vehicle</p>
-              <div className="vehicles rental-vehicle-list">
-                {(noOperator.useOffers
-                  ? noOperator.availableVehicles
-                  : noOperator.availableTypes.map((t) => ({
-                      id: t,
-                      vehicleType: t,
-                      name: vehicleLabel(t),
-                      available: true,
-                      maxPassengers: vehicleMaxPassengers(t),
-                      isCargo: vehicleIsCargo(t),
-                    }))
-                ).map((item) => {
-                  const type = item.vehicleType as VehicleType
-                  const categoryId = 'id' in item && item.id !== type ? item.id : null
-                  const canSelect = !('available' in item) || item.available !== false
-                  const selected = canSelect && (categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId)
-                  const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
-                    ? item.maxPassengers
-                    : vehicleMaxPassengers(type)
-                  const cargo = 'isCargo' in item && typeof item.isCargo === 'boolean'
-                    ? item.isCargo
-                    : vehicleIsCargo(type)
-                  const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
-                  return (
-                    <button
-                      key={categoryId ?? type}
-                      type="button"
-                      disabled={!canSelect}
-                      className={`vehicle${selected ? ' on' : ''}${!canSelect ? ' dim' : ''}`}
-                      onClick={() => {
-                        if (!canSelect) return
-                        setVehicle(type)
-                        setVehicleCategoryId(categoryId)
-                        setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))
-                      }}
-                    >
-                      <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
-                        <img src={vehicleArt(type, iconKey)} alt="" />
-                      </span>
-                      <span className="copy">
-                        <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </>
-          ) : null}
+          <div className="stop">
+            <div className="stop-row">
+              <span className="pin beat"><span className="dot a" /></span>
+              <button
+                type="button"
+                className={`addr${searchFor === 'pickup' ? ' on' : ''}`}
+                onClick={() => openSearch('pickup')}
+              >
+                <small>Pickup</small>
+                {pickup?.label ?? (locating ? 'Waiting for GPS…' : 'Tap to set pickup')}
+              </button>
+            </div>
+            <div className="stop-row">
+              <span className="pin beat"><span className="dot b" /></span>
+              <button
+                type="button"
+                className={`addr${searchFor === 'dropoff' ? ' on' : ''}`}
+                onClick={() => openSearch('dropoff')}
+              >
+                <small>Drop-off</small>
+                {dropoff?.label ?? 'Tap to set drop-off'}
+              </button>
+            </div>
+          </div>
+          <p className="section-title">Vehicle</p>
+          <div className="vehicles rental-vehicle-list">
+            {vehicleOptions.map((item) => {
+              const type = item.vehicleType as VehicleType
+              const categoryId = 'id' in item && item.id !== type ? item.id : null
+              const canSelect = !('available' in item) || item.available !== false
+              const selected = canSelect && (categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId)
+              const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
+                ? item.maxPassengers
+                : vehicleMaxPassengers(type)
+              const cargo = 'isCargo' in item && typeof item.isCargo === 'boolean'
+                ? item.isCargo
+                : vehicleIsCargo(type)
+              const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
+              return (
+                <button
+                  key={categoryId ?? type}
+                  type="button"
+                  disabled={!canSelect}
+                  className={`vehicle${selected ? ' on' : ''}${!canSelect ? ' dim' : ''}`}
+                  onClick={() => {
+                    if (!canSelect) return
+                    setVehicle(type)
+                    setVehicleCategoryId(categoryId)
+                    setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))
+                  }}
+                >
+                  <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
+                    <img src={vehicleArt(type, iconKey)} alt="" />
+                  </span>
+                  <span className="copy">
+                    <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
+                    {'name' in item && item.name !== vehicleLabel(type) ? (
+                      <small className="muted">{vehicleLabel(type)}</small>
+                    ) : null}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
           {showPassengerPicker ? (
             <div className="passenger-picker" role="group" aria-label="Number of passengers">
               <span className="passenger-label">Passengers (max {selectedMaxPassengers})</span>
@@ -487,7 +541,7 @@ export function RentalScreen({
           ) : pickup?.lat && dropoff?.lat ? (
             <p className="muted">No fare available for this route yet.</p>
           ) : null}
-          {error ? <p className="error">{error}</p> : null}
+          {error && !searchFor ? <p className="error">{error}</p> : null}
           <NoOperatorNotice show={noOperator.uncovered} />
           {note ? <p className="muted">{note}</p> : null}
           <button className="primary rental-submit" type="submit" disabled={!canSubmit}>
@@ -501,6 +555,64 @@ export function RentalScreen({
           </button>
         </form>
       </div>
+      {searchFor ? (
+        <div className="picker rental-picker">
+          <button
+            className="ghost"
+            type="button"
+            onClick={() => {
+              setSearchFor(null)
+              setQuery('')
+              setHints([])
+              setGeoHits([])
+            }}
+          >
+            Back
+          </button>
+          <h2>{searchFor === 'pickup' ? 'Set pickup' : 'Set drop-off'}</h2>
+          <input
+            autoFocus
+            placeholder="Search a place"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                void confirmTyped()
+              }
+            }}
+          />
+          {searchFor === 'pickup' ? (
+            <button type="button" className="picker-item" disabled={locating} onClick={() => void useCurrentLocation()}>
+              <b>{locating ? 'Getting your location…' : 'Use current location'}</b>
+              <div className="muted">{locating ? 'Keep this screen open while GPS locks' : 'GPS pickup'}</div>
+            </button>
+          ) : null}
+          {geoHits.map((item) => (
+            <button
+              key={`${item.details}-${item.lat}`}
+              className="picker-item"
+              type="button"
+              onClick={() => applyStop(searchFor, item)}
+            >
+              <b>{item.label}</b>
+              <div className="muted">{item.details}</div>
+            </button>
+          ))}
+          {hints.map((item) => (
+            <button
+              key={item.place_id}
+              className="picker-item"
+              type="button"
+              onClick={() => void choosePrediction(item)}
+            >
+              <b>{item.structured_formatting?.main_text ?? item.description}</b>
+              <div className="muted">{item.structured_formatting?.secondary_text}</div>
+            </button>
+          ))}
+          {error ? <p className="error">{error}</p> : null}
+        </div>
+      ) : null}
     </div>
   )
 }
