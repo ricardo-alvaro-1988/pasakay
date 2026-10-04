@@ -21,4 +21,7 @@ public class CustomerRentalInquiry : BaseEntity
     public string? Notes { get; set; }
     public string MobileNumber { get; set; } = string.Empty;
     public RentalLeadStatus Status { get; set; } = RentalLeadStatus.Pending;
+    public Guid? MatchedListingId { get; set; }
+    public CustomerCarListing? MatchedListing { get; set; }
+    public DateTime? MatchedAtUtc { get; set; }
 }

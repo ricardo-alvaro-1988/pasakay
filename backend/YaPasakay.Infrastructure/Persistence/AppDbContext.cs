@@ -686,6 +686,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasIndex(x => new { x.OperatorId, x.CreatedAtUtc });
             entity.HasIndex(x => new { x.OperatorId, x.Status });
             entity.HasIndex(x => x.CustomerId);
+            entity.HasIndex(x => x.MatchedListingId);
             entity.Property(x => x.LocationDetails).HasMaxLength(400).IsRequired();
             entity.Property(x => x.Notes).HasMaxLength(1000);
             entity.Property(x => x.MobileNumber).HasMaxLength(20).IsRequired();
@@ -696,6 +697,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.HasOne(x => x.Customer)
                 .WithMany()
                 .HasForeignKey(x => x.CustomerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.MatchedListing)
+                .WithMany()
+                .HasForeignKey(x => x.MatchedListingId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

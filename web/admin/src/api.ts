@@ -1455,6 +1455,41 @@ export type OperatorInboxItem = {
   readAtUtc: string | null
 }
 
+export type OperatorRentalInquiry = {
+  id: string
+  customerName: string
+  mobileNumber: string
+  vehicleType: string
+  scheduleFromUtc: string
+  scheduleToUtc: string
+  locationDetails: string
+  locationLat: number
+  locationLng: number
+  notes: string | null
+  status: string
+  createdAtUtc: string
+  matchedListingId: string | null
+  matchedPlate: string | null
+  matchedAtUtc: string | null
+}
+
+export type OperatorCarListing = {
+  id: string
+  customerName: string
+  mobileNumber: string
+  vehicleType: string
+  plateNumber: string
+  seater: number
+  frontImageUrl: string | null
+  backImageUrl: string | null
+  leftImageUrl: string | null
+  rightImageUrl: string | null
+  insideImageUrl: string | null
+  availableDays: string[]
+  status: string
+  createdAtUtc: string
+}
+
 export type AuditAction =
   | 'OperatorCreated'
   | 'OperatorUpdated'
@@ -2948,41 +2983,49 @@ export const api = {
     request<OperatorInboxItem>(`/api/operator/inbox/${id}/read`, { method: 'POST' }),
   readOperatorBillingInbox: () =>
     request<{ message: string }>('/api/operator/inbox/read-billing', { method: 'POST' }),
-  operatorRentals: (status?: string) =>
+  operatorRentalsSummary: () =>
+    request<{ pendingInquiries: number; pendingListings: number }>('/api/operator/rentals/summary'),
+  operatorRentalInquiries: (params?: { q?: string; status?: string; page?: number; pageSize?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.q) qs.set('q', params.q)
+    if (params?.status) qs.set('status', params.status)
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize))
+    const suffix = qs.toString() ? `?${qs}` : ''
+    return request<{
+      items: OperatorRentalInquiry[]
+      total: number
+      page: number
+      pageSize: number
+    }>(`/api/operator/rentals/inquiries${suffix}`)
+  },
+  operatorRentalListings: (params?: { q?: string; status?: string; page?: number; pageSize?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.q) qs.set('q', params.q)
+    if (params?.status) qs.set('status', params.status)
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize))
+    const suffix = qs.toString() ? `?${qs}` : ''
+    return request<{
+      items: OperatorCarListing[]
+      total: number
+      page: number
+      pageSize: number
+    }>(`/api/operator/rentals/listings${suffix}`)
+  },
+  operatorRentalMatches: (inquiryId: string) =>
+    request<OperatorCarListing[]>(`/api/operator/rentals/inquiries/${inquiryId}/matches`),
+  assignRentalMatch: (inquiryId: string, listingId: string) =>
     request<{
-      inquiries: {
-        id: string
-        customerName: string
-        mobileNumber: string
-        vehicleType: string
-        scheduleFromUtc: string
-        scheduleToUtc: string
-        locationDetails: string
-        locationLat: number
-        locationLng: number
-        notes: string | null
-        status: string
-        createdAtUtc: string
-      }[]
-      listings: {
-        id: string
-        customerName: string
-        mobileNumber: string
-        vehicleType: string
-        plateNumber: string
-        seater: number
-        frontImageUrl: string | null
-        backImageUrl: string | null
-        leftImageUrl: string | null
-        rightImageUrl: string | null
-        insideImageUrl: string | null
-        availableDays: string[]
-        status: string
-        createdAtUtc: string
-      }[]
-      pendingInquiries: number
-      pendingListings: number
-    }>(`/api/operator/rentals${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+      inquiryId: string
+      listingId: string
+      plateNumber: string
+      status: string
+      matchedAtUtc: string
+    }>(`/api/operator/rentals/inquiries/${inquiryId}/match`, {
+      method: 'POST',
+      body: JSON.stringify({ listingId }),
+    }),
   setRentalInquiryStatus: (id: string, status: string) =>
     request<{ id: string; status: string }>(`/api/operator/rentals/inquiries/${id}/status`, {
       method: 'POST',
