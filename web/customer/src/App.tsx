@@ -59,6 +59,7 @@ import { lastKnownGps, readBootGps, readPickupGps, readGps, watchTripGps } from 
 import { applyBrand, DEFAULT_BRAND_NAME, type BrandingConfig } from './brand-themes'
 import { isRiderDownloadPath, RiderDownloadPage } from './RiderDownloadPage'
 import { isPassengerDownloadPath, PassengerDownloadPage } from './PassengerDownloadPage'
+import { isMobileAuthPath, MobileAuthPage } from './MobileAuthPage'
 
 type Tab = 'home' | 'booking' | 'favorites' | 'account' | 'rental'
 
@@ -99,7 +100,8 @@ export default function App() {
   const [branding, setBranding] = useState<BrandingConfig | null>(null)
   const riderDownload = isRiderDownloadPath()
   const passengerDownload = isPassengerDownloadPath()
-  const publicDownload = riderDownload || passengerDownload
+  const mobileAuth = isMobileAuthPath()
+  const publicDownload = riderDownload || passengerDownload || mobileAuth
 
   useEffect(() => {
     if (publicDownload) return
@@ -167,6 +169,7 @@ export default function App() {
 
   if (riderDownload) return <RiderDownloadPage />
   if (passengerDownload) return <PassengerDownloadPage />
+  if (mobileAuth) return <MobileAuthPage />
 
   if (boot) {
     return (
