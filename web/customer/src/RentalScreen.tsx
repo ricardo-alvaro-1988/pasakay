@@ -57,18 +57,20 @@ function VehiclePicker({
   onChange: (type: VehicleType) => void
 }) {
   return (
-    <div className="rental-vehicles">
+    <div className="vehicles rental-vehicle-list">
       {PLATFORM_VEHICLE_TYPES.map((type) => (
         <button
           key={type}
           type="button"
-          className={value === type ? 'on' : ''}
+          className={`vehicle${value === type ? ' on' : ''}`}
           onClick={() => onChange(type)}
         >
-          <span className="icon">
+          <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
             <img src={vehicleArt(type)} alt="" />
           </span>
-          <span>{vehicleLabel(type)}</span>
+          <span className="copy">
+            <b>{vehicleLabel(type)}</b>
+          </span>
         </button>
       ))}
     </div>
@@ -114,7 +116,10 @@ function LocationPicker({
           zoom: location || (initialLat != null && initialLng != null) ? 15 : 6,
           disableDefaultUI: true,
           zoomControl: true,
-          gestureHandling: 'greedy',
+          // Keep page scroll; require two-finger / ctrl+scroll to pan zoom the map.
+          gestureHandling: 'cooperative',
+          scrollwheel: false,
+          draggable: true,
         })
         mapRef.current = map
         map.addListener('click', (event) => {

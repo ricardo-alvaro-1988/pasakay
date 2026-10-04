@@ -4238,8 +4238,12 @@ button.where-toggle .where { pointer-events: none; }
 }
 
 .rental-panel {
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding-bottom: 24px;
+  touch-action: pan-y;
 }
 .rental-chooser {
   display: grid;
@@ -4276,37 +4280,11 @@ button.where-toggle .where { pointer-events: none; }
   padding: 12px 14px;
   background: var(--input);
 }
-.rental-vehicles {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+.rental-vehicle-list {
+  margin: 0;
 }
-.rental-vehicles button {
-  display: grid;
-  gap: 6px;
-  place-items: center;
-  padding: 10px 6px;
-  border-radius: 16px;
-  border: 1px solid var(--line);
-  background: var(--chip);
-  font-size: 11px;
-  font-weight: 700;
-}
-.rental-vehicles button.on {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, #fff);
-  color: var(--accent);
-}
-.rental-vehicles .icon {
-  width: 54px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-}
-.rental-vehicles .icon img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+.rental-vehicle-list .vehicle .price {
+  display: none;
 }
 .rental-dates {
   display: grid;
@@ -4332,11 +4310,13 @@ button.where-toggle .where { pointer-events: none; }
   overflow: hidden;
   border: 1px solid var(--line);
   background: var(--chip);
-  min-height: 200px;
+  min-height: 180px;
+  /* Stop map touch gestures from fighting the panel scroll. */
+  touch-action: pan-y;
 }
 .rental-map {
   width: 100%;
-  height: 220px;
+  height: 180px;
 }
 .rental-map-loading {
   position: absolute;
