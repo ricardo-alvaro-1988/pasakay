@@ -122,26 +122,54 @@ export function loadGoogleMaps(key: string) {
   if (ready) return Promise.resolve(ready)
   if (loader) return loader
   loader = new Promise((resolve, reject) => {
+    let settled = false
+    const finishOk = (): boolean => {
+      if (settled) return true
+      const maps = window.google?.maps
+      if (!maps) return false
+      settled = true
+      resolve(maps)
+      return true
+    }
+    const finishErr = (message: string) => {
+      if (settled) return
+      settled = true
+      loader = null
+      reject(new Error(message))
+    }
+
     const existing = document.querySelector<HTMLScriptElement>('script[data-yp-maps]')
     if (existing) {
+      if (finishOk()) return
+      // Script tag may already have finished — `load` will never fire again.
       existing.addEventListener('load', () => {
-        const maps = window.google?.maps
-        if (maps) resolve(maps)
-        else reject(new Error('Google Maps did not initialize.'))
+        if (!finishOk()) finishErr('Google Maps did not initialize.')
       })
+      existing.addEventListener('error', () => finishErr('Google Maps failed to load.'))
+      let ticks = 0
+      const poll = window.setInterval(() => {
+        ticks += 1
+        if (finishOk()) {
+          window.clearInterval(poll)
+          return
+        }
+        if (ticks >= 100) {
+          window.clearInterval(poll)
+          finishErr('Google Maps timed out.')
+        }
+      }, 50)
       return
     }
+
     const script = document.createElement('script')
     script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`
     script.async = true
     script.defer = true
     script.dataset.ypMaps = '1'
     script.onload = () => {
-      const maps = window.google?.maps
-      if (maps) resolve(maps)
-      else reject(new Error('Google Maps did not initialize.'))
+      if (!finishOk()) finishErr('Google Maps did not initialize.')
     }
-    script.onerror = () => reject(new Error('Google Maps failed to load.'))
+    script.onerror = () => finishErr('Google Maps failed to load.')
     document.head.appendChild(script)
   })
   return loader

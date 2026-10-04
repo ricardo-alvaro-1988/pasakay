@@ -893,7 +893,10 @@ button.brand-pill:active { transform: scale(.98); }
   box-shadow: var(--shadow);
 }
 .nav.nav-with-favs {
-  grid-template-columns: 1fr 1fr auto 1fr 1fr 1fr;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.nav.nav-with-favs.nav-with-pabili {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 .nav button {
   border: 0;
@@ -4237,13 +4240,65 @@ button.where-toggle .where { pointer-events: none; }
   color: color-mix(in srgb, var(--accent) 55%, #6b7280);
 }
 
-.rental-panel {
+/* Dedicated rental sheet — avoids .page-panel scrollbar clipping */
+.rental-sheet {
+  position: absolute;
+  z-index: 4;
+  left: 8px;
+  right: 8px;
+  top: 12px;
+  bottom: 84px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+.rental-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  max-width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 24px;
-  touch-action: pan-y;
+  padding: 12px 14px 22px;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 40%, transparent) transparent;
+}
+.rental-sheet-body::-webkit-scrollbar {
+  width: 4px;
+}
+.rental-sheet-body::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 42%, transparent);
+  border-radius: 99px;
+}
+.rental-sheet-body > h2 {
+  margin: 0 0 8px;
+}
+.rental-sheet-body > .ghost {
+  margin-bottom: 8px;
+}
+@media (min-width: 900px) {
+  .rental-sheet {
+    left: 24px;
+    top: 84px;
+    bottom: 24px;
+    width: min(400px, calc(100% - 48px));
+    right: auto;
+    border-radius: 28px;
+  }
+  .rental-sheet-body {
+    padding: 18px 20px 24px;
+  }
 }
 .rental-chooser {
   display: grid;
@@ -4267,34 +4322,76 @@ button.where-toggle .where { pointer-events: none; }
   display: grid;
   gap: 12px;
   margin-top: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-x: clip;
 }
 .rental-form .field {
   display: grid;
   gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 .rental-form .field input,
-.rental-form .field textarea {
+.rental-form .field textarea,
+.rental-location input {
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 12px 14px;
   background: var(--input);
 }
-.rental-vehicle-list {
+.rental-form .field input[type='datetime-local'] {
+  font-size: 16px; /* avoid mobile zoom + keep control readable */
+}
+.rental-vehicle-list.vehicles {
+  display: flex;
+  grid-template-columns: none;
+  gap: 8px;
   margin: 0;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+.rental-vehicle-list.vehicles::-webkit-scrollbar {
+  display: none;
+}
+.rental-vehicle-list .vehicle {
+  flex: 0 0 150px;
+  width: 150px;
+  max-width: 150px;
+  min-width: 150px;
+  box-sizing: border-box;
 }
 .rental-vehicle-list .vehicle .price {
   display: none;
 }
+.rental-vehicle-list .vehicle .copy b {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  font-size: 12px;
+  line-height: 1.2;
+}
+/* From/To always stacked — datetime-local is too wide for 2 columns on phones */
 .rental-dates {
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
-}
-@media (min-width: 420px) {
-  .rental-dates {
-    grid-template-columns: 1fr 1fr;
-  }
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 .rental-hint {
   margin: 0;
@@ -4303,6 +4400,9 @@ button.where-toggle .where { pointer-events: none; }
 .rental-location {
   display: grid;
   gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 .rental-map-wrap {
   position: relative;
@@ -4310,13 +4410,15 @@ button.where-toggle .where { pointer-events: none; }
   overflow: hidden;
   border: 1px solid var(--line);
   background: var(--chip);
-  min-height: 180px;
-  /* Stop map touch gestures from fighting the panel scroll. */
+  min-height: 160px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   touch-action: pan-y;
 }
 .rental-map {
   width: 100%;
-  height: 180px;
+  height: 160px;
 }
 .rental-map-loading {
   position: absolute;
@@ -4347,6 +4449,8 @@ button.where-toggle .where { pointer-events: none; }
 button.primary.rental-submit {
   display: block;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   margin-top: 8px;
   border: 0;
   border-radius: 14px;

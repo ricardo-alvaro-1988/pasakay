@@ -92,6 +92,7 @@ function LocationPicker({
   const mapRef = useRef<MapHandle | null>(null)
   const markerRef = useRef<MarkerHandle | null>(null)
   const mapsRef = useRef<Awaited<ReturnType<typeof loadGoogleMaps>> | null>(null)
+  const onLocationRef = useRef(onLocation)
   const [query, setQuery] = useState('')
   const [hints, setHints] = useState<Prediction[]>([])
   const [geoHits, setGeoHits] = useState<StopResult[]>([])
@@ -100,53 +101,70 @@ function LocationPicker({
   const [mapReady, setMapReady] = useState(false)
 
   useEffect(() => {
+    onLocationRef.current = onLocation
+  }, [onLocation])
+
+  useEffect(() => {
     let cancelled = false
-    void (async () => {
-      try {
-        const { googleMapsBrowserKey } = await api.mapsConfig()
-        const maps = await loadGoogleMaps(googleMapsBrowserKey)
-        if (cancelled || !mapEl.current) return
-        mapsRef.current = maps
-        const center = {
-          lat: location?.lat ?? initialLat ?? PH.lat,
-          lng: location?.lng ?? initialLng ?? PH.lng,
-        }
-        const map = new maps.Map(mapEl.current, {
-          center,
-          zoom: location || (initialLat != null && initialLng != null) ? 15 : 6,
-          disableDefaultUI: true,
-          zoomControl: true,
-          // Keep page scroll; require two-finger / ctrl+scroll to pan zoom the map.
-          gestureHandling: 'cooperative',
-          scrollwheel: false,
-          draggable: true,
-        })
-        mapRef.current = map
-        map.addListener('click', (event) => {
-          const latLng = event.latLng
-          if (!latLng) return
-          const lat = latLng.lat()
-          const lng = latLng.lng()
-          void reverseGeocode(maps, lat, lng).then((details) => {
-            onLocation({
-              label: details.split(',')[0]?.trim() || 'Pinned location',
-              details,
-              lat,
-              lng,
+    const boot = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const { googleMapsBrowserKey } = await api.mapsConfig()
+          const maps = await loadGoogleMaps(googleMapsBrowserKey)
+          if (cancelled || !mapEl.current) return
+          mapsRef.current = maps
+          const center = {
+            lat: initialLat ?? PH.lat,
+            lng: initialLng ?? PH.lng,
+          }
+          const map = new maps.Map(mapEl.current, {
+            center,
+            zoom: initialLat != null && initialLng != null ? 15 : 6,
+            disableDefaultUI: true,
+            zoomControl: true,
+            gestureHandling: 'cooperative',
+            scrollwheel: false,
+            draggable: true,
+          })
+          mapRef.current = map
+          map.addListener('click', (event) => {
+            const latLng = event.latLng
+            if (!latLng) return
+            const lat = latLng.lat()
+            const lng = latLng.lng()
+            void reverseGeocode(maps, lat, lng).then((details) => {
+              onLocationRef.current({
+                label: details.split(',')[0]?.trim() || 'Pinned location',
+                details,
+                lat,
+                lng,
+              })
             })
           })
-        })
-        if (!cancelled) setMapReady(true)
-      } catch {
-        if (!cancelled) setError('Could not load the map.')
-      }
-    })()
+          // Map was created in a flex/scroll sheet — force a layout pass.
+          window.setTimeout(() => {
+            try {
+              map.setOptions({})
+              map.panTo(center)
+            } catch {
+              /* ignore */
+            }
+          }, 80)
+          if (!cancelled) setMapReady(true)
+        } catch (err) {
+          if (!cancelled) {
+            setMapReady(true)
+            setError(err instanceof Error ? err.message : 'Could not load the map.')
+          }
+        }
+      })()
+    }, 0)
     return () => {
       cancelled = true
+      window.clearTimeout(boot)
       markerRef.current?.setMap(null)
       markerRef.current = null
       mapRef.current = null
-      mapsRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -170,7 +188,7 @@ function LocationPicker({
         const lat = pos.lat()
         const lng = pos.lng()
         void reverseGeocode(maps, lat, lng).then((details) => {
-          onLocation({
+          onLocationRef.current({
             label: details.split(',')[0]?.trim() || 'Pinned location',
             details,
             lat,
@@ -181,7 +199,7 @@ function LocationPicker({
     } else {
       markerRef.current.setPosition({ lat: location.lat, lng: location.lng })
     }
-  }, [location, onLocation])
+  }, [location])
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -262,7 +280,7 @@ function LocationPicker({
     <div className="rental-location">
       <div className="rental-map-wrap">
         <div className="rental-map" ref={mapEl} />
-        {!mapReady ? <div className="rental-map-loading muted">Loading map…</div> : null}
+        {!mapReady && !error ? <div className="rental-map-loading muted">Loading map…</div> : null}
       </div>
       <p className="muted rental-hint">Search a place, tap the map, or drag the pin.</p>
       <button type="button" className="secondary rental-gps" disabled={locating} onClick={() => void useCurrent()}>
@@ -492,46 +510,50 @@ export function RentalScreen({
 
   if (mode === 'chooser') {
     return (
-      <section className="panel page-panel rental-panel">
-        <h2>Rental</h2>
-        <p className="muted">Rent a vehicle or list yours with the local operator.</p>
-        <div className="rental-chooser">
-          <button type="button" className="rental-choice" onClick={() => { resetForms(); setMode('rent') }}>
-            <strong>Rental Car</strong>
-            <span className="muted">Request a vehicle for your schedule</span>
-          </button>
-          <button type="button" className="rental-choice" onClick={() => { resetForms(); setMode('list') }}>
-            <strong>List Your Car</strong>
-            <span className="muted">Offer your vehicle for rent</span>
-          </button>
+      <div className="rental-sheet">
+        <div className="rental-sheet-body">
+          <h2>Rental</h2>
+          <p className="muted">Rent a vehicle or list yours with the local operator.</p>
+          <div className="rental-chooser">
+            <button type="button" className="rental-choice" onClick={() => { resetForms(); setMode('rent') }}>
+              <strong>Rental Car</strong>
+              <span className="muted">Request a vehicle for your schedule</span>
+            </button>
+            <button type="button" className="rental-choice" onClick={() => { resetForms(); setMode('list') }}>
+              <strong>List Your Car</strong>
+              <span className="muted">Offer your vehicle for rent</span>
+            </button>
+          </div>
         </div>
-      </section>
+      </div>
     )
   }
 
   if (mode === 'done') {
     return (
-      <section className="panel page-panel rental-panel">
-        <h2>Thank you</h2>
-        <p className="rental-done">{doneMessage || 'We will come back to you soonest.'}</p>
-        <button type="button" className="primary" onClick={() => setMode('chooser')}>
-          Back to Rental
-        </button>
-      </section>
+      <div className="rental-sheet">
+        <div className="rental-sheet-body">
+          <h2>Thank you</h2>
+          <p className="rental-done">{doneMessage || 'We will come back to you soonest.'}</p>
+          <button type="button" className="primary rental-submit" onClick={() => setMode('chooser')}>
+            Back to Rental
+          </button>
+        </div>
+      </div>
     )
   }
 
   if (mode === 'rent') {
     return (
-      <section className="panel page-panel rental-panel">
-        <button type="button" className="ghost" onClick={() => setMode('chooser')}>← Back</button>
-        <h2>Rental Car</h2>
-        <form className="rental-form" onSubmit={(e) => void submitRent(e)}>
-          <label className="field">
-            <span>Select vehicle type</span>
-          </label>
-          <VehiclePicker value={vehicle} onChange={setVehicle} />
-          <div className="rental-dates">
+      <div className="rental-sheet">
+        <div className="rental-sheet-body">
+          <button type="button" className="ghost" onClick={() => setMode('chooser')}>← Back</button>
+          <h2>Rental Car</h2>
+          <form className="rental-form" onSubmit={(e) => void submitRent(e)}>
+            <label className="field">
+              <span>Select vehicle type</span>
+            </label>
+            <VehiclePicker value={vehicle} onChange={setVehicle} />
             <label className="field">
               <span>From</span>
               <input
@@ -560,36 +582,37 @@ export function RentalScreen({
                 required
               />
             </label>
-          </div>
-          <p className="muted rental-hint">From must be at least 1 day from now. To defaults to From + 1 day.</p>
-          <label className="field">
-            <span>Location</span>
-          </label>
-          <LocationPicker
-            location={location}
-            onLocation={setLocation}
-            initialLat={mapLat}
-            initialLng={mapLng}
-          />
-          <label className="field">
-            <span>Notes</span>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={1000} placeholder="Optional details" />
-          </label>
-          <label className="field">
-            <span>Mobile number</span>
-            <input value={mobile} onChange={(e) => setMobile(e.target.value)} required inputMode="tel" placeholder="09xxxxxxxxx" />
-          </label>
-          {error ? <p className="error">{error}</p> : null}
-          <button className="primary rental-submit" type="submit" disabled={busy}>
-            {busy ? 'Submitting…' : 'Submit'}
-          </button>
-        </form>
-      </section>
+            <p className="muted rental-hint">From must be at least 1 day from now. To defaults to From + 1 day.</p>
+            <label className="field">
+              <span>Location</span>
+            </label>
+            <LocationPicker
+              location={location}
+              onLocation={setLocation}
+              initialLat={mapLat}
+              initialLng={mapLng}
+            />
+            <label className="field">
+              <span>Notes</span>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={1000} placeholder="Optional details" />
+            </label>
+            <label className="field">
+              <span>Mobile number</span>
+              <input value={mobile} onChange={(e) => setMobile(e.target.value)} required inputMode="tel" placeholder="09xxxxxxxxx" />
+            </label>
+            {error ? <p className="error">{error}</p> : null}
+            <button className="primary rental-submit" type="submit" disabled={busy}>
+              {busy ? 'Submitting…' : 'Submit'}
+            </button>
+          </form>
+        </div>
+      </div>
     )
   }
 
   return (
-    <section className="panel page-panel rental-panel">
+    <div className="rental-sheet">
+      <div className="rental-sheet-body">
       <button type="button" className="ghost" onClick={() => setMode('chooser')}>← Back</button>
       <h2>List Your Car</h2>
       <form className="rental-form" onSubmit={(e) => void submitList(e)}>
@@ -670,6 +693,7 @@ export function RentalScreen({
           {busy ? 'Submitting…' : 'Submit'}
         </button>
       </form>
-    </section>
+      </div>
+    </div>
   )
 }

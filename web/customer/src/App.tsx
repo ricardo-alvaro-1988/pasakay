@@ -1057,8 +1057,9 @@ function Home({
 
   return (
     <>
-      <div className="map" ref={mapEl} />
+      <div className="map" ref={mapEl} aria-hidden={tab === 'rental' || tab === 'account' || tab === 'favorites' || tab === 'booking'} style={tab === 'rental' || tab === 'account' || tab === 'favorites' || tab === 'booking' ? { visibility: 'hidden', pointerEvents: 'none' } : undefined} />
       <div className="hud">
+        {tab === 'home' ? (
         <div className="topbar">
           <div className="brand-col">
             {pabiliEnabled ? (
@@ -1097,6 +1098,7 @@ function Home({
             <ShowQrButton onClick={() => setShowQr(true)} />
           )}
         </div>
+        ) : null}
         {tab === 'home' && (
           <div className="home-dock">
             <button className="locate" type="button" disabled={locating} onClick={() => void useCurrentLocation(false)} aria-label="My location">
@@ -1381,15 +1383,15 @@ function Home({
             />
           </section>
         )}
-        {tab === 'rental' && (
+        {tab === 'rental' ? (
           <RentalScreen deskMobile={desk.phoneNumber} mapLat={desk.mapLat} mapLng={desk.mapLng} />
-        )}
+        ) : null}
         {tab === 'account' && (
           <section className="panel page-panel">
             <AccountHub desk={desk} page={accountPage} onPage={onAccountPage} onDesk={onDesk} onLogout={onLogout} />
           </section>
         )}
-        <nav className="nav nav-with-favs">
+        <nav className={`nav nav-with-favs${pabiliEnabled ? ' nav-with-pabili' : ''}`}>
           <button className={tab === 'home' ? 'on' : ''} onClick={() => onTab('home')}>
             <span className="ico"><HomeIcon /></span>
             Home
