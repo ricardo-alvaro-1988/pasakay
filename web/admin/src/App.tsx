@@ -3469,6 +3469,7 @@ function OperatorFormPage({
     pabiliFareSystemCommissionPercent: '10',
     pabiliMarkupSystemCommissionPercent: '10',
     pabiliEnabled: false,
+    rentalEnabled: false,
   })
   const [vehicleCommissions, setVehicleCommissions] = useState<Array<{
     vehicleCategoryId: string
@@ -3519,6 +3520,7 @@ function OperatorFormPage({
           pabiliFareSystemCommissionPercent: String(op.pabiliFareSystemCommissionPercent ?? 10),
           pabiliMarkupSystemCommissionPercent: String(op.pabiliMarkupSystemCommissionPercent ?? 10),
           pabiliEnabled: !!op.pabiliEnabled,
+          rentalEnabled: !!op.rentalEnabled,
         })
         setVehicleCommissions(
           offers.map((offer) => ({
@@ -3626,6 +3628,7 @@ function OperatorFormPage({
       data.append('pabiliFareSystemCommissionPercent', String(pabiliFareSystem))
       data.append('pabiliMarkupSystemCommissionPercent', String(pabiliMarkupSystem))
       data.append('pabiliEnabled', form.pabiliEnabled ? 'true' : 'false')
+      data.append('rentalEnabled', form.rentalEnabled ? 'true' : 'false')
       for (const area of areas) {
         data.append('barangayIds', area.barangayId)
       }
@@ -3817,6 +3820,16 @@ function OperatorFormPage({
               >
                 <option value="no">Off — customers see Scan instead</option>
                 <option value="yes">On — Pasakay / Pabili toggle available</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Activate Rental</span>
+              <select
+                value={form.rentalEnabled ? 'yes' : 'no'}
+                onChange={(e) => setForm({ ...form, rentalEnabled: e.target.value === 'yes' })}
+              >
+                <option value="no">Off — customers and operator hide Rental</option>
+                <option value="yes">On — Rental available for this operator</option>
               </select>
             </label>
             <label className="field">

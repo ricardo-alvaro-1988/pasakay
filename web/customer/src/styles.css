@@ -895,8 +895,12 @@ button.brand-pill:active { transform: scale(.98); }
 .nav.nav-with-favs {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
-.nav.nav-with-favs.nav-with-pabili {
+.nav.nav-with-favs.nav-with-pabili,
+.nav.nav-with-favs.nav-with-rental {
   grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.nav.nav-with-favs.nav-with-pabili.nav-with-rental {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
 }
 .nav button {
   border: 0;

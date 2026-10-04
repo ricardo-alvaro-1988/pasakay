@@ -776,6 +776,7 @@ export type OperatorDetail = OperatorListItem & {
   liveBookingExpiryMinutes?: number
   scheduledBookingGraceMinutes?: number
   pabiliEnabled?: boolean
+  rentalEnabled?: boolean
 }
 
 export type CustomerListItem = {

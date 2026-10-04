@@ -86,6 +86,7 @@ public record OperatorDetailResponse(
     string? GovernmentIdPhotoUrl,
     bool IsActive,
     bool PabiliEnabled,
+    bool RentalEnabled,
     decimal MotorcycleCommissionPercent,
     decimal TricycleCommissionPercent,
     decimal PabiliFareSystemCommissionPercent,
@@ -103,7 +104,7 @@ public record OperatorDetailResponse(
     IReadOnlyList<RiderListItem> Riders,
     IReadOnlyList<VehicleCountItem>? RiderVehicleCounts = null);
 
-public record CustomerServicesResponse(bool PabiliEnabled);
+public record CustomerServicesResponse(bool PabiliEnabled, bool RentalEnabled);
 
 public record SaveBookingDispatchModeRequest(
     BookingDispatchMode BookingDispatchMode,

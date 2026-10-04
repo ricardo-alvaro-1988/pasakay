@@ -531,6 +531,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             GovernmentId = form.GovernmentId.Trim(),
             IsActive = true,
             PabiliEnabled = form.PabiliEnabled ?? false,
+            RentalEnabled = form.RentalEnabled ?? false,
             MotorcycleCommissionPercent = motorcycleCommission,
             TricycleCommissionPercent = tricycleCommission,
             PabiliFareSystemCommissionPercent = pabiliFareSystem,
@@ -814,6 +815,10 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
         {
             op.PabiliEnabled = pabiliEnabled;
         }
+        if (form.RentalEnabled is bool rentalEnabled)
+        {
+            op.RentalEnabled = rentalEnabled;
+        }
         op.UpdatedAtUtc = DateTime.UtcNow;
 
         await VehicleCatalogBootstrap.EnsureAsync(db, cancellationToken);
@@ -953,6 +958,7 @@ public class AdminController(AppDbContext db, UploadStore uploads, IOtpStore otp
             UploadUrls.FromPath(op.GovernmentIdPhotoPath),
             op.IsActive,
             op.PabiliEnabled,
+            op.RentalEnabled,
             op.MotorcycleCommissionPercent,
             op.TricycleCommissionPercent,
             op.PabiliFareSystemCommissionPercent,

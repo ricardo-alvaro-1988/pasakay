@@ -69,13 +69,18 @@ public class CustomerBookingsController(
         }
         else if (lat is double && lng is double)
         {
+            // Lat/lng alone has no barangay pin — prefer an active operator that offers Pabili or Rental.
             op = await db.Operators.AsNoTracking()
-                .Where(x => x.IsActive && x.Merchants.Any(m => m.IsActive))
+                .Where(x => x.IsActive && (
+                    (x.PabiliEnabled && x.Merchants.Any(m => m.IsActive))
+                    || x.RentalEnabled))
                 .OrderBy(x => x.CompanyName)
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        return Ok(new CustomerServicesResponse(op?.PabiliEnabled == true));
+        return Ok(new CustomerServicesResponse(
+            op?.PabiliEnabled == true,
+            op?.RentalEnabled == true));
     }
 
     [HttpGet("places")]

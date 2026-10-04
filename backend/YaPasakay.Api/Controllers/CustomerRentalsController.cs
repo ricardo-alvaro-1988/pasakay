@@ -104,6 +104,11 @@ public class CustomerRentalsController(AppDbContext db, UploadStore uploads) : C
             return BadRequest(new { message = "No operator covers this location yet. Try another pin nearby." });
         }
 
+        if (!op.RentalEnabled)
+        {
+            return BadRequest(new { message = "Rental is not available in this area yet." });
+        }
+
         var row = new CustomerRentalInquiry
         {
             OperatorId = op.Id,
@@ -202,6 +207,11 @@ public class CustomerRentalsController(AppDbContext db, UploadStore uploads) : C
         if (op is null)
         {
             return BadRequest(new { message = "No operator in your area yet. Turn on location or try again later." });
+        }
+
+        if (!op.RentalEnabled)
+        {
+            return BadRequest(new { message = "Rental is not available in this area yet." });
         }
 
         var row = new CustomerCarListing

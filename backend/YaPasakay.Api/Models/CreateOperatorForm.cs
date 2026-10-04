@@ -18,4 +18,5 @@ public class CreateOperatorForm
     public decimal? PabiliFareSystemCommissionPercent { get; set; }
     public decimal? PabiliMarkupSystemCommissionPercent { get; set; }
     public bool? PabiliEnabled { get; set; }
+    public bool? RentalEnabled { get; set; }
 }

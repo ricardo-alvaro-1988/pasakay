@@ -592,7 +592,7 @@ export const api = {
     if (opts?.lng != null) params.set('lng', String(opts.lng))
     if (opts?.barangayId) params.set('barangayId', opts.barangayId)
     const q = params.toString()
-    return request<{ pabiliEnabled: boolean }>(`/api/customer/services${q ? `?${q}` : ''}`)
+    return request<{ pabiliEnabled: boolean; rentalEnabled: boolean }>(`/api/customer/services${q ? `?${q}` : ''}`)
   },
   quote: (body: BookBody) => request<Quote>('/api/customer/quote', { method: 'POST', body: JSON.stringify(body) }),
   availableRiders: (opts: {

@@ -58,19 +58,32 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
 
     public record MatchBody(Guid ListingId);
 
+    private async Task<(Operator? Op, ActionResult? Error)> RequireRentalOperatorAsync(CancellationToken cancellationToken)
+    {
+        var (op, code, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return (null, StatusCode(code, new { message }));
+        }
+
+        if (!op.RentalEnabled)
+        {
+            return (null, StatusCode(StatusCodes.Status403Forbidden, new { message = "Rental is off for this operator. Ask admin to activate it." }));
+        }
+
+        return (op, null);
+    }
+
     /// <summary>Legacy combined list (kept for older clients).</summary>
     [HttpGet]
     public async Task<ActionResult<object>> List(
         [FromQuery] string? status,
         CancellationToken cancellationToken)
     {
-        var (op, code, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
-        if (op is null)
-        {
-            return StatusCode(code, new { message });
-        }
+        var (op, error) = await RequireRentalOperatorAsync(cancellationToken);
+        if (error is not null) return error;
 
-        var inquiries = await ListInquiriesCore(op.Id, null, status, 1, 100, cancellationToken);
+        var inquiries = await ListInquiriesCore(op!.Id, null, status, 1, 100, cancellationToken);
         var listings = await ListListingsCore(op.Id, null, status, 1, 100, cancellationToken);
         var summary = await SummaryCore(op.Id, cancellationToken);
         return Ok(new
@@ -85,13 +98,10 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
     [HttpGet("summary")]
     public async Task<ActionResult<RentalsSummaryDto>> Summary(CancellationToken cancellationToken)
     {
-        var (op, code, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
-        if (op is null)
-        {
-            return StatusCode(code, new { message });
-        }
+        var (op, error) = await RequireRentalOperatorAsync(cancellationToken);
+        if (error is not null) return error;
 
-        return Ok(await SummaryCore(op.Id, cancellationToken));
+        return Ok(await SummaryCore(op!.Id, cancellationToken));
     }
 
     [HttpGet("inquiries")]
@@ -102,13 +112,10 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
         [FromQuery] int pageSize = DefaultPageSize,
         CancellationToken cancellationToken = default)
     {
-        var (op, code, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
-        if (op is null)
-        {
-            return StatusCode(code, new { message });
-        }
+        var (op, error) = await RequireRentalOperatorAsync(cancellationToken);
+        if (error is not null) return error;
 
-        return Ok(await ListInquiriesCore(op.Id, q, status, page, pageSize, cancellationToken));
+        return Ok(await ListInquiriesCore(op!.Id, q, status, page, pageSize, cancellationToken));
     }
 
     [HttpGet("listings")]
@@ -119,13 +126,10 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
         [FromQuery] int pageSize = DefaultPageSize,
         CancellationToken cancellationToken = default)
     {
-        var (op, code, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
-        if (op is null)
-        {
-            return StatusCode(code, new { message });
-        }
+        var (op, error) = await RequireRentalOperatorAsync(cancellationToken);
+        if (error is not null) return error;
 
-        return Ok(await ListListingsCore(op.Id, q, status, page, pageSize, cancellationToken));
+        return Ok(await ListListingsCore(op!.Id, q, status, page, pageSize, cancellationToken));
     }
 
     [HttpGet("inquiries/{id:guid}/matches")]
@@ -133,14 +137,12 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
         Guid id,
         CancellationToken cancellationToken)
     {
-        var (op, code, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
-        if (op is null)
-        {
-            return StatusCode(code, new { message });
-        }
+        var (op, error) = await RequireRentalOperatorAsync(cancellationToken);
+        if (error is not null) return error;
+        var operatorId = op!.Id;
 
         var inquiry = await db.CustomerRentalInquiries.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op.Id, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == operatorId, cancellationToken);
         if (inquiry is null)
         {
             return NotFound(new { message = "Rental request not found." });
@@ -153,7 +155,7 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
 
         var candidates = await db.CustomerCarListings.AsNoTracking()
             .Include(x => x.Customer).ThenInclude(c => c.AppUser)
-            .Where(x => x.OperatorId == op.Id
+            .Where(x => x.OperatorId == operatorId
                 && x.VehicleType == inquiry.VehicleType
                 && (x.Status == RentalLeadStatus.Pending || x.Status == RentalLeadStatus.Contacted))
             .OrderByDescending(x => x.CreatedAtUtc)
@@ -161,7 +163,7 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
             .ToListAsync(cancellationToken);
 
         var matchedListingIds = await db.CustomerRentalInquiries.AsNoTracking()
-            .Where(x => x.OperatorId == op.Id && x.MatchedListingId != null)
+            .Where(x => x.OperatorId == operatorId && x.MatchedListingId != null)
             .Select(x => x.MatchedListingId!.Value)
             .ToListAsync(cancellationToken);
         var taken = matchedListingIds.ToHashSet();
@@ -180,14 +182,11 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
         [FromBody] MatchBody body,
         CancellationToken cancellationToken)
     {
-        var (op, code, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
-        if (op is null)
-        {
-            return StatusCode(code, new { message });
-        }
+        var (op, error) = await RequireRentalOperatorAsync(cancellationToken);
+        if (error is not null) return error;
 
         var inquiry = await db.CustomerRentalInquiries
-            .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op.Id, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op!.Id, cancellationToken);
         if (inquiry is null)
         {
             return NotFound(new { message = "Rental request not found." });
@@ -204,7 +203,7 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
         }
 
         var listing = await db.CustomerCarListings
-            .FirstOrDefaultAsync(x => x.Id == body.ListingId && x.OperatorId == op.Id, cancellationToken);
+            .FirstOrDefaultAsync(x => x.Id == body.ListingId && x.OperatorId == op!.Id, cancellationToken);
         if (listing is null)
         {
             return NotFound(new { message = "Car listing not found." });
@@ -254,11 +253,8 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
     [HttpPost("inquiries/{id:guid}/status")]
     public async Task<ActionResult> SetInquiryStatus(Guid id, [FromBody] StatusBody body, CancellationToken cancellationToken)
     {
-        var (op, code, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
-        if (op is null)
-        {
-            return StatusCode(code, new { message });
-        }
+        var (op, error) = await RequireRentalOperatorAsync(cancellationToken);
+        if (error is not null) return error;
 
         if (!TryParseLeadStatus(body.Status, out var next)
             || next is not (RentalLeadStatus.Pending or RentalLeadStatus.Contacted or RentalLeadStatus.Closed or RentalLeadStatus.Matched))
@@ -266,7 +262,7 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = "Status must be Pending, Contacted, Matched, or Closed." });
         }
 
-        var row = await db.CustomerRentalInquiries.FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op.Id, cancellationToken);
+        var row = await db.CustomerRentalInquiries.FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op!.Id, cancellationToken);
         if (row is null)
         {
             return NotFound(new { message = "Rental request not found." });
@@ -286,11 +282,8 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
     [HttpPost("listings/{id:guid}/status")]
     public async Task<ActionResult> SetListingStatus(Guid id, [FromBody] StatusBody body, CancellationToken cancellationToken)
     {
-        var (op, code, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
-        if (op is null)
-        {
-            return StatusCode(code, new { message });
-        }
+        var (op, error) = await RequireRentalOperatorAsync(cancellationToken);
+        if (error is not null) return error;
 
         if (!TryParseLeadStatus(body.Status, out var next)
             || next is not (RentalLeadStatus.Pending or RentalLeadStatus.Contacted or RentalLeadStatus.Closed or RentalLeadStatus.Matched))
@@ -298,7 +291,7 @@ public class OperatorRentalsController(AppDbContext db) : ControllerBase
             return BadRequest(new { message = "Status must be Pending, Contacted, Matched, or Closed." });
         }
 
-        var row = await db.CustomerCarListings.FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op.Id, cancellationToken);
+        var row = await db.CustomerCarListings.FirstOrDefaultAsync(x => x.Id == id && x.OperatorId == op!.Id, cancellationToken);
         if (row is null)
         {
             return NotFound(new { message = "Car listing not found." });

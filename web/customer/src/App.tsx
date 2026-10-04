@@ -231,6 +231,7 @@ function RideApp({
   brandLogo: string
 }) {
   const [pabiliEnabled, setPabiliEnabled] = useState(false)
+  const [rentalEnabled, setRentalEnabled] = useState(false)
   const logout = () => {
     clearToken()
     onDesk(null)
@@ -246,13 +247,19 @@ function RideApp({
         const res = await api.customerServices({ lat, lng })
         if (dead) return
         setPabiliEnabled(!!res.pabiliEnabled)
+        setRentalEnabled(!!res.rentalEnabled)
         if (!res.pabiliEnabled && serviceMode === 'pabili') {
           onServiceMode('pasakay')
+        }
+        if (!res.rentalEnabled && tab === 'rental') {
+          onTab('home')
         }
       } catch {
         if (!dead) {
           setPabiliEnabled(false)
+          setRentalEnabled(false)
           if (serviceMode === 'pabili') onServiceMode('pasakay')
+          if (tab === 'rental') onTab('home')
         }
       }
     })()
@@ -286,6 +293,7 @@ function RideApp({
               tab={tab}
               onTab={onTab}
               pabiliEnabled={pabiliEnabled}
+              rentalEnabled={rentalEnabled}
               onSwitchToPabili={() => onServiceMode('pabili')}
               accountPage={accountPage}
               onAccountPage={onAccountPage}
@@ -307,6 +315,7 @@ function RideApp({
         tab={tab}
         onTab={onTab}
         pabiliEnabled={pabiliEnabled}
+        rentalEnabled={rentalEnabled}
         onSwitchToPabili={() => {
           if (pabiliEnabled) onServiceMode('pabili')
         }}
@@ -326,6 +335,7 @@ function Home({
   tab,
   onTab,
   pabiliEnabled,
+  rentalEnabled,
   onSwitchToPabili,
   accountPage,
   onAccountPage,
@@ -338,6 +348,7 @@ function Home({
   tab: Tab
   onTab: (tab: Tab) => void
   pabiliEnabled: boolean
+  rentalEnabled: boolean
   onSwitchToPabili: () => void
   accountPage: AccountPage
   onAccountPage: (page: AccountPage) => void
@@ -1383,7 +1394,7 @@ function Home({
             />
           </section>
         )}
-        {tab === 'rental' ? (
+        {tab === 'rental' && rentalEnabled ? (
           <RentalScreen deskMobile={desk.phoneNumber} mapLat={desk.mapLat} mapLng={desk.mapLng} />
         ) : null}
         {tab === 'account' && (
@@ -1391,7 +1402,7 @@ function Home({
             <AccountHub desk={desk} page={accountPage} onPage={onAccountPage} onDesk={onDesk} onLogout={onLogout} />
           </section>
         )}
-        <nav className={`nav nav-with-favs${pabiliEnabled ? ' nav-with-pabili' : ''}`}>
+        <nav className={`nav nav-with-favs${pabiliEnabled ? ' nav-with-pabili' : ''}${rentalEnabled ? ' nav-with-rental' : ''}`}>
           <button className={tab === 'home' ? 'on' : ''} onClick={() => onTab('home')}>
             <span className="ico"><HomeIcon /></span>
             Home
@@ -1410,10 +1421,12 @@ function Home({
             <span className="ico"><SosIcon /></span>
             {sosBusy ? '…' : 'SOS'}
           </button>
-          <button className={tab === 'rental' ? 'on' : ''} type="button" onClick={() => onTab('rental')}>
-            <span className="ico"><RentalIcon /></span>
-            Rental
-          </button>
+          {rentalEnabled ? (
+            <button className={tab === 'rental' ? 'on' : ''} type="button" onClick={() => onTab('rental')}>
+              <span className="ico"><RentalIcon /></span>
+              Rental
+            </button>
+          ) : null}
           {pabiliEnabled ? (
             <button type="button" onClick={onSwitchToPabili}>
               <span className="ico"><PabiliIcon /></span>
