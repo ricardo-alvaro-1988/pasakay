@@ -37,16 +37,35 @@ function pad(n: number) {
   return String(n).padStart(2, '0')
 }
 
-/** Local datetime-local value: now + daysAhead, keeping current hour/minute. */
-function localDateTimePlusDays(daysAhead: number, from?: Date) {
+/** Local datetime-local value: base + daysAhead (+ optional extra minutes). */
+function localDateTimePlusDays(daysAhead: number, from?: Date, extraMinutes = 0) {
   const d = from ? new Date(from.getTime()) : new Date()
   d.setDate(d.getDate() + daysAhead)
+  if (extraMinutes) d.setMinutes(d.getMinutes() + extraMinutes)
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
+/** Default rental From: tomorrow + 15 min so the form stays valid while the user fills it. */
+function defaultRentalFrom() {
+  return localDateTimePlusDays(1, undefined, 15)
+}
+
 function parseLocalDateTime(value: string) {
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? null : d
+  // Parse as local wall time (avoid UTC shift from `new Date('YYYY-MM-DDTHH:mm')` in some engines).
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value.trim())
+  if (!m) {
+    const d = new Date(value)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  return new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4]),
+    Number(m[5]),
+    0,
+    0,
+  )
 }
 
 function VehiclePicker({
@@ -347,11 +366,14 @@ export function RentalScreen({
   mapLat?: number | null
   mapLng?: number | null
 }) {
-  const minFrom = useMemo(() => localDateTimePlusDays(1), [])
   const [mode, setMode] = useState<Mode>('chooser')
   const [vehicle, setVehicle] = useState<VehicleType>('Motorcycle')
-  const [from, setFrom] = useState(() => localDateTimePlusDays(1))
-  const [to, setTo] = useState(() => localDateTimePlusDays(2))
+  const [from, setFrom] = useState(() => defaultRentalFrom())
+  const [to, setTo] = useState(() => {
+    const start = parseLocalDateTime(defaultRentalFrom()) ?? new Date()
+    return localDateTimePlusDays(1, start)
+  })
+  const minFrom = useMemo(() => localDateTimePlusDays(1), [mode, from])
   const [location, setLocation] = useState<StopResult | null>(null)
   const [notes, setNotes] = useState('')
   const [mobile, setMobile] = useState(deskMobile || '')
@@ -397,7 +419,7 @@ export function RentalScreen({
   function resetForms() {
     setError('')
     setVehicle('Motorcycle')
-    const nextFrom = localDateTimePlusDays(1)
+    const nextFrom = defaultRentalFrom()
     const fromDate = parseLocalDateTime(nextFrom) ?? new Date()
     setFrom(nextFrom)
     setTo(localDateTimePlusDays(1, fromDate))
@@ -420,10 +442,23 @@ export function RentalScreen({
       setError('Pin a location on the map or search a place.')
       return
     }
-    const fromDate = parseLocalDateTime(from)
+    let scheduleFrom = from
+    let fromDate = parseLocalDateTime(scheduleFrom)
     const toDate = parseLocalDateTime(to)
     if (!fromDate || !toDate) {
       setError('Choose a valid From and To date/time.')
+      return
+    }
+    // Keep From at least ~1 day ahead even if the form sat open for a while.
+    const minOk = Date.now() + 24 * 60 * 60 * 1000 - 5 * 60 * 1000
+    if (fromDate.getTime() < minOk) {
+      scheduleFrom = defaultRentalFrom()
+      fromDate = parseLocalDateTime(scheduleFrom) ?? fromDate
+      setFrom(scheduleFrom)
+      if (toDate.getTime() < fromDate.getTime()) {
+        setTo(localDateTimePlusDays(1, fromDate))
+      }
+      setError('From was updated to at least 1 day from now. Review the dates and submit again.')
       return
     }
     if (toDate.getTime() < fromDate.getTime()) {
@@ -435,7 +470,7 @@ export function RentalScreen({
     try {
       const data = new FormData()
       data.append('vehicleType', vehicle)
-      data.append('scheduleFrom', from)
+      data.append('scheduleFrom', scheduleFrom)
       data.append('scheduleTo', to)
       data.append('locationDetails', location.details)
       data.append('locationLat', String(location.lat))

@@ -68,7 +68,8 @@ public class CustomerRentalsController(AppDbContext db, UploadStore uploads) : C
             return BadRequest(new { message = "Schedule To must be on or after From." });
         }
 
-        var minFromPh = DateTime.UtcNow.Add(PhilippinesOffset).AddDays(1).AddMinutes(-2);
+        // 30-minute grace: form defaults to now+1d; users often submit several minutes later.
+        var minFromPh = DateTime.UtcNow.Add(PhilippinesOffset).AddDays(1).AddMinutes(-30);
         if (fromLocal < minFromPh)
         {
             return BadRequest(new { message = "Schedule From must be at least 1 day from now." });
