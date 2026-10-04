@@ -128,13 +128,8 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             x => x.DeleteStatus == DeleteAccountStatus.Pending
                 && db.Trips.Any(t => t.OperatorId == op.Id && t.CustomerId == x.Id),
             cancellationToken);
-        var pendingRentals =
-            await db.CustomerRentalInquiries.CountAsync(
-                x => x.OperatorId == op.Id && x.Status == RentalLeadStatus.Pending, cancellationToken)
-            + await db.CustomerCarListings.CountAsync(
-                x => x.OperatorId == op.Id && x.Status == RentalLeadStatus.Pending, cancellationToken);
 
-        return Ok(new OperatorNavAlertsResponse(pendingWallet, openSos, unreadBilling, pendingAccountDeletes, pendingRentals));
+        return Ok(new OperatorNavAlertsResponse(pendingWallet, openSos, unreadBilling, pendingAccountDeletes));
     }
 
     [HttpGet("fleet")]

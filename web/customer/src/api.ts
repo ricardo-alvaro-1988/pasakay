@@ -574,14 +574,6 @@ export const api = {
         notes: string | null
       }[]
     >('/api/public/rider-app/releases'),
-  rentalVehicles: () =>
-    request<{ vehicleType: string; name: string; iconKey: string; maxPassengers: number }[]>(
-      '/api/customer/rentals/vehicles',
-    ),
-  rentalInquire: (body: FormData) =>
-    requestForm<{ id: string; message: string }>('/api/customer/rentals/inquire', body),
-  rentalListCar: (body: FormData) =>
-    requestForm<{ id: string; message: string }>('/api/customer/rentals/list-car', body),
   googleSignIn: (idToken: string) =>
     request<AuthResponse>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
   mapsConfig: () => request<{ googleMapsBrowserKey: string }>('/api/public/maps'),

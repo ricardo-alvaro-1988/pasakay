@@ -1395,7 +1395,7 @@ function Home({
           </section>
         )}
         {tab === 'rental' && rentalEnabled ? (
-          <RentalScreen deskMobile={desk.phoneNumber} mapLat={desk.mapLat} mapLng={desk.mapLng} />
+          <RentalScreen desk={desk} onDesk={onDesk} onGoBooking={() => onTab('booking')} />
         ) : null}
         {tab === 'account' && (
           <section className="panel page-panel">

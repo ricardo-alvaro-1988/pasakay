@@ -88,15 +88,8 @@ public enum NotificationKind
     Announcement = 2,
     Sos = 3,
     AccountDelete = 4,
+    /// <summary>Legacy — rental leads removed; kept for old inbox rows.</summary>
     Rental = 5
-}
-
-public enum RentalLeadStatus
-{
-    Pending = 1,
-    Contacted = 2,
-    Closed = 3,
-    Matched = 4
 }
 
 public enum SurchargeKind

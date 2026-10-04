@@ -67,9 +67,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<VehicleOfferingLog> VehicleOfferingLogs => Set<VehicleOfferingLog>();
     public DbSet<CustomerLoginBlock> CustomerLoginBlocks => Set<CustomerLoginBlock>();
     public DbSet<RiderNotice> RiderNotices => Set<RiderNotice>();
-    public DbSet<CustomerRentalInquiry> CustomerRentalInquiries => Set<CustomerRentalInquiry>();
-    public DbSet<CustomerCarListing> CustomerCarListings => Set<CustomerCarListing>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AppUser>(entity =>
@@ -679,50 +676,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.Version).HasMaxLength(40).IsRequired();
             entity.Property(x => x.ApkPath).HasMaxLength(260).IsRequired();
             entity.Property(x => x.ReleaseNotes).HasMaxLength(2000);
-        });
-
-        modelBuilder.Entity<CustomerRentalInquiry>(entity =>
-        {
-            entity.HasIndex(x => new { x.OperatorId, x.CreatedAtUtc });
-            entity.HasIndex(x => new { x.OperatorId, x.Status });
-            entity.HasIndex(x => x.CustomerId);
-            entity.HasIndex(x => x.MatchedListingId);
-            entity.Property(x => x.LocationDetails).HasMaxLength(400).IsRequired();
-            entity.Property(x => x.Notes).HasMaxLength(1000);
-            entity.Property(x => x.MobileNumber).HasMaxLength(20).IsRequired();
-            entity.HasOne(x => x.Operator)
-                .WithMany()
-                .HasForeignKey(x => x.OperatorId)
-                .OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.Customer)
-                .WithMany()
-                .HasForeignKey(x => x.CustomerId)
-                .OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.MatchedListing)
-                .WithMany()
-                .HasForeignKey(x => x.MatchedListingId)
-                .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        modelBuilder.Entity<CustomerCarListing>(entity =>
-        {
-            entity.HasIndex(x => new { x.OperatorId, x.CreatedAtUtc });
-            entity.HasIndex(x => new { x.OperatorId, x.Status });
-            entity.HasIndex(x => x.CustomerId);
-            entity.Property(x => x.PlateNumber).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.FrontImagePath).HasMaxLength(260).IsRequired();
-            entity.Property(x => x.BackImagePath).HasMaxLength(260).IsRequired();
-            entity.Property(x => x.LeftImagePath).HasMaxLength(260).IsRequired();
-            entity.Property(x => x.RightImagePath).HasMaxLength(260).IsRequired();
-            entity.Property(x => x.InsideImagePath).HasMaxLength(260).IsRequired();
-            entity.HasOne(x => x.Operator)
-                .WithMany()
-                .HasForeignKey(x => x.OperatorId)
-                .OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.Customer)
-                .WithMany()
-                .HasForeignKey(x => x.CustomerId)
-                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<RiderInviteLink>(entity =>

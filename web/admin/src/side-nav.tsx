@@ -230,7 +230,6 @@ export const OPERATOR_MENU_GROUPS: SideNavGroup[] = [
     items: [
       { id: 'bookings', label: 'Booking', icon: '▢' },
       { id: 'schedule', label: 'Schedule', icon: '◷' },
-      { id: 'rentals', label: 'Rentals', icon: '▥' },
     ],
   },
   {

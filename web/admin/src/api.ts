@@ -64,7 +64,6 @@ export type PageId =
   | 'dashboard'
   | 'bookings'
   | 'schedule'
-  | 'rentals'
   | 'inbox'
   | 'rider-notices'
   | 'company'
@@ -1350,7 +1349,6 @@ export type OperatorNavAlerts = {
   openSos: number
   unreadBilling: number
   pendingAccountDeletes: number
-  pendingRentals?: number
 }
 
 export type AdminAlertItem = {
@@ -1448,47 +1446,12 @@ export type OperatorBookingListItem = {
 
 export type OperatorInboxItem = {
   id: string
-  kind: 'Billing' | 'Announcement' | 'Sos' | 'AccountDelete' | 'Rental'
+  kind: 'Billing' | 'Announcement' | 'Sos' | 'AccountDelete'
   title: string
   body: string
   billId: string | null
   createdAtUtc: string
   readAtUtc: string | null
-}
-
-export type OperatorRentalInquiry = {
-  id: string
-  customerName: string
-  mobileNumber: string
-  vehicleType: string
-  scheduleFromUtc: string
-  scheduleToUtc: string
-  locationDetails: string
-  locationLat: number
-  locationLng: number
-  notes: string | null
-  status: string
-  createdAtUtc: string
-  matchedListingId: string | null
-  matchedPlate: string | null
-  matchedAtUtc: string | null
-}
-
-export type OperatorCarListing = {
-  id: string
-  customerName: string
-  mobileNumber: string
-  vehicleType: string
-  plateNumber: string
-  seater: number
-  frontImageUrl: string | null
-  backImageUrl: string | null
-  leftImageUrl: string | null
-  rightImageUrl: string | null
-  insideImageUrl: string | null
-  availableDays: string[]
-  status: string
-  createdAtUtc: string
 }
 
 export type AuditAction =
@@ -2984,59 +2947,6 @@ export const api = {
     request<OperatorInboxItem>(`/api/operator/inbox/${id}/read`, { method: 'POST' }),
   readOperatorBillingInbox: () =>
     request<{ message: string }>('/api/operator/inbox/read-billing', { method: 'POST' }),
-  operatorRentalsSummary: () =>
-    request<{ pendingInquiries: number; pendingListings: number }>('/api/operator/rentals/summary'),
-  operatorRentalInquiries: (params?: { q?: string; status?: string; page?: number; pageSize?: number }) => {
-    const qs = new URLSearchParams()
-    if (params?.q) qs.set('q', params.q)
-    if (params?.status) qs.set('status', params.status)
-    if (params?.page) qs.set('page', String(params.page))
-    if (params?.pageSize) qs.set('pageSize', String(params.pageSize))
-    const suffix = qs.toString() ? `?${qs}` : ''
-    return request<{
-      items: OperatorRentalInquiry[]
-      total: number
-      page: number
-      pageSize: number
-    }>(`/api/operator/rentals/inquiries${suffix}`)
-  },
-  operatorRentalListings: (params?: { q?: string; status?: string; page?: number; pageSize?: number }) => {
-    const qs = new URLSearchParams()
-    if (params?.q) qs.set('q', params.q)
-    if (params?.status) qs.set('status', params.status)
-    if (params?.page) qs.set('page', String(params.page))
-    if (params?.pageSize) qs.set('pageSize', String(params.pageSize))
-    const suffix = qs.toString() ? `?${qs}` : ''
-    return request<{
-      items: OperatorCarListing[]
-      total: number
-      page: number
-      pageSize: number
-    }>(`/api/operator/rentals/listings${suffix}`)
-  },
-  operatorRentalMatches: (inquiryId: string) =>
-    request<OperatorCarListing[]>(`/api/operator/rentals/inquiries/${inquiryId}/matches`),
-  assignRentalMatch: (inquiryId: string, listingId: string) =>
-    request<{
-      inquiryId: string
-      listingId: string
-      plateNumber: string
-      status: string
-      matchedAtUtc: string
-    }>(`/api/operator/rentals/inquiries/${inquiryId}/match`, {
-      method: 'POST',
-      body: JSON.stringify({ listingId }),
-    }),
-  setRentalInquiryStatus: (id: string, status: string) =>
-    request<{ id: string; status: string }>(`/api/operator/rentals/inquiries/${id}/status`, {
-      method: 'POST',
-      body: JSON.stringify({ status }),
-    }),
-  setRentalListingStatus: (id: string, status: string) =>
-    request<{ id: string; status: string }>(`/api/operator/rentals/listings/${id}/status`, {
-      method: 'POST',
-      body: JSON.stringify({ status }),
-    }),
   operatorAlerts: () => request<OperatorNavAlerts>('/api/operator/alerts'),
   operatorBilling: () => request<BillingOperatorDetail>('/api/operator/billing'),
   operatorProvinces: () => request<IdName[]>('/api/operator/territories/provinces'),

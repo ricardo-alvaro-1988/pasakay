@@ -153,7 +153,6 @@ import {
 } from './side-nav'
 import { BrandingSettingsPage } from './BrandingSettings'
 import { RiderAppSettingsPage } from './RiderAppSettings'
-import { OperatorRentalsPage } from './OperatorRentalsPage'
 import {
   applyBrand,
   DEFAULT_BRAND_NAME,
@@ -3508,15 +3507,15 @@ function OperatorFormPage({
     }
     Promise.all([api.operator(operatorId), api.adminOperatorVehicleOffers(operatorId)])
       .then(([op, offers]) => {
-        setExisting(op)
-        setForm({
-          companyName: op.companyName,
-          contactName: op.contactName,
-          phone: op.contactPhone,
-          governmentIdType: op.governmentIdType ?? '',
-          governmentId: op.governmentId,
-          motorcycleCommissionPercent: String(op.motorcycleCommissionPercent ?? 10),
-          tricycleCommissionPercent: String(op.tricycleCommissionPercent ?? 5),
+      setExisting(op)
+      setForm({
+        companyName: op.companyName,
+        contactName: op.contactName,
+        phone: op.contactPhone,
+        governmentIdType: op.governmentIdType ?? '',
+        governmentId: op.governmentId,
+        motorcycleCommissionPercent: String(op.motorcycleCommissionPercent ?? 10),
+        tricycleCommissionPercent: String(op.tricycleCommissionPercent ?? 5),
           pabiliFareSystemCommissionPercent: String(op.pabiliFareSystemCommissionPercent ?? 10),
           pabiliMarkupSystemCommissionPercent: String(op.pabiliMarkupSystemCommissionPercent ?? 10),
           pabiliEnabled: !!op.pabiliEnabled,
@@ -3531,13 +3530,13 @@ function OperatorFormPage({
             isEnabled: offer.isEnabled,
           })),
         )
-        setAddress({
-          province: op.address?.provinceId ? { id: op.address.provinceId, name: op.address.province } : null,
-          municipality: op.address?.municipalityId ? { id: op.address.municipalityId, name: op.address.municipality } : null,
-          barangay: op.address?.barangayId ? { id: op.address.barangayId, name: op.address.barangay } : null,
-          details: op.address?.details ?? '',
-        })
-        setAreas(op.areas ?? [])
+      setAddress({
+        province: op.address?.provinceId ? { id: op.address.provinceId, name: op.address.province } : null,
+        municipality: op.address?.municipalityId ? { id: op.address.municipalityId, name: op.address.municipality } : null,
+        barangay: op.address?.barangayId ? { id: op.address.barangayId, name: op.address.barangay } : null,
+        details: op.address?.details ?? '',
+      })
+      setAreas(op.areas ?? [])
       })
       .catch((err: Error) => setError(err.message))
   }, [operatorId])
@@ -3828,8 +3827,8 @@ function OperatorFormPage({
                 value={form.rentalEnabled ? 'yes' : 'no'}
                 onChange={(e) => setForm({ ...form, rentalEnabled: e.target.value === 'yes' })}
               >
-                <option value="no">Off — customers and operator hide Rental</option>
-                <option value="yes">On — Rental available for this operator</option>
+                <option value="no">Off — customers hide Rental tab</option>
+                <option value="yes">On — customers can schedule via Rental tab</option>
               </select>
             </label>
             <label className="field">
@@ -5527,32 +5526,32 @@ function RelatedFareRatesTable({
         passengerTiers: [{ ...tier, passengerCount: '1', [key]: value }],
       })
     }
-    return (
+  return (
       <div className="fare-tier-editor">
         <table className="fare-tier-table">
-          <thead>
-            <tr>
+        <thead>
+          <tr>
               <th>Base</th>
               <th>Incl. km</th>
               <th>Per km</th>
               <th>Min</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
               <td>
                 <input value={tier.baseFare} disabled={locked} onChange={(e) => patchRate('baseFare', e.target.value)} />
-              </td>
-              <td>
+            </td>
+            <td>
                 <input value={tier.includedKm} disabled={locked} onChange={(e) => patchRate('includedKm', e.target.value)} />
-              </td>
-              <td>
+            </td>
+            <td>
                 <input value={tier.perKm} disabled={locked} onChange={(e) => patchRate('perKm', e.target.value)} />
-              </td>
+            </td>
               <td>
                 <input value={tier.minimumFare} disabled={locked} onChange={(e) => patchRate('minimumFare', e.target.value)} />
               </td>
-            </tr>
+          </tr>
           </tbody>
         </table>
         <p className="muted" style={{ margin: '8px 0 0', fontSize: 12 }}>
@@ -5601,40 +5600,40 @@ function RelatedFareRatesTable({
             {tiers.map((tier, index) => (
               <tr key={`${vehicle}-${index}`}>
                 <td>
-                  <input
+                <input
                     value={tier.passengerCount}
                     disabled={locked}
                     onChange={(e) => updateTier(vehicle, tiers, index, 'passengerCount', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
+                />
+            </td>
+            <td>
+                <input
                     value={tier.baseFare}
                     disabled={locked}
                     onChange={(e) => updateTier(vehicle, tiers, index, 'baseFare', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
+                />
+            </td>
+            <td>
+                <input
                     value={tier.includedKm}
                     disabled={locked}
                     onChange={(e) => updateTier(vehicle, tiers, index, 'includedKm', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
+                />
+            </td>
+            <td>
+                <input
                     value={tier.perKm}
                     disabled={locked}
                     onChange={(e) => updateTier(vehicle, tiers, index, 'perKm', e.target.value)}
-                  />
-                </td>
+                />
+            </td>
                 <td>
                   <input
                     value={tier.minimumFare}
                     disabled={locked}
                     onChange={(e) => updateTier(vehicle, tiers, index, 'minimumFare', e.target.value)}
                   />
-                </td>
+            </td>
                 {editable ? (
                   <td className="fare-tier-actions">
                     <button
@@ -5645,12 +5644,12 @@ function RelatedFareRatesTable({
                     >
                       Remove
                     </button>
-                  </td>
+            </td>
                 ) : null}
-              </tr>
+          </tr>
             ))}
-          </tbody>
-        </table>
+        </tbody>
+      </table>
         {editable ? (
           <button type="button" className="btn tiny" disabled={locked} onClick={() => addTier(vehicle, tiers)} style={{ width: 'auto', justifySelf: 'start' }}>
             Add person tier
@@ -6256,8 +6255,8 @@ function BillingDetailPage({ operatorId, onBack }: { operatorId: string; onBack:
                   ))
                 : (
                   <>
-                    <VehicleTag type="Motorcycle" />
-                    <VehicleTag type="Tricycle" />
+              <VehicleTag type="Motorcycle" />
+              <VehicleTag type="Tricycle" />
                   </>
                 )}
             </div>
@@ -6284,8 +6283,8 @@ function BillingDetailPage({ operatorId, onBack }: { operatorId: string; onBack:
             ))
           ) : (
             <>
-              <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
-              <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
+          <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
+          <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
             </>
           )}
           <p className="muted">{data.riderCount} rider{data.riderCount === 1 ? '' : 's'}</p>
@@ -6607,25 +6606,25 @@ function SettingsPage({
       ) : section === 'rider-app' ? (
         <RiderAppSettingsPage />
       ) : (
-        <div className="grid-2">
-          <div className="card">
-            <h2>Vehicle types</h2>
-            <p>Locked for this product. Operators will assign one of these when they create a rider.</p>
-            <div className="chips" style={{ marginTop: 12 }}>
+      <div className="grid-2">
+        <div className="card">
+          <h2>Vehicle types</h2>
+          <p>Locked for this product. Operators will assign one of these when they create a rider.</p>
+          <div className="chips" style={{ marginTop: 12 }}>
               {PLATFORM_VEHICLE_TYPES.map((type) => (
                 <button key={type} type="button" className="on">{vehicleTypeLabel(type)}</button>
               ))}
               <button type="button" className="on">Custom</button>
-            </div>
-          </div>
-          <div className="card">
-            <h2>Appearance</h2>
-            <p>Same dashboard in dark and light. Choice is saved on this browser.</p>
-            <button className="btn" type="button" onClick={onTheme} style={{ maxWidth: 220, marginTop: 12 }}>
-              Switch to {theme === 'dark' ? 'light' : 'dark'} mode
-            </button>
           </div>
         </div>
+        <div className="card">
+          <h2>Appearance</h2>
+          <p>Same dashboard in dark and light. Choice is saved on this browser.</p>
+          <button className="btn" type="button" onClick={onTheme} style={{ maxWidth: 220, marginTop: 12 }}>
+            Switch to {theme === 'dark' ? 'light' : 'dark'} mode
+          </button>
+        </div>
+      </div>
       )}
     </div>
   )
@@ -7657,7 +7656,6 @@ function OperatorShell({
     openSos: 0,
     unreadBilling: 0,
     pendingAccountDeletes: 0,
-    pendingRentals: 0,
   })
   const [sosFlash, setSosFlash] = useState<OpsAlert | null>(null)
 
@@ -7670,7 +7668,7 @@ function OperatorShell({
   const loadAlerts = useCallback(() => {
     api.operatorAlerts()
       .then(setAlerts)
-      .catch(() => setAlerts({ pendingWalletRequests: 0, openSos: 0, unreadBilling: 0, pendingAccountDeletes: 0, pendingRentals: 0 }))
+      .catch(() => setAlerts({ pendingWalletRequests: 0, openSos: 0, unreadBilling: 0, pendingAccountDeletes: 0 }))
   }, [])
 
   useEffect(() => {
@@ -7727,7 +7725,6 @@ function OperatorShell({
             if (id === 'support') return <NavBadge count={alerts.openSos} tone="sos" />
             if (id === 'billing') return <NavBadge count={alerts.unreadBilling} tone="billing" />
             if (id === 'customers') return <NavBadge count={alerts.pendingAccountDeletes} tone="delete" />
-            if (id === 'rentals') return <NavBadge count={alerts.pendingRentals ?? 0} tone="wallet" />
             return null
           }}
         />
@@ -7775,7 +7772,6 @@ function OperatorShell({
         {page === 'bookings' && <OperatorBookingsPage />}
         {page === 'overview' && <OperatorOverviewPage onOpen={(next) => setPage(next)} />}
         {page === 'schedule' && <OperatorSchedulePage />}
-        {page === 'rentals' && <OperatorRentalsPage />}
         {page === 'riders' && <OperatorRidersPage />}
         {page === 'customers' && <OperatorCustomersPage />}
         {page === 'fleet' && <OperatorFleetPage theme={theme} />}
@@ -7789,7 +7785,6 @@ function OperatorShell({
           <OperatorInboxPage
             onOpenBilling={() => setPage('billing')}
             onOpenCustomers={() => setPage('customers')}
-            onOpenRentals={() => setPage('rentals')}
           />
         )}
         {page === 'billing' && <OperatorBillingPage />}
@@ -8767,7 +8762,7 @@ function OperatorBookingList({
         <h2 style={{ margin: 0 }}>Booking</h2>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <PersonSuggest
-            value={q}
+              value={q}
             onChange={(value) => { setQ(value); setPage(1) }}
             placeholder="Search booking number, customer, or rider"
             items={suggestItems}
@@ -9036,7 +9031,7 @@ function OperatorDashboardPage() {
                           discountPercent={ride.discountPercent}
                         />
                         <DiscountTag label={ride.fareDiscountLabel} />
-                        <TripStatusTag status={ride.status} />
+                      <TripStatusTag status={ride.status} />
                       </span>
                     </span>
                     <small>{ride.customerName}</small>
@@ -9118,9 +9113,9 @@ function OperatorScheduleList({
   const pageSize = 10
 
   function reload() {
-    api.scheduledBookings(q, page, pageSize, statusFilter)
-      .then((data) => { setItems(data.items); setTotal(data.total); setError('') })
-      .catch((err: Error) => setError(err.message))
+      api.scheduledBookings(q, page, pageSize, statusFilter)
+        .then((data) => { setItems(data.items); setTotal(data.total); setError('') })
+        .catch((err: Error) => setError(err.message))
   }
 
   useEffect(() => {
@@ -9199,25 +9194,25 @@ function OperatorScheduleList({
             ) : items.map((row) => {
               const canCancel = row.status === 'Pending' || row.status === 'Waiting'
               return (
-                <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
-                  <td>
-                    <strong>{phDateTime(row.scheduledAtUtc)}</strong>
-                    <div><small>{row.reference}</small></div>
-                  </td>
-                  <td>
-                    <strong>{row.customerName}</strong>
-                    <div><small>{row.customerPhone}</small></div>
-                  </td>
-                  <td>
-                    {row.riderName}
-                    <div><small>{row.plateNumber}</small></div>
-                  </td>
-                  <td>
+              <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
+                <td>
+                  <strong>{phDateTime(row.scheduledAtUtc)}</strong>
+                  <div><small>{row.reference}</small></div>
+                </td>
+                <td>
+                  <strong>{row.customerName}</strong>
+                  <div><small>{row.customerPhone}</small></div>
+                </td>
+                <td>
+                  {row.riderName}
+                  <div><small>{row.plateNumber}</small></div>
+                </td>
+                <td>
                     <small>{stopAddress(row.pickup)}</small>
                     <div><small>→ {stopAddress(row.dropoff)}</small></div>
-                  </td>
-                  <td><PaymentMethodTag method={row.paymentMethod} other={row.paymentMethodOther} /></td>
-                  <td><TripStatusTag status={row.status} /></td>
+                </td>
+                <td><PaymentMethodTag method={row.paymentMethod} other={row.paymentMethodOther} /></td>
+                <td><TripStatusTag status={row.status} /></td>
                   <td>
                     <FareAmount fare={row.fare} customerFare={row.customerFare} emphasize />
                     <DiscountTag label={row.fareDiscountLabel} />
@@ -9234,7 +9229,7 @@ function OperatorScheduleList({
                       </button>
                     ) : null}
                   </td>
-                </tr>
+              </tr>
               )
             })}
           </tbody>
@@ -9427,24 +9422,24 @@ function OperatorScheduleForm({
         {dispatch === 'select' ? (
           <label className="field">
             <span>Rider *</span>
-            <PersonSuggest
-              value={riderQuery}
-              onChange={(value) => { setRiderQuery(value); setRiderId('') }}
-              placeholder="Search rider name, phone, or plate"
-              items={riders.map((row) => ({
-                id: row.id,
-                name: row.fullName,
-                phone: row.phoneNumber,
-                photoUrl: row.profilePhotoUrl,
-                extra: row.plateNumber,
-                vehicleType: row.vehicleType,
-              }))}
-              onPick={(item) => {
-                setRiderQuery(item.name)
-                setRiderId(item.id)
-              }}
-            />
-          </label>
+          <PersonSuggest
+            value={riderQuery}
+            onChange={(value) => { setRiderQuery(value); setRiderId('') }}
+            placeholder="Search rider name, phone, or plate"
+            items={riders.map((row) => ({
+              id: row.id,
+              name: row.fullName,
+              phone: row.phoneNumber,
+              photoUrl: row.profilePhotoUrl,
+              extra: row.plateNumber,
+              vehicleType: row.vehicleType,
+            }))}
+            onPick={(item) => {
+              setRiderQuery(item.name)
+              setRiderId(item.id)
+            }}
+          />
+        </label>
         ) : null}
 
         <div className="field wide">
@@ -9919,10 +9914,10 @@ function OperatorCustomerListPage({ onOpen }: { onOpen: (id: string) => void }) 
                 <td>{row.phoneNumber}</td>
                 <td>{phDate(row.registeredAtUtc)}</td>
                 <td>
-                <div className="tag-row" style={{ marginTop: 0 }}>
+                  <div className="tag-row" style={{ marginTop: 0 }}>
                   {row.isBlocked ? <span className="tag status inactive">Blocked</span> : <StatusTag active={row.isActive} />}
-                  {row.deleteStatus === 'Pending' ? <span className="tag pending">Delete requested</span> : null}
-                </div>
+                    {row.deleteStatus === 'Pending' ? <span className="tag pending">Delete requested</span> : null}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -10196,7 +10191,7 @@ function OperatorRiderList({
                   <div className="person-cell">
                     <ClickableAvatar name={row.fullName} photoUrl={row.profilePhotoUrl} />
                     <div>
-                      <strong>{row.fullName}</strong>
+                    <strong>{row.fullName}</strong>
                       {row.acceptsPabili ? (
                         <div className="tag-row" style={{ marginTop: 4 }}>
                           <span className="tag kind">Pabili</span>
@@ -11846,15 +11841,15 @@ function OperatorFaresPage() {
   function changeRates(vehicle: VehicleType, patch: Partial<FareDraft>) {
     const commissionPatch = patch.operatorCommissionPercent != null || patch.driverCommissionPercent != null
     if (vehicle === 'Motorcycle' || vehicle === 'Tricycle') {
-      if (linked && !commissionPatch) {
-        setMotorcycle((current) => ({ ...current, ...patch }))
-        setTricycle((current) => ({ ...current, ...patch }))
-        return
-      }
-      if (vehicle === 'Motorcycle') {
-        setMotorcycle((current) => applyCommission(current, data?.motorcycleCommissionPercent ?? 0, patch))
-      } else {
-        setTricycle((current) => applyCommission(current, data?.tricycleCommissionPercent ?? 0, patch))
+    if (linked && !commissionPatch) {
+      setMotorcycle((current) => ({ ...current, ...patch }))
+      setTricycle((current) => ({ ...current, ...patch }))
+      return
+    }
+    if (vehicle === 'Motorcycle') {
+      setMotorcycle((current) => applyCommission(current, data?.motorcycleCommissionPercent ?? 0, patch))
+    } else {
+      setTricycle((current) => applyCommission(current, data?.tricycleCommissionPercent ?? 0, patch))
       }
     }
   }
@@ -12482,17 +12477,17 @@ function OperatorSurchargesPage() {
                       ))}
                     </div>
                   </div>
-                  <div className="field wide">
-                    <span>Applies to</span>
-                    <div className="chips" style={{ marginTop: 8 }}>
+                <div className="field wide">
+                  <span>Applies to</span>
+                  <div className="chips" style={{ marginTop: 8 }}>
                       <button type="button" className={applyTo === 'Both' ? 'on' : ''} onClick={() => setApplyTo('Both')}>All platform types</button>
                       {PLATFORM_VEHICLE_TYPES.map((type) => (
                         <button key={type} type="button" className={applyTo === type ? 'on' : ''} onClick={() => setApplyTo(type)}>
                           {vehicleTypeLabel(type)}
                         </button>
                       ))}
-                    </div>
                   </div>
+                </div>
                 </>
               ) : null}
               <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Night" /></label>
@@ -12780,11 +12775,9 @@ function OperatorSupportDetail({ ticketId, onBack }: { ticketId: string; onBack:
 function OperatorInboxPage({
   onOpenBilling,
   onOpenCustomers,
-  onOpenRentals,
 }: {
   onOpenBilling: () => void
   onOpenCustomers: () => void
-  onOpenRentals: () => void
 }) {
   const [items, setItems] = useState<OperatorInboxItem[]>([])
   const [error, setError] = useState('')
@@ -12801,7 +12794,7 @@ function OperatorInboxPage({
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Inbox</h2>
-      <p className="muted">Billing records, rentals, account deletion requests, and platform announcements for your company.</p>
+      <p className="muted">Billing records, account deletion requests, and platform announcements for your company.</p>
       {error ? <p className="error">{error}</p> : null}
       {items.length === 0 ? <p>No notifications yet.</p> : (
         <div className="list">
@@ -12816,7 +12809,6 @@ function OperatorInboxPage({
                 {!item.readAtUtc ? <button className="btn tiny" type="button" onClick={() => void markRead(item.id)}>Mark read</button> : null}
                 {item.billId ? <button className="btn tiny" type="button" onClick={onOpenBilling}>Open billing</button> : null}
                 {item.kind === 'AccountDelete' ? <button className="btn tiny" type="button" onClick={onOpenCustomers}>Open customers</button> : null}
-                {item.kind === 'Rental' ? <button className="btn tiny" type="button" onClick={onOpenRentals}>Open rentals</button> : null}
               </div>
             </div>
           ))}
@@ -12860,8 +12852,8 @@ function OperatorBillingPage() {
             ))
           ) : (
             <>
-              <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
-              <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
+          <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
+          <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
             </>
           )}
         </div>

@@ -1,811 +1,506 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import {
   api,
-  PLATFORM_VEHICLE_TYPES,
+  BookBody,
+  Desk,
+  PaymentMethod,
+  Quote,
+  Stop,
   VehicleType,
 } from './api'
+import { PaymentBar } from './account-screens'
+import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
 import {
   geocodeText,
   loadGoogleMaps,
-  MapHandle,
-  MarkerHandle,
   PH,
-  pinIcon,
   placeDetails,
   Prediction,
-  reverseGeocode,
   searchPlaces,
   StopResult,
 } from './maps'
-import { lastKnownGps, readPickupGps } from './gps'
-import { vehicleArt, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
+import { lastKnownGps } from './gps'
+import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
 
-type Mode = 'chooser' | 'rent' | 'list' | 'done'
-type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+const PH_TZ = 'Asia/Manila'
 
-const DAYS: { key: DayKey; label: string; form: string }[] = [
-  { key: 'mon', label: 'Mon', form: 'availableMonday' },
-  { key: 'tue', label: 'Tue', form: 'availableTuesday' },
-  { key: 'wed', label: 'Wed', form: 'availableWednesday' },
-  { key: 'thu', label: 'Thu', form: 'availableThursday' },
-  { key: 'fri', label: 'Fri', form: 'availableFriday' },
-  { key: 'sat', label: 'Sat', form: 'availableSaturday' },
-  { key: 'sun', label: 'Sun', form: 'availableSunday' },
-]
-
-function pad(n: number) {
-  return String(n).padStart(2, '0')
+function peso(n: number) {
+  return `₱${n.toLocaleString('en-PH', { maximumFractionDigits: 0 })}`
 }
 
-/** Local datetime-local value: base + daysAhead (+ optional extra minutes). */
-function localDateTimePlusDays(daysAhead: number, from?: Date, extraMinutes = 0) {
-  const d = from ? new Date(from.getTime()) : new Date()
-  d.setDate(d.getDate() + daysAhead)
-  if (extraMinutes) d.setMinutes(d.getMinutes() + extraMinutes)
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+function kmLabel(km: number) {
+  if (!Number.isFinite(km) || km <= 0) return ''
+  return `${km.toFixed(1)} km`
 }
 
-/** Default rental From: tomorrow + 15 min so the form stays valid while the user fills it. */
-function defaultRentalFrom() {
-  return localDateTimePlusDays(1, undefined, 15)
+function isOperatorCoverageError(message: string) {
+  return /no operator|not covered|outside|municipality/i.test(message)
 }
 
-function parseLocalDateTime(value: string) {
-  // Parse as local wall time (avoid UTC shift from `new Date('YYYY-MM-DDTHH:mm')` in some engines).
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value.trim())
-  if (!m) {
-    const d = new Date(value)
-    return Number.isNaN(d.getTime()) ? null : d
+function fromPhInput(value: string) {
+  const raw = value.trim()
+  if (!raw) return null
+  const normalized = raw.length === 16 ? `${raw}:00` : raw
+  const stamp = new Date(`${normalized}+08:00`)
+  return Number.isNaN(stamp.getTime()) ? null : stamp.toISOString()
+}
+
+function toPhInput(value: string | null | undefined) {
+  if (!value) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: PH_TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(value))
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`
+}
+
+function bookBody(
+  vehicle: VehicleType,
+  pickup: Stop,
+  dropoff: Stop,
+  payment: PaymentMethod,
+  refNo = '',
+  passengerCount = 1,
+  categoryId?: string | null,
+  maxPassengers?: number,
+  isCargo?: boolean,
+): BookBody {
+  const max = vehicleMaxPassengers(vehicle, maxPassengers)
+  const cargo = vehicleIsCargo(vehicle, isCargo)
+  return {
+    vehicleType: vehicle,
+    vehicleCategoryId: categoryId ?? undefined,
+    pickupBarangayId: pickup.barangayId,
+    pickupDetails: pickup.details || pickup.label,
+    pickupLat: pickup.lat,
+    pickupLng: pickup.lng,
+    dropoffBarangayId: dropoff.barangayId,
+    dropoffDetails: dropoff.details || dropoff.label,
+    dropoffLat: dropoff.lat,
+    dropoffLng: dropoff.lng,
+    paymentMethod: payment,
+    paymentMethodOther: payment === 'Cash' ? undefined : (refNo.trim() || undefined),
+    passengerCount: cargo || max <= 1 ? 1 : Math.min(max, Math.max(1, passengerCount)),
   }
-  return new Date(
-    Number(m[1]),
-    Number(m[2]) - 1,
-    Number(m[3]),
-    Number(m[4]),
-    Number(m[5]),
-    0,
-    0,
-  )
 }
 
-function VehiclePicker({
+function stopFromResult(hit: StopResult): Stop {
+  return {
+    label: hit.label,
+    details: hit.details,
+    lat: hit.lat,
+    lng: hit.lng,
+  }
+}
+
+function StopSearch({
+  label,
   value,
-  onChange,
+  near,
+  onPick,
 }: {
-  value: VehicleType
-  onChange: (type: VehicleType) => void
+  label: string
+  value: Stop | null
+  near?: { lat: number; lng: number } | null
+  onPick: (stop: Stop | null) => void
 }) {
-  return (
-    <div className="vehicles rental-vehicle-list">
-      {PLATFORM_VEHICLE_TYPES.map((type) => (
-        <button
-          key={type}
-          type="button"
-          className={`vehicle${value === type ? ' on' : ''}`}
-          onClick={() => onChange(type)}
-        >
-          <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
-            <img src={vehicleArt(type)} alt="" />
-          </span>
-          <span className="copy">
-            <b>{vehicleLabel(type)}</b>
-          </span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function LocationPicker({
-  location,
-  onLocation,
-  initialLat,
-  initialLng,
-}: {
-  location: StopResult | null
-  onLocation: (stop: StopResult | null) => void
-  initialLat?: number | null
-  initialLng?: number | null
-}) {
-  const mapEl = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<MapHandle | null>(null)
-  const markerRef = useRef<MarkerHandle | null>(null)
-  const mapsRef = useRef<Awaited<ReturnType<typeof loadGoogleMaps>> | null>(null)
-  const onLocationRef = useRef(onLocation)
   const [query, setQuery] = useState('')
   const [hints, setHints] = useState<Prediction[]>([])
   const [geoHits, setGeoHits] = useState<StopResult[]>([])
-  const [locating, setLocating] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [mapReady, setMapReady] = useState(false)
 
-  useEffect(() => {
-    onLocationRef.current = onLocation
-  }, [onLocation])
-
-  useEffect(() => {
-    let cancelled = false
-    const boot = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const { googleMapsBrowserKey } = await api.mapsConfig()
-          const maps = await loadGoogleMaps(googleMapsBrowserKey)
-          if (cancelled || !mapEl.current) return
-          mapsRef.current = maps
-          const center = {
-            lat: initialLat ?? PH.lat,
-            lng: initialLng ?? PH.lng,
-          }
-          const map = new maps.Map(mapEl.current, {
-            center,
-            zoom: initialLat != null && initialLng != null ? 15 : 6,
-            disableDefaultUI: true,
-            zoomControl: true,
-            gestureHandling: 'cooperative',
-            scrollwheel: false,
-            draggable: true,
-          })
-          mapRef.current = map
-          map.addListener('click', (event) => {
-            const latLng = event.latLng
-            if (!latLng) return
-            const lat = latLng.lat()
-            const lng = latLng.lng()
-            void reverseGeocode(maps, lat, lng).then((details) => {
-              onLocationRef.current({
-                label: details.split(',')[0]?.trim() || 'Pinned location',
-                details,
-                lat,
-                lng,
-              })
-            })
-          })
-          // Map was created in a flex/scroll sheet — force a layout pass.
-          window.setTimeout(() => {
-            try {
-              map.setOptions({})
-              map.panTo(center)
-            } catch {
-              /* ignore */
-            }
-          }, 80)
-          if (!cancelled) setMapReady(true)
-        } catch (err) {
-          if (!cancelled) {
-            setMapReady(true)
-            setError(err instanceof Error ? err.message : 'Could not load the map.')
-          }
-        }
-      })()
-    }, 0)
-    return () => {
-      cancelled = true
-      window.clearTimeout(boot)
-      markerRef.current?.setMap(null)
-      markerRef.current = null
-      mapRef.current = null
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  useEffect(() => {
-    const maps = mapsRef.current
-    const map = mapRef.current
-    if (!maps || !map || !location) return
-    map.panTo({ lat: location.lat, lng: location.lng })
-    map.setZoom(16)
-    if (!markerRef.current) {
-      markerRef.current = new maps.Marker({
-        map,
-        position: { lat: location.lat, lng: location.lng },
-        draggable: true,
-        icon: pinIcon(maps, '#e30613'),
-      })
-      markerRef.current.addListener('dragend', () => {
-        const pos = markerRef.current?.getPosition()
-        if (!pos) return
-        const lat = pos.lat()
-        const lng = pos.lng()
-        void reverseGeocode(maps, lat, lng).then((details) => {
-          onLocationRef.current({
-            label: details.split(',')[0]?.trim() || 'Pinned location',
-            details,
-            lat,
-            lng,
-          })
-        })
-      })
-    } else {
-      markerRef.current.setPosition({ lat: location.lat, lng: location.lng })
-    }
-  }, [location])
-
-  useEffect(() => {
-    if (query.trim().length < 2) {
-      setHints([])
-      setGeoHits([])
-      return
-    }
-    let cancelled = false
-    const handle = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const maps = mapsRef.current ?? await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
-          const near = location
-            ? { lat: location.lat, lng: location.lng }
-            : initialLat != null && initialLng != null
-              ? { lat: initialLat, lng: initialLng }
-              : undefined
-          const [places, geos] = await Promise.all([
-            searchPlaces(maps, query.trim(), near),
-            geocodeText(maps, query.trim(), near),
-          ])
-          if (cancelled) return
-          setHints(places)
-          setGeoHits(geos)
-        } catch {
-          if (!cancelled) setError('Could not search places.')
-        }
-      })()
-    }, 280)
-    return () => {
-      cancelled = true
-      window.clearTimeout(handle)
-    }
-  }, [query, location, initialLat, initialLng])
-
-  async function useCurrent() {
-    setLocating(true)
+  async function runSearch() {
+    const q = query.trim()
+    if (q.length < 2) return
+    setBusy(true)
     setError('')
     try {
-      const maps = mapsRef.current ?? await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
-      let lat: number
-      let lng: number
-      try {
-        const pos = await readPickupGps()
-        lat = pos.coords.latitude
-        lng = pos.coords.longitude
-      } catch {
-        const cached = lastKnownGps(600_000)
-        if (!cached) throw new Error('Could not get GPS. Allow location and try again.')
-        lat = cached.lat
-        lng = cached.lng
-      }
-      const details = await reverseGeocode(maps, lat, lng)
-      onLocation({
-        label: details.split(',')[0]?.trim() || 'Current location',
-        details,
-        lat,
-        lng,
+      const { googleMapsBrowserKey } = await api.mapsConfig()
+      const maps = await loadGoogleMaps(googleMapsBrowserKey)
+      const center = near ?? lastKnownGps(300_000) ?? PH
+      const [predictions, geos] = await Promise.all([
+        searchPlaces(maps, q, center),
+        geocodeText(maps, q, center),
+      ])
+      setHints(predictions.slice(0, 6))
+      setGeoHits(geos.slice(0, 4))
+      if (!predictions.length && !geos.length) setError('No places found.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Search failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function pickPrediction(item: Prediction) {
+    setBusy(true)
+    setError('')
+    try {
+      const { googleMapsBrowserKey } = await api.mapsConfig()
+      const maps = await loadGoogleMaps(googleMapsBrowserKey)
+      const details = await placeDetails(maps, item.place_id)
+      onPick({
+        label: item.structured_formatting?.main_text || details.address.split(',')[0] || item.description,
+        details: details.address,
+        lat: details.lat,
+        lng: details.lng,
       })
       setQuery('')
       setHints([])
       setGeoHits([])
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not use current location.')
+      setError(err instanceof Error ? err.message : 'Could not load place.')
     } finally {
-      setLocating(false)
+      setBusy(false)
     }
   }
 
-  function pickStop(stop: StopResult) {
-    onLocation(stop)
-    setQuery('')
-    setHints([])
-    setGeoHits([])
-  }
-
   return (
-    <div className="rental-location">
-      <div className="rental-map-wrap">
-        <div className="rental-map" ref={mapEl} />
-        {!mapReady && !error ? <div className="rental-map-loading muted">Loading map…</div> : null}
-      </div>
-      <p className="muted rental-hint">Search a place, tap the map, or drag the pin.</p>
-      <button type="button" className="secondary rental-gps" disabled={locating} onClick={() => void useCurrent()}>
-        {locating ? 'Getting location…' : 'Use current location'}
-      </button>
-      <input
-        placeholder="Search a place"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-      />
-      {(geoHits.length > 0 || hints.length > 0) && (
-        <div className="rental-suggest">
-          {geoHits.map((item) => (
-            <button key={`${item.details}-${item.lat}`} className="picker-item" type="button" onClick={() => pickStop(item)}>
-              <b>{item.label}</b>
-              <div className="muted">{item.details}</div>
+    <div className="rental-stop-search">
+      <label className="field">
+        <span>{label}</span>
+        {value ? (
+          <div className="rental-stop-picked">
+            <strong>{value.label}</strong>
+            <small className="muted">{value.details}</small>
+            <button type="button" className="ghost tiny" onClick={() => onPick(null)}>
+              Change
             </button>
-          ))}
-          {hints.map((item) => (
-            <button
-              key={item.place_id}
-              className="picker-item"
-              type="button"
-              onClick={() => {
-                void (async () => {
-                  try {
-                    const maps = mapsRef.current ?? await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
-                    const stop = await placeDetails(maps, item.place_id, mapRef.current)
-                    pickStop({
-                      label: stop.address.split(',')[0]?.trim() || item.description,
-                      details: stop.address,
-                      lat: stop.lat,
-                      lng: stop.lng,
-                    })
-                  } catch {
-                    setError('Could not load that place.')
+          </div>
+        ) : (
+          <>
+            <div className="rental-stop-row">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    void runSearch()
                   }
-                })()
-              }}
-            >
-              <b>{item.structured_formatting?.main_text ?? item.description}</b>
-              <div className="muted">{item.structured_formatting?.secondary_text}</div>
-            </button>
-          ))}
-        </div>
-      )}
-      {location ? (
-        <div className="rental-loc-card">
-          <strong>{location.label}</strong>
-          <div className="muted">{location.details}</div>
-        </div>
-      ) : null}
-      {error ? <p className="error">{error}</p> : null}
+                }}
+                placeholder={`Search ${label.toLowerCase()}`}
+              />
+              <button type="button" className="secondary" disabled={busy || query.trim().length < 2} onClick={() => void runSearch()}>
+                {busy ? '…' : 'Search'}
+              </button>
+            </div>
+            {error ? <p className="error">{error}</p> : null}
+            {hints.length || geoHits.length ? (
+              <div className="rental-suggest">
+                {hints.map((item) => (
+                  <button key={item.place_id} type="button" onClick={() => void pickPrediction(item)}>
+                    <b>{item.structured_formatting?.main_text || item.description}</b>
+                    <small className="muted">{item.structured_formatting?.secondary_text || item.description}</small>
+                  </button>
+                ))}
+                {geoHits.map((hit) => (
+                  <button key={`${hit.lat},${hit.lng},${hit.details}`} type="button" onClick={() => { onPick(stopFromResult(hit)); setQuery(''); setHints([]); setGeoHits([]) }}>
+                    <b>{hit.label}</b>
+                    <small className="muted">{hit.details}</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </>
+        )}
+      </label>
     </div>
   )
 }
 
 export function RentalScreen({
-  deskMobile,
-  mapLat,
-  mapLng,
+  desk,
+  onDesk,
+  onGoBooking,
 }: {
-  deskMobile?: string | null
-  mapLat?: number | null
-  mapLng?: number | null
+  desk: Desk
+  onDesk: (desk: Desk) => void
+  onGoBooking?: () => void
 }) {
-  const [mode, setMode] = useState<Mode>('chooser')
+  const [pickup, setPickup] = useState<Stop | null>(null)
+  const [dropoff, setDropoff] = useState<Stop | null>(null)
   const [vehicle, setVehicle] = useState<VehicleType>('Motorcycle')
-  const [from, setFrom] = useState(() => defaultRentalFrom())
-  const [to, setTo] = useState(() => {
-    const start = parseLocalDateTime(defaultRentalFrom()) ?? new Date()
-    return localDateTimePlusDays(1, start)
-  })
-  const minFrom = useMemo(() => localDateTimePlusDays(1), [mode, from])
-  const [location, setLocation] = useState<StopResult | null>(null)
-  const [notes, setNotes] = useState('')
-  const [mobile, setMobile] = useState(deskMobile || '')
-  const [plate, setPlate] = useState('')
-  const [seater, setSeater] = useState(1)
-  const [days, setDays] = useState<Record<DayKey, boolean>>({
-    mon: true,
-    tue: true,
-    wed: true,
-    thu: true,
-    fri: true,
-    sat: true,
-    sun: true,
-  })
-  const [front, setFront] = useState<File | null>(null)
-  const [back, setBack] = useState<File | null>(null)
-  const [left, setLeft] = useState<File | null>(null)
-  const [right, setRight] = useState<File | null>(null)
-  const [inside, setInside] = useState<File | null>(null)
-  const [busy, setBusy] = useState(false)
+  const [vehicleCategoryId, setVehicleCategoryId] = useState<string | null>(null)
+  const [passengers, setPassengers] = useState(1)
+  const [payment, setPayment] = useState<PaymentMethod>('Cash')
+  const [paymentRef, setPaymentRef] = useState('')
+  const [when, setWhen] = useState(() => toPhInput(new Date(Date.now() + 60 * 60 * 1000).toISOString()))
+  const [quote, setQuote] = useState<Quote | null>(null)
+  const [quoting, setQuoting] = useState(false)
   const [error, setError] = useState('')
-  const [doneMessage, setDoneMessage] = useState('')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [coverageHint, setCoverageHint] = useState(false)
+  const noOperator = useNoOperatorNotice(pickup, dropoff, true, coverageHint)
 
-  const maxSeats = vehicleMaxPassengers(vehicle)
+  const selectedOffer = noOperator.listedVehicles.find((v) => v.id === vehicleCategoryId)
+    ?? noOperator.listedVehicles.find((v) => v.vehicleType === vehicle && v.available)
+    ?? noOperator.availableVehicles.find((v) => v.vehicleType === vehicle)
+    ?? null
+  const selectedMaxPassengers = vehicleMaxPassengers(vehicle, selectedOffer?.maxPassengers)
+  const selectedIsCargo = vehicleIsCargo(vehicle, selectedOffer?.isCargo)
+  const showPassengerPicker = !!pickup && !selectedIsCargo && selectedMaxPassengers > 1
+  const near = pickup ?? (desk.mapLat != null && desk.mapLng != null ? { lat: desk.mapLat, lng: desk.mapLng } : lastKnownGps(300_000))
 
   useEffect(() => {
-    setSeater((n) => Math.min(Math.max(1, n), maxSeats))
-  }, [maxSeats])
-
-  const weekdayHint = useMemo(() => {
-    const on = DAYS.filter((d) => days[d.key]).map((d) => d.label)
-    if (on.length === 7) return 'Available every day'
-    if (on.length === 0) return 'Pick at least one day'
-    if (days.mon && days.tue && days.wed && days.thu && days.fri && !days.sat && !days.sun) {
-      return 'Weekdays only'
-    }
-    if (!days.mon && !days.tue && !days.wed && !days.thu && !days.fri && days.sat && days.sun) {
-      return 'Weekends only'
-    }
-    return on.join(' · ')
-  }, [days])
-
-  function resetForms() {
-    setError('')
-    setVehicle('Motorcycle')
-    const nextFrom = defaultRentalFrom()
-    const fromDate = parseLocalDateTime(nextFrom) ?? new Date()
-    setFrom(nextFrom)
-    setTo(localDateTimePlusDays(1, fromDate))
-    setNotes('')
-    setMobile(deskMobile || '')
-    setPlate('')
-    setSeater(1)
-    setDays({ mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: true })
-    setFront(null)
-    setBack(null)
-    setLeft(null)
-    setRight(null)
-    setInside(null)
-    setLocation(null)
-  }
-
-  async function submitRent(e: FormEvent) {
-    e.preventDefault()
-    if (!location?.details || !location.lat || !location.lng) {
-      setError('Pin a location on the map or search a place.')
+    if (!pickup || !dropoff) {
+      setQuote(null)
+      setQuoting(false)
+      setCoverageHint(false)
       return
     }
-    let scheduleFrom = from
-    let fromDate = parseLocalDateTime(scheduleFrom)
-    const toDate = parseLocalDateTime(to)
-    if (!fromDate || !toDate) {
-      setError('Choose a valid From and To date/time.')
-      return
-    }
-    // Keep From at least ~1 day ahead even if the form sat open for a while.
-    const minOk = Date.now() + 24 * 60 * 60 * 1000 - 5 * 60 * 1000
-    if (fromDate.getTime() < minOk) {
-      scheduleFrom = defaultRentalFrom()
-      fromDate = parseLocalDateTime(scheduleFrom) ?? fromDate
-      setFrom(scheduleFrom)
-      if (toDate.getTime() < fromDate.getTime()) {
-        setTo(localDateTimePlusDays(1, fromDate))
-      }
-      setError('From was updated to at least 1 day from now. Review the dates and submit again.')
-      return
-    }
-    if (toDate.getTime() < fromDate.getTime()) {
-      setError('To must be on or after From.')
-      return
-    }
-    setBusy(true)
-    setError('')
-    try {
-      const data = new FormData()
-      data.append('vehicleType', vehicle)
-      data.append('scheduleFrom', scheduleFrom)
-      data.append('scheduleTo', to)
-      data.append('locationDetails', location.details)
-      data.append('locationLat', String(location.lat))
-      data.append('locationLng', String(location.lng))
-      if (notes.trim()) data.append('notes', notes.trim())
-      data.append('mobileNumber', mobile.trim())
-      const res = await api.rentalInquire(data)
-      setDoneMessage(res.message)
-      setMode('done')
-      resetForms()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not submit.')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function submitList(e: FormEvent) {
-    e.preventDefault()
-    if (!front || !back || !left || !right || !inside) {
-      setError('Upload all 5 photos.')
-      return
-    }
-    setBusy(true)
-    setError('')
-    try {
-      let pin = location
-      if (!pin) {
-        try {
-          const maps = await loadGoogleMaps((await api.mapsConfig()).googleMapsBrowserKey)
-          const pos = await readPickupGps()
-          const details = await reverseGeocode(maps, pos.coords.latitude, pos.coords.longitude)
-          pin = {
-            label: details.split(',')[0]?.trim() || 'Current location',
-            details,
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-          }
-        } catch {
-          if (mapLat != null && mapLng != null) {
-            pin = { label: 'Nearby', details: 'Nearby', lat: mapLat, lng: mapLng }
-          }
+    let ignore = false
+    void (async () => {
+      setQuoting(true)
+      try {
+        const next = await api.quote(bookBody(vehicle, pickup, dropoff, payment, paymentRef, passengers, vehicleCategoryId, selectedMaxPassengers, selectedIsCargo))
+        if (ignore) return
+        setQuote(next)
+        setCoverageHint(false)
+        setError('')
+      } catch (err) {
+        if (ignore) return
+        setQuote(null)
+        const message = err instanceof Error ? err.message : 'Could not quote fare.'
+        if (isOperatorCoverageError(message)) {
+          setCoverageHint(true)
+          setError('')
+        } else {
+          setError(message)
         }
+      } finally {
+        if (!ignore) setQuoting(false)
       }
-      if (!pin) {
-        throw new Error('Turn on location so we can find your local operator.')
-      }
+    })()
+    return () => { ignore = true }
+  }, [pickup, dropoff, vehicle, vehicleCategoryId, payment, paymentRef, passengers, selectedMaxPassengers, selectedIsCargo])
 
-      const data = new FormData()
-      data.append('vehicleType', vehicle)
-      data.append('plate', plate.trim())
-      data.append('seater', String(seater))
-      data.append('front', front)
-      data.append('back', back)
-      data.append('left', left)
-      data.append('right', right)
-      data.append('inside', inside)
-      for (const day of DAYS) data.append(day.form, String(days[day.key]))
-      data.append('locationDetails', pin.details)
-      data.append('locationLat', String(pin.lat))
-      data.append('locationLng', String(pin.lng))
-      const res = await api.rentalListCar(data)
-      setDoneMessage(res.message)
-      setMode('done')
-      resetForms()
+  useEffect(() => {
+    if (noOperator.useOffers) {
+      const available = noOperator.availableVehicles
+      const current = available.find((v) => v.id === vehicleCategoryId)
+      if (current) return
+      const first = available[0]
+      if (first) {
+        setVehicleCategoryId(first.id)
+        setVehicle(first.vehicleType as VehicleType)
+      }
+      return
+    }
+    setVehicleCategoryId(null)
+    setVehicle((current) => {
+      const types = noOperator.availableTypes
+      if (types.length && !types.includes(current)) return types[0] ?? current
+      return current
+    })
+  }, [noOperator.availableTypes, noOperator.availableVehicles, noOperator.useOffers, vehicleCategoryId])
+
+  useEffect(() => {
+    if (!showPassengerPicker) {
+      setPassengers(1)
+      return
+    }
+    setPassengers((n) => Math.min(selectedMaxPassengers, Math.max(1, n)))
+  }, [showPassengerPicker, selectedMaxPassengers, vehicle, vehicleCategoryId])
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!pickup?.lat || !dropoff?.lat) {
+      setError('Set pickup and drop-off first.')
+      return
+    }
+    const scheduledAtUtc = fromPhInput(when)
+    if (!scheduledAtUtc) {
+      setError('Choose a valid date and time.')
+      return
+    }
+    if (new Date(scheduledAtUtc).getTime() < Date.now() + 10 * 60 * 1000) {
+      setError('Schedule the booking at least 10 minutes from now.')
+      return
+    }
+    if (!quote || quoting) {
+      setError('Wait for the fare quote before scheduling.')
+      return
+    }
+    setBusy(true)
+    setError('')
+    setNote('')
+    try {
+      onDesk(await api.book({
+        ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, passengers, vehicleCategoryId, selectedMaxPassengers, selectedIsCargo),
+        scheduledAtUtc,
+      }))
+      setNote('Scheduled. Riders are notified about an hour before pickup.')
+      setWhen(toPhInput(new Date(Date.now() + 60 * 60 * 1000).toISOString()))
+      onGoBooking?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not submit.')
+      const message = err instanceof Error ? err.message : 'Could not schedule.'
+      if (isOperatorCoverageError(message)) {
+        setCoverageHint(true)
+        setError('')
+      } else {
+        setError(message)
+      }
     } finally {
       setBusy(false)
     }
   }
 
-  if (mode === 'chooser') {
-    return (
-      <div className="rental-sheet rental-sheet-chooser">
-        <div className="rental-sheet-body rental-chooser-body">
-          <header className="rental-hero">
-            <div className="rental-hero-badge" aria-hidden="true">
-              <RentKeysIcon />
-            </div>
-            <div className="rental-hero-copy">
-              <p className="rental-hero-kicker">Local operator</p>
-              <h2>Rental</h2>
-              <p>Need a ride for a day — or earn from your own vehicle?</p>
-            </div>
-          </header>
-          <div className="rental-chooser">
-            <button type="button" className="rental-choice rent" onClick={() => { resetForms(); setMode('rent') }}>
-              <span className="rental-choice-icon" aria-hidden="true">
-                <RentCarIcon />
-              </span>
-              <span className="rental-choice-copy">
-                <strong>Rental Car</strong>
-                <span>Pick dates &amp; location — we match you with a vehicle</span>
-              </span>
-              <span className="rental-choice-go" aria-hidden="true">→</span>
-            </button>
-            <button type="button" className="rental-choice list" onClick={() => { resetForms(); setMode('list') }}>
-              <span className="rental-choice-icon" aria-hidden="true">
-                <ListCarIcon />
-              </span>
-              <span className="rental-choice-copy">
-                <strong>List Your Car</strong>
-                <span>Share plates, photos &amp; availability with your operator</span>
-              </span>
-              <span className="rental-choice-go" aria-hidden="true">→</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  if (mode === 'done') {
-    return (
-      <div className="rental-sheet">
-        <div className="rental-sheet-body">
-          <h2>Thank you</h2>
-          <p className="rental-done">{doneMessage || 'We will come back to you soonest.'}</p>
-          <button type="button" className="primary rental-submit" onClick={() => setMode('chooser')}>
-            Back to Rental
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (mode === 'rent') {
-    return (
-      <div className="rental-sheet">
-        <div className="rental-sheet-body">
-          <button type="button" className="ghost" onClick={() => setMode('chooser')}>← Back</button>
-          <h2>Rental Car</h2>
-          <form className="rental-form" onSubmit={(e) => void submitRent(e)}>
-            <label className="field">
-              <span>Select vehicle type</span>
-            </label>
-            <VehiclePicker value={vehicle} onChange={setVehicle} />
-            <label className="field">
-              <span>From</span>
-              <input
-                type="datetime-local"
-                min={minFrom}
-                value={from}
-                onChange={(e) => {
-                  const next = e.target.value
-                  setFrom(next)
-                  const nextFrom = parseLocalDateTime(next)
-                  const toDate = parseLocalDateTime(to)
-                  if (nextFrom && (!toDate || toDate.getTime() < nextFrom.getTime())) {
-                    setTo(localDateTimePlusDays(1, nextFrom))
-                  }
-                }}
-                required
-              />
-            </label>
-            <label className="field">
-              <span>To</span>
-              <input
-                type="datetime-local"
-                min={from || minFrom}
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                required
-              />
-            </label>
-            <p className="muted rental-hint">From must be at least 1 day from now. To defaults to From + 1 day.</p>
-            <label className="field">
-              <span>Location</span>
-            </label>
-            <LocationPicker
-              location={location}
-              onLocation={setLocation}
-              initialLat={mapLat}
-              initialLng={mapLng}
-            />
-            <label className="field">
-              <span>Notes</span>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} maxLength={1000} placeholder="Optional details" />
-            </label>
-            <label className="field">
-              <span>Mobile number</span>
-              <input value={mobile} onChange={(e) => setMobile(e.target.value)} required inputMode="tel" placeholder="09xxxxxxxxx" />
-            </label>
-            {error ? <p className="error">{error}</p> : null}
-            <button className="primary rental-submit" type="submit" disabled={busy}>
-              {busy ? 'Submitting…' : 'Submit'}
-            </button>
-          </form>
-        </div>
-      </div>
-    )
-  }
+  const quotePay = quote ? (quote.customerFare ?? quote.fare) : 0
+  const quoteOriginal = quote?.originalFare && quote.originalFare > quotePay ? quote.originalFare : null
+  const canSubmit = !!pickup?.lat && !!dropoff?.lat && !!quote && !quoting && !busy && !noOperator.searching && !noOperator.uncovered
+    && (payment !== 'Other' || !!paymentRef.trim())
 
   return (
     <div className="rental-sheet">
       <div className="rental-sheet-body">
-      <button type="button" className="ghost" onClick={() => setMode('chooser')}>← Back</button>
-      <h2>List Your Car</h2>
-      <form className="rental-form" onSubmit={(e) => void submitList(e)}>
-        <label className="field">
-          <span>Select vehicle type</span>
-        </label>
-        <VehiclePicker value={vehicle} onChange={setVehicle} />
-        <label className="field">
-          <span>Plate</span>
-          <input value={plate} onChange={(e) => setPlate(e.target.value)} required maxLength={40} placeholder="ABC 1234" />
-        </label>
-        <label className="field">
-          <span>Seater</span>
-          <input
-            type="number"
-            min={1}
-            max={maxSeats}
-            value={seater}
-            onChange={(e) => setSeater(Number(e.target.value) || 1)}
-            required
+        <form className="rental-form" onSubmit={(e) => void submit(e)}>
+          <h2>Rental</h2>
+          <p className="muted">
+            Schedule a ride for later (Philippine time). This creates a scheduled booking for your local operator.
+          </p>
+          <label className="field">
+            <span>When (Philippines)</span>
+            <input
+              type="datetime-local"
+              value={when}
+              min={toPhInput(new Date(Date.now() + 10 * 60 * 1000).toISOString())}
+              onChange={(e) => setWhen(e.target.value)}
+              required
+            />
+          </label>
+          <StopSearch
+            label="Pickup"
+            value={pickup}
+            near={near}
+            onPick={setPickup}
           />
-          <small className="muted">Max {maxSeats} for {vehicleLabel(vehicle)}</small>
-        </label>
-        <div className="rental-photos">
-          <p>Images (Front / Back / Left / Right / Inside)</p>
-          {(
-            [
-              ['Front', front, setFront],
-              ['Back', back, setBack],
-              ['Left', left, setLeft],
-              ['Right', right, setRight],
-              ['Inside', inside, setInside],
-            ] as const
-          ).map(([label, file, setFile]) => (
-            <label key={label} className="field">
-              <span>{label}</span>
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                required
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              />
-              {file ? (
-                <img className="rental-thumb" src={URL.createObjectURL(file)} alt="" />
-              ) : null}
-            </label>
-          ))}
-        </div>
-        <div className="rental-days">
-          <p>Availability</p>
-          <p className="muted rental-hint">{weekdayHint}</p>
-          <div className="rental-day-checks" role="group" aria-label="Available days">
-            {DAYS.map((day) => (
-              <label key={day.key} className={`rental-day-check${days[day.key] ? ' on' : ''}`}>
+          <StopSearch
+            label="Drop-off"
+            value={dropoff}
+            near={near}
+            onPick={setDropoff}
+          />
+          {pickup?.lat ? (
+            <>
+              <p className="section-title">Vehicle</p>
+              <div className="vehicles rental-vehicle-list">
+                {(noOperator.useOffers
+                  ? noOperator.availableVehicles
+                  : noOperator.availableTypes.map((t) => ({
+                      id: t,
+                      vehicleType: t,
+                      name: vehicleLabel(t),
+                      available: true,
+                      maxPassengers: vehicleMaxPassengers(t),
+                      isCargo: vehicleIsCargo(t),
+                    }))
+                ).map((item) => {
+                  const type = item.vehicleType as VehicleType
+                  const categoryId = 'id' in item && item.id !== type ? item.id : null
+                  const canSelect = !('available' in item) || item.available !== false
+                  const selected = canSelect && (categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId)
+                  const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
+                    ? item.maxPassengers
+                    : vehicleMaxPassengers(type)
+                  const cargo = 'isCargo' in item && typeof item.isCargo === 'boolean'
+                    ? item.isCargo
+                    : vehicleIsCargo(type)
+                  const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
+                  return (
+                    <button
+                      key={categoryId ?? type}
+                      type="button"
+                      disabled={!canSelect}
+                      className={`vehicle${selected ? ' on' : ''}${!canSelect ? ' dim' : ''}`}
+                      onClick={() => {
+                        if (!canSelect) return
+                        setVehicle(type)
+                        setVehicleCategoryId(categoryId)
+                        setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))
+                      }}
+                    >
+                      <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
+                        <img src={vehicleArt(type, iconKey)} alt="" />
+                      </span>
+                      <span className="copy">
+                        <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          ) : null}
+          {showPassengerPicker ? (
+            <div className="passenger-picker" role="group" aria-label="Number of passengers">
+              <span className="passenger-label">Passengers (max {selectedMaxPassengers})</span>
+              <div className="passenger-controls">
+                <button type="button" className="passenger-btn" disabled={passengers <= 1} onClick={() => setPassengers((n) => Math.max(1, n - 1))}>−</button>
                 <input
-                  type="checkbox"
-                  checked={days[day.key]}
-                  onChange={() => setDays((prev) => ({ ...prev, [day.key]: !prev[day.key] }))}
+                  className="passenger-input"
+                  type="number"
+                  min={1}
+                  max={selectedMaxPassengers}
+                  value={passengers}
+                  onChange={(e) => {
+                    const next = Math.floor(Number(e.target.value))
+                    setPassengers(!Number.isFinite(next) || next < 1 ? 1 : Math.min(selectedMaxPassengers, next))
+                  }}
                 />
-                <span>{day.label}</span>
-              </label>
-            ))}
-          </div>
-          <div className="rental-day-presets">
-            <button type="button" className="secondary" onClick={() => setDays({ mon: true, tue: true, wed: true, thu: true, fri: true, sat: false, sun: false })}>
-              Weekdays
-            </button>
-            <button type="button" className="secondary" onClick={() => setDays({ mon: false, tue: false, wed: false, thu: false, fri: false, sat: true, sun: true })}>
-              Weekends
-            </button>
-            <button type="button" className="secondary" onClick={() => setDays({ mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: true })}>
-              Every day
-            </button>
-          </div>
-        </div>
-        {error ? <p className="error">{error}</p> : null}
-        <button className="primary rental-submit" type="submit" disabled={busy}>
-          {busy ? 'Submitting…' : 'Submit'}
-        </button>
-      </form>
+                <button type="button" className="passenger-btn" disabled={passengers >= selectedMaxPassengers} onClick={() => setPassengers((n) => Math.min(selectedMaxPassengers, n + 1))}>+</button>
+              </div>
+            </div>
+          ) : null}
+          <p className="section-title">Payment</p>
+          <PaymentBar
+            payment={payment}
+            refNo={paymentRef}
+            onPayment={(method) => {
+              setPayment(method)
+              if (method === 'Cash') setPaymentRef('')
+            }}
+            onRefNo={setPaymentRef}
+          />
+          {quoting ? (
+            <p className="muted">Getting fare…</p>
+          ) : quote ? (
+            <p className="fareline">
+              {quoteOriginal ? (
+                <>
+                  <b>{peso(quotePay)}</b>
+                  <span className="promo-was"> was {peso(quoteOriginal)}</span>
+                </>
+              ) : (
+                <b>{peso(quotePay)}</b>
+              )}
+              {kmLabel(quote.distanceKm) ? ` · ${kmLabel(quote.distanceKm)}` : ''}
+            </p>
+          ) : pickup?.lat && dropoff?.lat ? (
+            <p className="muted">No fare available for this route yet.</p>
+          ) : null}
+          {error ? <p className="error">{error}</p> : null}
+          <NoOperatorNotice show={noOperator.uncovered} />
+          {note ? <p className="muted">{note}</p> : null}
+          <button className="primary rental-submit" type="submit" disabled={!canSubmit}>
+            {busy || noOperator.searching
+              ? 'Scheduling…'
+              : quoting
+                ? 'Getting fare…'
+                : quote
+                  ? `Schedule · ${peso(quotePay)}`
+                  : 'Schedule booking'}
+          </button>
+        </form>
       </div>
     </div>
-  )
-}
-
-function RentKeysIcon() {
-  return (
-    <svg viewBox="0 0 48 48" width="28" height="28" fill="none" aria-hidden="true">
-      <path
-        d="M20.5 26.5a8.5 8.5 0 1 1 6.2-2.7L38 35.1v4.4h-4.2v-2.8h-3.2v-2.9H27.6l-3.4-3.4a8.5 8.5 0 0 1-3.7.5Z"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinejoin="round"
-      />
-      <circle cx="17.8" cy="20.2" r="2.2" fill="currentColor" />
-    </svg>
-  )
-}
-
-function RentCarIcon() {
-  return (
-    <svg viewBox="0 0 48 48" width="28" height="28" fill="none" aria-hidden="true">
-      <path
-        d="M10 28h28l-2.4-7.2a3 3 0 0 0-2.8-2H15.2a3 3 0 0 0-2.8 2L10 28Z"
-        fill="currentColor"
-        opacity=".18"
-      />
-      <path
-        d="M12.5 28.5h23M14.2 21.2h19.6c1.2 0 2.2.7 2.6 1.8L39 30.5H9l2.6-7.5c.4-1.1 1.4-1.8 2.6-1.8Z"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinejoin="round"
-      />
-      <circle cx="16.5" cy="33.5" r="2.6" stroke="currentColor" strokeWidth="2.2" />
-      <circle cx="31.5" cy="33.5" r="2.6" stroke="currentColor" strokeWidth="2.2" />
-      <path d="M19.5 33.5h9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-    </svg>
-  )
-}
-
-function ListCarIcon() {
-  return (
-    <svg viewBox="0 0 48 48" width="28" height="28" fill="none" aria-hidden="true">
-      <rect x="9" y="10" width="18" height="24" rx="3" stroke="currentColor" strokeWidth="2.2" />
-      <path d="M13.5 17h9M13.5 22h9M13.5 27h6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      <path
-        d="M30 20.5h7.5l2 5.5H29l1-5.5Z"
-        fill="currentColor"
-        opacity=".18"
-      />
-      <path
-        d="M29.5 26.5h11.5l-1.5-4.2a2 2 0 0 0-1.9-1.3H31.2a2 2 0 0 0-1.9 1.3L28 26.5h1.5Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <circle cx="32.2" cy="30.2" r="1.7" stroke="currentColor" strokeWidth="2" />
-      <circle cx="38.8" cy="30.2" r="1.7" stroke="currentColor" strokeWidth="2" />
-    </svg>
   )
 }

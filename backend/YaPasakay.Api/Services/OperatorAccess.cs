@@ -81,11 +81,6 @@ public static class OperatorAccess
             return "schedule";
         }
 
-        if (value.StartsWith("/api/operator/rentals"))
-        {
-            return "rentals";
-        }
-
         if (value.StartsWith("/api/operator/riders")
             || value.StartsWith("/api/operator/rider-invite")
             || value.StartsWith("/api/operator/rider-applications"))

@@ -79,16 +79,11 @@ public static class AdminAccess
         string? companyName = null;
         if (loaded.OperatorId is Guid operatorId)
         {
-            var opFlags = await db.Operators
+            companyName = await db.Operators
                 .AsNoTracking()
                 .Where(x => x.Id == operatorId)
-                .Select(x => new { x.CompanyName, x.RentalEnabled })
+                .Select(x => x.CompanyName)
                 .FirstOrDefaultAsync(cancellationToken);
-            companyName = opFlags?.CompanyName;
-            if (opFlags is { RentalEnabled: false })
-            {
-                pages.RemoveAll(x => string.Equals(x, "rentals", StringComparison.OrdinalIgnoreCase));
-            }
         }
 
         return new MeResponse(
