@@ -237,6 +237,42 @@ public class AuthController(
         return Ok(await IssueAsync(user, me, cancellationToken));
     }
 
+    [HttpPost("google/mobile-ticket")]
+    public async Task<ActionResult<object>> GoogleMobileTicket(
+        [FromBody] GoogleSignInRequest request,
+        CancellationToken cancellationToken)
+    {
+        var signedIn = await Google(request, cancellationToken);
+        AuthResponse? auth = signedIn.Value;
+        if (auth is null && signedIn.Result is OkObjectResult { Value: AuthResponse okAuth })
+        {
+            auth = okAuth;
+        }
+
+        if (auth is not null)
+        {
+            return Ok(new
+            {
+                ticket = MobileAuthTicketStore.Issue(auth),
+                expiresInSeconds = 300,
+            });
+        }
+
+        return signedIn.Result ?? BadRequest(new { message = "Google sign-in failed." });
+    }
+
+    [HttpPost("google/mobile-ticket/redeem")]
+    public ActionResult<AuthResponse> RedeemMobileTicket([FromBody] MobileAuthTicketRedeemRequest request)
+    {
+        var auth = MobileAuthTicketStore.Take(request.Ticket);
+        if (auth is null)
+        {
+            return BadRequest(new { message = "This sign-in link expired. Try Continue with Google again." });
+        }
+
+        return Ok(auth);
+    }
+
     [HttpPost("refresh")]
     public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshRequest request, CancellationToken cancellationToken)
     {
