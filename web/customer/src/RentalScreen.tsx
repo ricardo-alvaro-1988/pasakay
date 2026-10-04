@@ -510,18 +510,38 @@ export function RentalScreen({
 
   if (mode === 'chooser') {
     return (
-      <div className="rental-sheet">
-        <div className="rental-sheet-body">
-          <h2>Rental</h2>
-          <p className="muted">Rent a vehicle or list yours with the local operator.</p>
+      <div className="rental-sheet rental-sheet-chooser">
+        <div className="rental-sheet-body rental-chooser-body">
+          <header className="rental-hero">
+            <div className="rental-hero-badge" aria-hidden="true">
+              <RentKeysIcon />
+            </div>
+            <div className="rental-hero-copy">
+              <p className="rental-hero-kicker">Local operator</p>
+              <h2>Rental</h2>
+              <p>Need a ride for a day — or earn from your own vehicle?</p>
+            </div>
+          </header>
           <div className="rental-chooser">
-            <button type="button" className="rental-choice" onClick={() => { resetForms(); setMode('rent') }}>
-              <strong>Rental Car</strong>
-              <span className="muted">Request a vehicle for your schedule</span>
+            <button type="button" className="rental-choice rent" onClick={() => { resetForms(); setMode('rent') }}>
+              <span className="rental-choice-icon" aria-hidden="true">
+                <RentCarIcon />
+              </span>
+              <span className="rental-choice-copy">
+                <strong>Rental Car</strong>
+                <span>Pick dates &amp; location — we match you with a vehicle</span>
+              </span>
+              <span className="rental-choice-go" aria-hidden="true">→</span>
             </button>
-            <button type="button" className="rental-choice" onClick={() => { resetForms(); setMode('list') }}>
-              <strong>List Your Car</strong>
-              <span className="muted">Offer your vehicle for rent</span>
+            <button type="button" className="rental-choice list" onClick={() => { resetForms(); setMode('list') }}>
+              <span className="rental-choice-icon" aria-hidden="true">
+                <ListCarIcon />
+              </span>
+              <span className="rental-choice-copy">
+                <strong>List Your Car</strong>
+                <span>Share plates, photos &amp; availability with your operator</span>
+              </span>
+              <span className="rental-choice-go" aria-hidden="true">→</span>
             </button>
           </div>
         </div>
@@ -695,5 +715,62 @@ export function RentalScreen({
       </form>
       </div>
     </div>
+  )
+}
+
+function RentKeysIcon() {
+  return (
+    <svg viewBox="0 0 48 48" width="28" height="28" fill="none" aria-hidden="true">
+      <path
+        d="M20.5 26.5a8.5 8.5 0 1 1 6.2-2.7L38 35.1v4.4h-4.2v-2.8h-3.2v-2.9H27.6l-3.4-3.4a8.5 8.5 0 0 1-3.7.5Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinejoin="round"
+      />
+      <circle cx="17.8" cy="20.2" r="2.2" fill="currentColor" />
+    </svg>
+  )
+}
+
+function RentCarIcon() {
+  return (
+    <svg viewBox="0 0 48 48" width="28" height="28" fill="none" aria-hidden="true">
+      <path
+        d="M10 28h28l-2.4-7.2a3 3 0 0 0-2.8-2H15.2a3 3 0 0 0-2.8 2L10 28Z"
+        fill="currentColor"
+        opacity=".18"
+      />
+      <path
+        d="M12.5 28.5h23M14.2 21.2h19.6c1.2 0 2.2.7 2.6 1.8L39 30.5H9l2.6-7.5c.4-1.1 1.4-1.8 2.6-1.8Z"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinejoin="round"
+      />
+      <circle cx="16.5" cy="33.5" r="2.6" stroke="currentColor" strokeWidth="2.2" />
+      <circle cx="31.5" cy="33.5" r="2.6" stroke="currentColor" strokeWidth="2.2" />
+      <path d="M19.5 33.5h9" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function ListCarIcon() {
+  return (
+    <svg viewBox="0 0 48 48" width="28" height="28" fill="none" aria-hidden="true">
+      <rect x="9" y="10" width="18" height="24" rx="3" stroke="currentColor" strokeWidth="2.2" />
+      <path d="M13.5 17h9M13.5 22h9M13.5 27h6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      <path
+        d="M30 20.5h7.5l2 5.5H29l1-5.5Z"
+        fill="currentColor"
+        opacity=".18"
+      />
+      <path
+        d="M29.5 26.5h11.5l-1.5-4.2a2 2 0 0 0-1.9-1.3H31.2a2 2 0 0 0-1.9 1.3L28 26.5h1.5Z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinejoin="round"
+      />
+      <circle cx="32.2" cy="30.2" r="1.7" stroke="currentColor" strokeWidth="2" />
+      <circle cx="38.8" cy="30.2" r="1.7" stroke="currentColor" strokeWidth="2" />
+    </svg>
   )
 }
