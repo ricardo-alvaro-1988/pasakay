@@ -8,6 +8,7 @@ import 'rate_dialog.dart';
 import 'session.dart';
 import 'share_trip.dart';
 import 'theme.dart';
+import 'trip_status_banner.dart';
 
 class BookingScreen extends StatefulWidget {
   const BookingScreen({super.key, required this.session});
@@ -353,15 +354,19 @@ class _TripSummary extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        TripStatusBanner(status: trip.status, compact: true),
+        const SizedBox(height: 8),
         Row(
           children: [
             Expanded(
-              child: Text(tripHeadline(trip.status), style: Theme.of(context).textTheme.titleMedium),
+              child: Text(
+                trip.reference,
+                style: const TextStyle(color: brandMuted, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
             ),
             Text(peso(trip.customerFare ?? trip.fare), style: const TextStyle(fontWeight: FontWeight.w800)),
           ],
         ),
-        Text(trip.reference, style: const TextStyle(color: brandMuted, fontSize: 12, fontWeight: FontWeight.w600)),
         Text(phWhen(when), style: const TextStyle(color: brandMuted, fontSize: 12)),
       ],
     );

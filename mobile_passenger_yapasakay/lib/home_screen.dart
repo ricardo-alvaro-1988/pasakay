@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import 'api.dart';
+import 'chat_action_button.dart';
 import 'directions.dart';
 import 'geocode.dart';
 import 'models.dart';
@@ -14,6 +15,8 @@ import 'share_trip.dart';
 import 'show_qr.dart';
 import 'stop_rail.dart';
 import 'theme.dart';
+import 'trip_chat_sheet.dart';
+import 'trip_status_banner.dart';
 import 'vehicle_art.dart' hide vehicleLabel;
 
 class HomeScreen extends StatefulWidget {
@@ -29,6 +32,9 @@ class _HomeScreenState extends State<HomeScreen> {
   GoogleMapController? _map;
   Stop? _pickup;
   Stop? _dropoff;
+  /// 1 = vehicle type, 2 = pickup/drop-off, 3 = choose ride + book
+  int _bookStep = 1;
+  String _preferredType = 'Motorcycle';
   String _vehicle = 'Motorcycle';
   String? _vehicleCategoryId;
   String _payment = 'Cash';
@@ -83,14 +89,50 @@ class _HomeScreenState extends State<HomeScreen> {
     final riderId = widget.session.hailBookRiderId;
     final vehicle = widget.session.hailBookVehicleType;
     if (vehicle != null && vehicle.isNotEmpty) {
-      setState(() => _vehicle = vehicle);
+      setState(() {
+        _preferredType = vehicle;
+        _vehicle = vehicle;
+        _bookStep = 2;
+      });
     }
     if (riderId != null) {
       final hailed = widget.session.desk?.hailedRider;
       if (hailed != null) {
-        setState(() => _vehicle = hailed.vehicleType);
+        setState(() {
+          _preferredType = hailed.vehicleType;
+          _vehicle = hailed.vehicleType;
+          _bookStep = 2;
+        });
       }
     }
+  }
+
+  void _selectPreferredType(String type, String? categoryId) {
+    setState(() {
+      _preferredType = type;
+      _vehicle = type;
+      _vehicleCategoryId = categoryId;
+      _passengers = vehicleIsCargo(type) ? 1 : _passengers.clamp(1, vehicleMaxPassengers(type));
+      _bookStep = 2;
+      _sheetOpen = true;
+      _error = null;
+    });
+  }
+
+  void _goToChooseRide() {
+    if (_pickup == null || _dropoff == null) {
+      setState(() => _error = 'Choose pickup and drop-off.');
+      return;
+    }
+    setState(() {
+      _bookStep = 3;
+      _sheetOpen = true;
+      _error = null;
+      // Keep preferred type selected when entering step 3.
+      _vehicle = _preferredType;
+    });
+    _scheduleQuote();
+    unawaited(_syncRoute());
   }
 
   Future<String> _mapsKey() async {
@@ -300,11 +342,22 @@ class _HomeScreenState extends State<HomeScreen> {
           } catch (_) {}
         }
         if (!mounted) return;
-        final selected = _selectedOffer;
         setState(() {
           _quotes
             ..clear()
             ..addAll(entries);
+          // Prefer the step-1 type (and current selection) when applying quotes.
+          VehicleOffer? selected = _selectedOffer;
+          if (selected == null || !entries.containsKey(selected.id)) {
+            for (final v in vehicles) {
+              if (v.vehicleType == _preferredType && entries.containsKey(v.id)) {
+                selected = v;
+                _vehicle = v.vehicleType;
+                _vehicleCategoryId = v.id;
+                break;
+              }
+            }
+          }
           _quote = selected == null ? null : entries[selected.id];
           _quoting = false;
         });
@@ -363,6 +416,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       widget.session.updateDesk(desk);
       widget.session.clearHailIntent();
+      setState(() => _bookStep = 1);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -650,11 +704,28 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Row(
                           children: [
                             Text(
-                              active != null ? 'Your ride' : 'Where to?',
+                              active != null
+                                  ? 'Your ride'
+                                  : _bookStep == 1
+                                      ? 'Choose a vehicle'
+                                      : _bookStep == 2
+                                          ? 'Set your route'
+                                          : 'Choose your ride',
                               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
                             ),
                             const Spacer(),
-                            const Icon(Icons.expand_more, color: brandMuted),
+                            if (active == null && _bookStep > 1)
+                              IconButton(
+                                tooltip: 'Back',
+                                onPressed: () => setState(() {
+                                  _bookStep -= 1;
+                                  _error = null;
+                                }),
+                                icon: const Icon(Icons.arrow_back, color: brandMuted),
+                                visualDensity: VisualDensity.compact,
+                              )
+                            else
+                              const Icon(Icons.expand_more, color: brandMuted),
                           ],
                         ),
                       ),
@@ -663,8 +734,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         _ActiveTripCard(
                           trip: active,
                           cancelling: _cancelling,
+                          unreadChat: widget.session.unreadChatCount,
                           onCancel: active.canCancel && !_cancelling ? () => _cancelActive(active) : null,
                           onShare: () => shareCustomerTrip(active),
+                          onChat: tripCanViewChat(status: active.status, canViewChat: active.canViewChat)
+                              ? () => openTripChatSheet(
+                                    context,
+                                    api: widget.session.api,
+                                    tripId: active.id,
+                                    status: active.status,
+                                    canChat: active.canChat,
+                                    onOpened: widget.session.clearChatUnread,
+                                  )
+                              : null,
                         ),
                       ] else ...[
                         if (hailed != null || hailId != null) ...[
@@ -678,163 +760,184 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                         ],
-                        const SizedBox(height: 10),
-                        StopRail(
-                          pickup: _pickup,
-                          dropoff: _dropoff,
-                          onPickupTap: () => _pickStop(true),
-                          onDropoffTap: () => _pickStop(false),
-                          pickupHint: _locating ? 'Getting GPS…' : 'Tap to set pickup',
-                        ),
-                        const SizedBox(height: 6),
-                        _VehicleGrid(
-                          vehicles: vehicles,
-                          selectedType: _vehicle,
-                          selectedCategoryId: _vehicleCategoryId,
-                          quotes: _quotes,
-                          motoOk: motoOk,
-                          trikeOk: trikeOk,
-                          onSelect: (type, categoryId) {
-                            setState(() {
-                              _vehicle = type;
-                              _vehicleCategoryId = categoryId;
-                              _passengers = vehicleIsCargo(type)
-                                  ? 1
-                                  : _passengers.clamp(1, vehicleMaxPassengers(type));
-                              _quote = categoryId == null ? _quote : _quotes[categoryId];
-                            });
-                            _scheduleQuote();
-                          },
-                        ),
-                        if (_showPassengerPicker) ...[
-                          const SizedBox(height: 6),
-                          Row(
-                            children: [
-                              Text(
-                                'Passengers (max $_maxPassengers)',
-                                style: const TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              const Spacer(),
-                              _PassengerStepButton(
-                                icon: Icons.remove_circle_outline,
-                                onPressed: _passengers <= 1
-                                    ? null
-                                    : () {
-                                        setState(() => _passengers -= 1);
-                                        _scheduleQuote();
-                                      },
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 8),
-                                child: Text('$_passengers', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                              ),
-                              _PassengerStepButton(
-                                icon: Icons.add_circle_outline,
-                                onPressed: _passengers >= _maxPassengers
-                                    ? null
-                                    : () {
-                                        setState(() => _passengers += 1);
-                                        _scheduleQuote();
-                                      },
-                              ),
-                            ],
+                        if (_bookStep == 1) ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Pick the vehicle you want first. You can still switch on the fare screen.',
+                            style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600, fontSize: 13),
                           ),
-                        ],
-                        const SizedBox(height: 8),
-                        Row(
-                          children: ['Cash', 'GCash', 'Maya', 'Other'].map((p) {
-                            final on = _payment == p;
-                            return Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 3),
-                                child: Material(
-                                  color: on ? brandRed : brandChip,
-                                  borderRadius: BorderRadius.circular(999),
-                                  child: InkWell(
-                                    onTap: () {
-                                      setState(() => _payment = p);
-                                      _scheduleQuote();
-                                    },
+                          const SizedBox(height: 12),
+                          _VehicleGrid(
+                            vehicles: vehicles,
+                            selectedType: _preferredType,
+                            selectedCategoryId: null,
+                            quotes: const {},
+                            motoOk: motoOk,
+                            trikeOk: trikeOk,
+                            preferType: _preferredType,
+                            onSelect: _selectPreferredType,
+                          ),
+                        ] else if (_bookStep == 2) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Preferred: ${vehicleLabel(_preferredType)}',
+                            style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                          const SizedBox(height: 10),
+                          StopRail(
+                            pickup: _pickup,
+                            dropoff: _dropoff,
+                            onPickupTap: () => _pickStop(true),
+                            onDropoffTap: () => _pickStop(false),
+                            pickupHint: _locating ? 'Getting GPS…' : 'Tap to set pickup',
+                          ),
+                          if (_error != null) ...[
+                            const SizedBox(height: 8),
+                            Text(_error!, style: const TextStyle(color: brandSos, fontWeight: FontWeight.w600)),
+                          ],
+                          const SizedBox(height: 14),
+                          FilledButton(
+                            onPressed: _goToChooseRide,
+                            child: const Text('Continue'),
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            '${_pickup?.label ?? 'Pickup'} → ${_dropoff?.label ?? 'Drop-off'}',
+                            style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12),
+                          ),
+                          const SizedBox(height: 10),
+                          _VehicleOfferList(
+                            vehicles: vehicles,
+                            selectedType: _vehicle,
+                            selectedCategoryId: _vehicleCategoryId,
+                            quotes: _quotes,
+                            motoOk: motoOk,
+                            trikeOk: trikeOk,
+                            preferType: _preferredType,
+                            quoting: _quoting,
+                            onSelect: (type, categoryId) {
+                              setState(() {
+                                _vehicle = type;
+                                _vehicleCategoryId = categoryId;
+                                _passengers = vehicleIsCargo(type)
+                                    ? 1
+                                    : _passengers.clamp(1, vehicleMaxPassengers(type));
+                                if (categoryId != null) {
+                                  _quote = _quotes[categoryId];
+                                } else {
+                                  Quote? match;
+                                  for (final q in _quotes.values) {
+                                    if (q.vehicleType == type) {
+                                      match = q;
+                                      break;
+                                    }
+                                  }
+                                  _quote = match ?? _quote;
+                                }
+                              });
+                              _scheduleQuote();
+                            },
+                          ),
+                          if (_showPassengerPicker) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Text(
+                                  'Passengers (max $_maxPassengers)',
+                                  style: const TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                const Spacer(),
+                                _PassengerStepButton(
+                                  icon: Icons.remove_circle_outline,
+                                  onPressed: _passengers <= 1
+                                      ? null
+                                      : () {
+                                          setState(() => _passengers -= 1);
+                                          _scheduleQuote();
+                                        },
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  child: Text('$_passengers', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                                ),
+                                _PassengerStepButton(
+                                  icon: Icons.add_circle_outline,
+                                  onPressed: _passengers >= _maxPassengers
+                                      ? null
+                                      : () {
+                                          setState(() => _passengers += 1);
+                                          _scheduleQuote();
+                                        },
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 8),
+                          Row(
+                            children: ['Cash', 'GCash', 'Maya', 'Other'].map((p) {
+                              final on = _payment == p;
+                              return Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                                  child: Material(
+                                    color: on ? brandRed : brandChip,
                                     borderRadius: BorderRadius.circular(999),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
-                                      child: Text(
-                                        p.toUpperCase(),
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: on ? Colors.white : brandInk,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 11,
+                                    child: InkWell(
+                                      onTap: () {
+                                        setState(() => _payment = p);
+                                        _scheduleQuote();
+                                      },
+                                      borderRadius: BorderRadius.circular(999),
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        child: Text(
+                                          p.toUpperCase(),
+                                          textAlign: TextAlign.center,
+                                          style: TextStyle(
+                                            color: on ? Colors.white : brandInk,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 11,
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                        if (_payment == 'Other') ...[
-                          const SizedBox(height: 8),
-                          TextField(
-                            decoration: const InputDecoration(labelText: 'Payment reference'),
-                            onChanged: (v) => _paymentRef = v,
+                              );
+                            }).toList(),
                           ),
-                        ],
-                        if (_quoting)
-                          const Padding(
-                            padding: EdgeInsets.all(12),
-                            child: Center(child: CircularProgressIndicator()),
-                          )
-                        else if (_quote != null) ...[
-                          const SizedBox(height: 10),
-                          BrandPanel(
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(peso(_quote!.displayFare), style: Theme.of(context).textTheme.titleMedium),
-                                      Text(
-                                        '${_quote!.distanceKm.toStringAsFixed(1)} km · ~${_quote!.etaMinutes} min',
-                                        style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Text(_quote!.operatorName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
-                              ],
+                          if (_payment == 'Other') ...[
+                            const SizedBox(height: 8),
+                            TextField(
+                              decoration: const InputDecoration(labelText: 'Payment reference'),
+                              onChanged: (v) => _paymentRef = v,
                             ),
+                          ],
+                          if (_error != null) ...[
+                            const SizedBox(height: 8),
+                            Text(_error!, style: const TextStyle(color: brandSos, fontWeight: FontWeight.w600)),
+                          ],
+                          const SizedBox(height: 14),
+                          FilledButton(
+                            onPressed: _booking || _quoting
+                                ? null
+                                : _quote == null
+                                    ? null
+                                    : _book,
+                            child: _booking
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                  )
+                                : Text(
+                                    _quote == null
+                                        ? (_quoting ? 'Getting fare…' : 'Select a vehicle')
+                                        : 'Book ${vehicleLabel(_vehicle)} · ${peso(_quote!.displayFare)}',
+                                  ),
                           ),
                         ],
-                        if (_error != null) ...[
-                          const SizedBox(height: 8),
-                          Text(_error!, style: const TextStyle(color: brandSos, fontWeight: FontWeight.w600)),
-                        ],
-                        const SizedBox(height: 14),
-                        FilledButton(
-                          onPressed: _booking || _quoting
-                              ? null
-                              : (_pickup == null || _dropoff == null)
-                                  ? () => setState(() => _error = 'Choose pickup and drop-off.')
-                                  : _quote == null
-                                      ? null
-                                      : _book,
-                          child: _booking
-                              ? const SizedBox(
-                                  width: 22,
-                                  height: 22,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : Text(
-                                  _pickup == null || _dropoff == null
-                                      ? 'Choose pickup and drop-off'
-                                      : _quote == null
-                                          ? 'Getting fare…'
-                                          : 'Book ride · ${peso(_quote!.displayFare)}',
-                                ),
-                        ),
                       ],
                     ],
                   ),
@@ -848,6 +951,45 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+List<_VehicleItem> _buildVehicleItems({
+  required List<VehicleOffer> vehicles,
+  required Map<String, Quote> quotes,
+  required bool motoOk,
+  required bool trikeOk,
+  String? preferType,
+}) {
+  final items = <_VehicleItem>[];
+  if (vehicles.isNotEmpty) {
+    for (final v in vehicles.where((v) => v.available)) {
+      items.add(
+        _VehicleItem(
+          id: v.id,
+          type: v.vehicleType,
+          name: v.name,
+          iconKey: v.iconKey,
+          price: quotes[v.id]?.displayFare,
+        ),
+      );
+    }
+  } else {
+    if (motoOk) {
+      items.add(const _VehicleItem(id: null, type: 'Motorcycle', name: 'Motorcycle'));
+    }
+    if (trikeOk) {
+      items.add(const _VehicleItem(id: null, type: 'Tricycle', name: 'Tricycle'));
+    }
+    items.add(const _VehicleItem(id: null, type: 'Sedan', name: 'Sedan'));
+  }
+  if (preferType != null && preferType.isNotEmpty) {
+    items.sort((a, b) {
+      final ap = a.type == preferType ? 0 : 1;
+      final bp = b.type == preferType ? 0 : 1;
+      return ap.compareTo(bp);
+    });
+  }
+  return items;
+}
+
 class _VehicleGrid extends StatelessWidget {
   const _VehicleGrid({
     required this.vehicles,
@@ -857,6 +999,7 @@ class _VehicleGrid extends StatelessWidget {
     required this.motoOk,
     required this.trikeOk,
     required this.onSelect,
+    this.preferType,
   });
 
   final List<VehicleOffer> vehicles;
@@ -865,82 +1008,176 @@ class _VehicleGrid extends StatelessWidget {
   final Map<String, Quote> quotes;
   final bool motoOk;
   final bool trikeOk;
+  final String? preferType;
   final void Function(String type, String? categoryId) onSelect;
 
   @override
   Widget build(BuildContext context) {
-    final items = <_VehicleItem>[];
-    if (vehicles.isNotEmpty) {
-      for (final v in vehicles.where((v) => v.available)) {
-        items.add(
-          _VehicleItem(
-            id: v.id,
-            type: v.vehicleType,
-            name: v.name,
-            iconKey: v.iconKey,
-            price: quotes[v.id]?.displayFare,
-          ),
-        );
-      }
-    } else {
-      if (motoOk) {
-        items.add(const _VehicleItem(id: null, type: 'Motorcycle', name: 'Motorcycle'));
-      }
-      if (trikeOk) {
-        items.add(const _VehicleItem(id: null, type: 'Tricycle', name: 'Tricycle'));
-      }
-      items.add(const _VehicleItem(id: null, type: 'Sedan', name: 'Sedan'));
-    }
+    final items = _buildVehicleItems(
+      vehicles: vehicles,
+      quotes: quotes,
+      motoOk: motoOk,
+      trikeOk: trikeOk,
+      preferType: preferType,
+    );
 
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: items.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        mainAxisSpacing: 6,
-        crossAxisSpacing: 6,
-        childAspectRatio: 1.05,
-      ),
-      itemBuilder: (context, index) {
-        final item = items[index];
-        final selected = item.id != null
-            ? selectedCategoryId == item.id
-            : selectedCategoryId == null && selectedType == item.type;
-        return Material(
-          color: brandSurface,
-          borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            onTap: () => onSelect(item.type, item.id),
-            borderRadius: BorderRadius.circular(16),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: selected ? brandRed : brandLine, width: selected ? 2 : 1),
-                color: selected ? brandAccentSoft : brandSurface,
-              ),
-              padding: const EdgeInsets.all(6),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(child: vehicleArtImage(item.type, iconKey: item.iconKey, height: 42)),
-                  Text(
-                    item.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-                  ),
-                  if (item.price != null)
-                    Text(
-                      peso(item.price!),
-                      style: const TextStyle(color: brandRed, fontWeight: FontWeight.w800, fontSize: 12),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const gap = 6.0;
+        final tileWidth = (constraints.maxWidth - gap * 2) / 3;
+        return Wrap(
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final item in items)
+              Builder(
+                builder: (context) {
+                  final selected = item.id != null
+                      ? selectedCategoryId == item.id
+                      : selectedCategoryId == null && selectedType == item.type;
+                  return SizedBox(
+                    width: tileWidth,
+                    height: item.price != null ? 84 : 76,
+                    child: Material(
+                      color: brandSurface,
+                      borderRadius: BorderRadius.circular(16),
+                      child: InkWell(
+                        onTap: () => onSelect(item.type, item.id),
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: selected ? brandRed : brandLine, width: selected ? 2 : 1),
+                            color: selected ? brandAccentSoft : brandSurface,
+                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              vehicleArtImage(item.type, iconKey: item.iconKey, height: 36),
+                              const SizedBox(height: 4),
+                              Text(
+                                item.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
+                              ),
+                              if (item.price != null)
+                                Text(
+                                  peso(item.price!),
+                                  style: const TextStyle(color: brandRed, fontWeight: FontWeight.w800, fontSize: 11),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
-                ],
+                  );
+                },
               ),
-            ),
-          ),
+          ],
         );
       },
+    );
+  }
+}
+
+class _VehicleOfferList extends StatelessWidget {
+  const _VehicleOfferList({
+    required this.vehicles,
+    required this.selectedType,
+    required this.selectedCategoryId,
+    required this.quotes,
+    required this.motoOk,
+    required this.trikeOk,
+    required this.preferType,
+    required this.onSelect,
+    this.quoting = false,
+  });
+
+  final List<VehicleOffer> vehicles;
+  final String selectedType;
+  final String? selectedCategoryId;
+  final Map<String, Quote> quotes;
+  final bool motoOk;
+  final bool trikeOk;
+  final String preferType;
+  final bool quoting;
+  final void Function(String type, String? categoryId) onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _buildVehicleItems(
+      vehicles: vehicles,
+      quotes: quotes,
+      motoOk: motoOk,
+      trikeOk: trikeOk,
+      preferType: preferType,
+    );
+    if (quoting && quotes.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return Column(
+      children: [
+        for (final item in items)
+          Builder(
+            builder: (context) {
+              final selected = item.id != null
+                  ? selectedCategoryId == item.id
+                  : selectedCategoryId == null && selectedType == item.type;
+              final preferred = item.type == preferType;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Material(
+                  color: selected ? brandAccentSoft : brandSurface,
+                  borderRadius: BorderRadius.circular(16),
+                  child: InkWell(
+                    onTap: () => onSelect(item.type, item.id),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: selected ? brandRed : brandLine,
+                          width: selected ? 2 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          vehicleArtImage(item.type, iconKey: item.iconKey, height: 40),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                if (preferred)
+                                  const Text(
+                                    'Your first choice',
+                                    style: TextStyle(color: brandRed, fontWeight: FontWeight.w700, fontSize: 12),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            item.price != null ? peso(item.price!) : (quoting ? '…' : '—'),
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: brandRed),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+      ],
     );
   }
 }
@@ -986,12 +1223,21 @@ class _PassengerStepButton extends StatelessWidget {
 }
 
 class _ActiveTripCard extends StatelessWidget {
-  const _ActiveTripCard({required this.trip, this.onCancel, this.cancelling = false, this.onShare});
+  const _ActiveTripCard({
+    required this.trip,
+    this.onCancel,
+    this.cancelling = false,
+    this.onShare,
+    this.onChat,
+    this.unreadChat = 0,
+  });
 
   final CustomerTrip trip;
   final VoidCallback? onCancel;
   final bool cancelling;
   final VoidCallback? onShare;
+  final VoidCallback? onChat;
+  final int unreadChat;
 
   @override
   Widget build(BuildContext context) {
@@ -1006,10 +1252,15 @@ class _ActiveTripCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          TripStatusBanner(status: trip.status),
+          const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
-                child: Text(tripHeadline(trip.status), style: Theme.of(context).textTheme.titleMedium),
+                child: Text(
+                  trip.reference,
+                  style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12),
+                ),
               ),
               if (onShare != null)
                 IconButton(
@@ -1018,11 +1269,20 @@ class _ActiveTripCard extends StatelessWidget {
                   icon: const Icon(Icons.share, size: 20),
                   visualDensity: VisualDensity.compact,
                 ),
-              Text(trip.reference, style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12)),
             ],
           ),
-          if (finding) ...[
+          if (onChat != null) ...[
             const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ChatActionButton(
+                unread: unreadChat,
+                onPressed: onChat!,
+              ),
+            ),
+          ],
+          if (finding) ...[
+            const SizedBox(height: 4),
             const Row(
               children: [
                 SizedBox(
@@ -1033,14 +1293,14 @@ class _ActiveTripCard extends StatelessWidget {
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Finding a rider… Broadcasting to nearby phones.',
+                    'Still looking — keep this screen open.',
                     style: TextStyle(color: brandMuted, fontSize: 12, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
             ),
           ],
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(trip.pickup, style: const TextStyle(fontWeight: FontWeight.w600)),
           const Text('↓', style: TextStyle(color: brandMuted)),
           Text(trip.dropoff, style: const TextStyle(fontWeight: FontWeight.w600)),
@@ -1076,12 +1336,6 @@ class _ActiveTripCard extends StatelessWidget {
                       )
                     : Text(finding ? 'Cancel booking' : 'Cancel ride'),
               ),
-            ),
-          ] else if (trip.status == 'Ongoing') ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Trip is ongoing. Your rider will finish the ride when you arrive.',
-              style: TextStyle(color: brandMuted, fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ],
         ],

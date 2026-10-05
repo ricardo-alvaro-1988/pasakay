@@ -23,6 +23,8 @@ class CustomerSession extends ChangeNotifier {
   String? mapsKey;
   String? hailBookRiderId;
   String? hailBookVehicleType;
+  int unreadChatCount = 0;
+  String? unreadChatTripId;
 
   Timer? _poll;
   Timer? _hubDebounce;
@@ -62,11 +64,36 @@ class CustomerSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearChatUnread() {
+    if (unreadChatCount == 0 && unreadChatTripId == null) return;
+    unreadChatCount = 0;
+    unreadChatTripId = null;
+    notifyListeners();
+  }
+
+  void _onChatMessage(ChatMessage message) {
+    if (!message.fromRider) return;
+    final tripId = desk?.activeTrip?.id;
+    if (tripId == null || tripId.isEmpty) return;
+    unreadChatCount += 1;
+    unreadChatTripId = tripId;
+    notifyListeners();
+  }
+
   void updateDesk(Desk next) {
     final hadActive = hasActiveTrip;
+    final previousTripId = desk?.activeTrip?.id;
     desk = next;
     error = null;
     _deskSignature = _signature(next);
+    final activeId = next.activeTrip?.id;
+    if (activeId == null || (unreadChatTripId != null && unreadChatTripId != activeId)) {
+      unreadChatCount = 0;
+      unreadChatTripId = null;
+    } else if (previousTripId != null && previousTripId != activeId) {
+      unreadChatCount = 0;
+      unreadChatTripId = null;
+    }
     notifyListeners();
     if (hadActive != hasActiveTrip) {
       _schedulePoll();
@@ -192,10 +219,19 @@ class CustomerSession extends ChangeNotifier {
   Future<void> _refreshNow({bool silent = false}) async {
     final hadActive = hasActiveTrip;
     final previousSig = _deskSignature;
+    final previousTripId = desk?.activeTrip?.id;
     try {
       final next = await api.desk().timeout(const Duration(seconds: 12));
       desk = next;
       _deskSignature = _signature(next);
+      final activeId = next.activeTrip?.id;
+      if (activeId == null || (unreadChatTripId != null && unreadChatTripId != activeId)) {
+        unreadChatCount = 0;
+        unreadChatTripId = null;
+      } else if (previousTripId != null && previousTripId != activeId) {
+        unreadChatCount = 0;
+        unreadChatTripId = null;
+      }
       if (!silent) error = null;
     } on ApiException catch (ex) {
       if (!silent) error = ex.message;
@@ -243,6 +279,8 @@ class CustomerSession extends ChangeNotifier {
     pabiliEnabled = false;
     hailBookRiderId = null;
     hailBookVehicleType = null;
+    unreadChatCount = 0;
+    unreadChatTripId = null;
     if (!silent) error = null;
     notifyListeners();
   }
@@ -253,7 +291,7 @@ class CustomerSession extends ChangeNotifier {
     _hubDebounce?.cancel();
     _hubRetry?.cancel();
     try {
-      await _deskHub.connect(_onHubDeskChanged);
+      await _deskHub.connect(_onHubDeskChanged, onChat: _onChatMessage);
     } catch (_) {}
     _deskHubLive = _deskHub.isLive;
     _schedulePoll();
@@ -300,7 +338,7 @@ class CustomerSession extends ChangeNotifier {
     _hubRetry = Timer(_hubRetryDelay, () async {
       if (!loggedIn || _deskHubLive) return;
       try {
-        await _deskHub.connect(_onHubDeskChanged);
+        await _deskHub.connect(_onHubDeskChanged, onChat: _onChatMessage);
       } catch (_) {}
       _deskHubLive = _deskHub.isLive;
       _schedulePoll();

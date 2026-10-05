@@ -372,6 +372,9 @@ function Home({
   const routeRef = useRef<DirectionsRendererHandle | null>(null)
   const [pickup, setPickup] = useState<Stop | null>(null)
   const [dropoff, setDropoff] = useState<Stop | null>(null)
+  /** 1 = vehicle type, 2 = pickup/drop-off, 3 = choose ride + book */
+  const [bookStep, setBookStep] = useState<1 | 2 | 3>(1)
+  const [preferredType, setPreferredType] = useState<VehicleType>('Motorcycle')
   const [vehicle, setVehicle] = useState<VehicleType>('Motorcycle')
   const [vehicleCategoryId, setVehicleCategoryId] = useState<string | null>(null)
   const [passengers, setPassengers] = useState(1)
@@ -700,6 +703,14 @@ function Home({
   }, [pickup, dropoff, payment, paymentRef, promoCode, trip, lockedRider?.riderId, lockedRider?.vehicleType, passengers, noOperator.useOffers, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.availableTypes.join('|'), noOperator.availableVehicles.map((v) => `${v.id}:${v.available}:${v.maxPassengers}`).join('|')])
 
   useEffect(() => {
+    if (!lockedRider) return
+    const type = lockedRider.vehicleType as VehicleType
+    setPreferredType(type)
+    setVehicle(type)
+    setBookStep((s) => (s === 1 ? 2 : s))
+  }, [lockedRider?.riderId, lockedRider?.vehicleType])
+
+  useEffect(() => {
     if (lockedRider) return
     if (noOperator.useOffers) {
       const available = noOperator.availableVehicles
@@ -735,6 +746,49 @@ function Home({
   const selectedMaxPassengers = vehicleMaxPassengers(vehicle, selectedOffer?.maxPassengers)
   const selectedIsCargo = vehicleIsCargo(vehicle, selectedOffer?.isCargo)
   const showPassengerPicker = !!pickup && !selectedIsCargo && selectedMaxPassengers > 1
+
+  const rideOptions = (() => {
+    const raw = lockedRider
+      ? [{ id: lockedRider.vehicleType, vehicleType: lockedRider.vehicleType, name: vehicleLabel(lockedRider.vehicleType), available: true } as const]
+      : (noOperator.useOffers
+          ? noOperator.availableVehicles
+          : noOperator.availableTypes.map((t) => ({
+              id: t,
+              vehicleType: t,
+              name: vehicleLabel(t),
+              available: true,
+              maxPassengers: vehicleMaxPassengers(t),
+              isCargo: vehicleIsCargo(t),
+            })))
+    return [...raw].sort((a, b) => {
+      const at = String(a.vehicleType)
+      const bt = String(b.vehicleType)
+      const ap = at === preferredType ? 0 : 1
+      const bp = bt === preferredType ? 0 : 1
+      return ap - bp
+    })
+  })()
+
+  function selectPreferredType(type: VehicleType, categoryId: string | null) {
+    setPreferredType(type)
+    setVehicle(type)
+    setVehicleCategoryId(categoryId)
+    setPassengers(vehicleIsCargo(type) ? 1 : Math.min(passengers, vehicleMaxPassengers(type)))
+    setBookStep(2)
+    setBookSheetOpen(true)
+    setError('')
+  }
+
+  function goToChooseRide() {
+    if (!pickup || !dropoff) {
+      setError('Choose pickup and drop-off.')
+      return
+    }
+    setVehicle(preferredType)
+    setBookStep(3)
+    setBookSheetOpen(true)
+    setError('')
+  }
 
   useEffect(() => {
     if (!showPassengerPicker) {
@@ -1065,6 +1119,7 @@ function Home({
       setFavoritePick(null)
       setDraftBoost(0)
       setBoostCustom('')
+      setBookStep(1)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not book.'
       setError(isOperatorCoverageError(message) ? '' : message)
@@ -1134,15 +1189,29 @@ function Home({
               />
             ) : (
               <>
-                <button
-                  type="button"
-                  className={`sheet-head where-toggle${bookSheetOpen ? ' open' : ''}`}
-                  onClick={() => setBookSheetOpen((open) => !open)}
-                  aria-expanded={bookSheetOpen}
-                >
-                  <h2 className="where">Where to?</h2>
-                  <span className="where-chevron" aria-hidden>{bookSheetOpen ? '▾' : '▸'}</span>
-                </button>
+                <div className={`sheet-head where-toggle${bookSheetOpen ? ' open' : ''}`}>
+                  {bookStep > 1 ? (
+                    <button
+                      type="button"
+                      className="ghost book-step-back"
+                      aria-label="Back"
+                      onClick={() => { setBookStep((s) => (s === 3 ? 2 : 1)); setError('') }}
+                    >
+                      ←
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="where-toggle-main"
+                    onClick={() => setBookSheetOpen((open) => !open)}
+                    aria-expanded={bookSheetOpen}
+                  >
+                    <h2 className="where">
+                      {bookStep === 1 ? 'Choose a vehicle' : bookStep === 2 ? 'Set your route' : 'Choose your ride'}
+                    </h2>
+                    <span className="where-chevron" aria-hidden>{bookSheetOpen ? '▾' : '▸'}</span>
+                  </button>
+                </div>
                 {!bookSheetOpen && (dropoff || pickup) ? (
                   <button type="button" className="where-summary" onClick={() => setBookSheetOpen(true)}>
                     <small>{dropoff ? 'Drop-off' : 'Pickup'}</small>
@@ -1171,212 +1240,246 @@ function Home({
                     </div>
                   </div>
                 )}
-                <div className="stop">
-                  <div className="stop-row">
-                    <span className="pin beat"><span className="dot a" /></span>
-                    <button type="button" className={`addr ${searchFor === 'pickup' ? 'on' : ''}`} onClick={() => { setSearchFor('pickup'); setQuery(''); setError('') }}>
-                      <small>Pickup</small>
-                      {pickup?.label ?? (locating ? 'Waiting for GPS…' : 'Tap to set pickup')}
-                    </button>
-                  </div>
-                  <div className="stop-row">
-                    <span className="pin beat"><span className="dot b" /></span>
-                    <button type="button" className={`addr ${searchFor === 'dropoff' ? 'on' : ''}`} onClick={() => { setSearchFor('dropoff'); setQuery(''); setError('') }}>
-                      <small>Drop-off</small>
-                      {dropoff?.label ?? 'Tap to set drop-off'}
-                    </button>
-                  </div>
-                </div>
-                {(lockedRider || pickup) && (
-                <div className="vehicles">
-                  {(lockedRider
-                    ? [{ id: lockedRider.vehicleType, vehicleType: lockedRider.vehicleType, name: vehicleLabel(lockedRider.vehicleType), available: true } as const]
-                    : (noOperator.useOffers
-                        ? noOperator.availableVehicles
-                        : noOperator.availableTypes.map((t) => ({
-                            id: t,
-                            vehicleType: t,
-                            name: vehicleLabel(t),
-                            available: true,
-                            maxPassengers: vehicleMaxPassengers(t),
-                            isCargo: vehicleIsCargo(t),
-                          })))
-                  ).map((item) => {
-                    const type = item.vehicleType as VehicleType
-                    const categoryId = 'id' in item && item.id !== type ? item.id : null
-                    const itemKey = quoteKey(type, categoryId)
-                    const canSelect = !('available' in item) || item.available !== false
-                    const selected = canSelect && (categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId)
-                    const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
-                      ? item.maxPassengers
-                      : vehicleMaxPassengers(type)
-                    const cargo = 'isCargo' in item && typeof item.isCargo === 'boolean'
-                      ? item.isCargo
-                      : vehicleIsCargo(type)
-                    const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
-                    return (
-                      <button
-                        key={itemKey}
-                        type="button"
-                        disabled={(!!lockedRider && lockedRider.vehicleType !== type) || !canSelect}
-                        className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
-                        title={!canSelect ? 'Not offered for bookings in this area yet' : undefined}
-                        onClick={() => {
-                          if (!canSelect) return
-                          setVehicle(type)
-                          setVehicleCategoryId(categoryId)
-                          setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))
-                        }}
-                      >
-                        <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
-                          <img src={vehicleArt(type, iconKey)} alt="" />
-                        </span>
-                        <span className="copy">
-                          <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
-                          <b className="price">{!canSelect ? 'Not offered' : quotes[itemKey] ? quotePriceLabel(quotes[itemKey]!) : '—'}</b>
-                          {cargo ? <small className="muted">Cargo</small> : null}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-                )}
-                {!lockedRider && pickup && !noOperator.vehiclesReady && (
-                  <p className="muted" style={{ margin: '8px 0 0' }}>Checking available vehicles…</p>
-                )}
-                {!lockedRider && pickup && noOperator.vehiclesReady && noOperator.availableTypes.length === 0 && (
-                  <p className="muted" style={{ margin: '8px 0 0' }}>No vehicle types are offered for bookings in this municipality yet.</p>
-                )}
-                {showPassengerPicker && (
-                  <div className="passenger-picker" role="group" aria-label="Number of passengers">
-                    <span className="passenger-label">Passengers (max {selectedMaxPassengers})</span>
-                    <div className="passenger-controls">
-                      <button
-                        type="button"
-                        className="passenger-btn"
-                        disabled={passengers <= 1}
-                        onClick={() => setPassengers((n) => Math.max(1, n - 1))}
-                        aria-label="Fewer passengers"
-                      >
-                        −
-                      </button>
-                      <input
-                        className="passenger-input"
-                        type="number"
-                        min={1}
-                        max={selectedMaxPassengers}
-                        inputMode="numeric"
-                        value={passengers}
-                        onChange={(e) => {
-                          const next = Math.floor(Number(e.target.value))
-                          if (!Number.isFinite(next) || next < 1) {
-                            setPassengers(1)
-                            return
-                          }
-                          setPassengers(Math.min(selectedMaxPassengers, next))
-                        }}
-                        aria-label="Passenger count"
-                      />
-                      <button
-                        type="button"
-                        className="passenger-btn"
-                        disabled={passengers >= selectedMaxPassengers}
-                        onClick={() => setPassengers((n) => Math.min(selectedMaxPassengers, n + 1))}
-                        aria-label="More passengers"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                )}
-                <PaymentBar
-                  payment={payment}
-                  refNo={paymentRef}
-                  allowed={lockedRider?.paymentMethods}
-                  onPayment={(method) => {
-                    setPayment(method)
-                    if (method === 'Cash') setPaymentRef('')
-                  }}
-                  onRefNo={setPaymentRef}
-                />
-                {showPromoField ? (
+
+                {bookStep === 1 && (
                   <>
-                    <label className="promo-field">
-                      <span>Promo code</span>
-                      <input
-                        type="text"
-                        inputMode="text"
-                        autoComplete="off"
-                        spellCheck={false}
-                        placeholder="Save50"
-                        value={promoCode}
-                        onChange={(e) => setPromoCode(e.target.value)}
-                      />
-                    </label>
-                    {quote?.promoApplied && quote.promoCode ? (
-                      <p className="promo-hint">
-                        {quote.promoCode}
-                        {quote.discountPercent != null ? ` · ${quote.discountPercent}% off` : ' applied'}
-                        {quoteOriginal ? ` · Was ${peso(quoteOriginal)}, you pay ${peso(quotePay)}` : ''}
-                      </p>
-                    ) : null}
-                  </>
-                ) : null}
-                {!lockedRider && dispatchMode === 'Both' && (
-                  <div className="dispatch-choice" role="group" aria-label="How to find a rider">
-                    <button
-                      type="button"
-                      className={dispatchChoice === 'pick' ? 'on' : ''}
-                      onClick={() => setDispatchChoice('pick')}
-                    >
-                      Pick a rider
-                    </button>
-                    <button
-                      type="button"
-                      className={dispatchChoice === 'broadcast' ? 'on' : ''}
-                      onClick={() => { setDispatchChoice('broadcast'); setSelectedRiderId(null) }}
-                    >
-                      Any nearby
-                    </button>
-                  </div>
-                )}
-                {needsRiderPick && (
-                  <div className="rider-pick">
-                    {loadingRiders ? (
-                      <p className="muted">Looking for nearby riders…</p>
-                    ) : availableRiders.length === 0 ? (
-                      <p className="muted">No riders available right now. Try again shortly.</p>
-                    ) : (
-                      <ul className="rider-pick-list">
-                        {availableRiders.map((rider) => (
-                          <li key={rider.riderId}>
-                            <button
-                              type="button"
-                              className={`rider-pick-row${selectedRiderId === rider.riderId ? ' on' : ''}`}
-                              onClick={() => setSelectedRiderId(rider.riderId)}
-                            >
-                              {rider.photoUrl
-                                ? <img src={mediaUrl(rider.photoUrl)} alt="" />
-                                : <div className="hail-fallback">{rider.fullName.slice(0, 1)}</div>}
-                              <span className="rider-pick-copy">
-                                <b>{rider.fullName}</b>
-                                <small>
-                                  {[rider.plateNumber, rider.vehicleModel || rider.vehicleType].filter(Boolean).join(' · ')}
-                                  {typeof rider.distanceKm === 'number' ? ` · ${kmLabel(rider.distanceKm)}` : ''}
-                                </small>
-                              </span>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
+                    <p className="muted book-step-lead">Pick the vehicle you want first. You can still switch on the fare screen.</p>
+                    <div className="vehicles">
+                      {rideOptions.map((item) => {
+                        const type = item.vehicleType as VehicleType
+                        const categoryId = 'id' in item && item.id !== type ? String(item.id) : null
+                        const itemKey = quoteKey(type, categoryId)
+                        const canSelect = !('available' in item) || item.available !== false
+                        const selected = type === preferredType
+                        const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
+                        return (
+                          <button
+                            key={itemKey}
+                            type="button"
+                            disabled={!canSelect}
+                            className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
+                            onClick={() => { if (canSelect) selectPreferredType(type, categoryId) }}
+                          >
+                            <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
+                              <img src={vehicleArt(type, iconKey)} alt="" />
+                            </span>
+                            <span className="copy">
+                              <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {!lockedRider && !noOperator.vehiclesReady && (
+                      <p className="muted" style={{ margin: '8px 0 0' }}>Checking available vehicles…</p>
                     )}
-                  </div>
+                  </>
                 )}
-                {error && !isOperatorCoverageError(error) && <p className="error">{error}</p>}
-                <NoOperatorNotice show={noOperator.uncovered} />
-                <button className={`primary${searchingArea ? ' searching pulse' : ''}`} disabled={busy || !canBook} onClick={openBoostModal}>
-                  {bookLabel}
-                </button>
+
+                {bookStep === 2 && (
+                  <>
+                    <p className="muted book-step-lead">Preferred: <b>{vehicleLabel(preferredType)}</b></p>
+                    <div className="stop">
+                      <div className="stop-row">
+                        <span className="pin beat"><span className="dot a" /></span>
+                        <button type="button" className={`addr ${searchFor === 'pickup' ? 'on' : ''}`} onClick={() => { setSearchFor('pickup'); setQuery(''); setError('') }}>
+                          <small>Pickup</small>
+                          {pickup?.label ?? (locating ? 'Waiting for GPS…' : 'Tap to set pickup')}
+                        </button>
+                      </div>
+                      <div className="stop-row">
+                        <span className="pin beat"><span className="dot b" /></span>
+                        <button type="button" className={`addr ${searchFor === 'dropoff' ? 'on' : ''}`} onClick={() => { setSearchFor('dropoff'); setQuery(''); setError('') }}>
+                          <small>Drop-off</small>
+                          {dropoff?.label ?? 'Tap to set drop-off'}
+                        </button>
+                      </div>
+                    </div>
+                    {error && !isOperatorCoverageError(error) && <p className="error">{error}</p>}
+                    <NoOperatorNotice show={noOperator.uncovered} />
+                    <button className="primary" type="button" onClick={goToChooseRide}>Continue</button>
+                  </>
+                )}
+
+                {bookStep === 3 && (
+                  <>
+                    <p className="muted book-step-lead">
+                      {(pickup?.label ?? 'Pickup')} → {(dropoff?.label ?? 'Drop-off')}
+                    </p>
+                    <div className="vehicles vehicles-list">
+                      {rideOptions.map((item) => {
+                        const type = item.vehicleType as VehicleType
+                        const categoryId = 'id' in item && item.id !== type ? String(item.id) : null
+                        const itemKey = quoteKey(type, categoryId)
+                        const canSelect = !('available' in item) || item.available !== false
+                        const selected = canSelect && (categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId)
+                        const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
+                          ? item.maxPassengers
+                          : vehicleMaxPassengers(type)
+                        const cargo = 'isCargo' in item && typeof item.isCargo === 'boolean'
+                          ? item.isCargo
+                          : vehicleIsCargo(type)
+                        const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
+                        const preferred = type === preferredType
+                        return (
+                          <button
+                            key={itemKey}
+                            type="button"
+                            disabled={(!!lockedRider && lockedRider.vehicleType !== type) || !canSelect}
+                            className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
+                            title={!canSelect ? 'Not offered for bookings in this area yet' : undefined}
+                            onClick={() => {
+                              if (!canSelect) return
+                              setVehicle(type)
+                              setVehicleCategoryId(categoryId)
+                              setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))
+                            }}
+                          >
+                            <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
+                              <img src={vehicleArt(type, iconKey)} alt="" />
+                            </span>
+                            <span className="copy">
+                              <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
+                              {preferred ? <small className="prefer-tag">Your first choice</small> : null}
+                              {cargo ? <small className="muted">Cargo</small> : null}
+                            </span>
+                            <b className="price">{!canSelect ? 'Not offered' : quotes[itemKey] ? quotePriceLabel(quotes[itemKey]!) : (quoting ? '…' : '—')}</b>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    {showPassengerPicker && (
+                      <div className="passenger-picker" role="group" aria-label="Number of passengers">
+                        <span className="passenger-label">Passengers (max {selectedMaxPassengers})</span>
+                        <div className="passenger-controls">
+                          <button
+                            type="button"
+                            className="passenger-btn"
+                            disabled={passengers <= 1}
+                            onClick={() => setPassengers((n) => Math.max(1, n - 1))}
+                            aria-label="Fewer passengers"
+                          >
+                            −
+                          </button>
+                          <input
+                            className="passenger-input"
+                            type="number"
+                            min={1}
+                            max={selectedMaxPassengers}
+                            inputMode="numeric"
+                            value={passengers}
+                            onChange={(e) => {
+                              const next = Math.floor(Number(e.target.value))
+                              if (!Number.isFinite(next) || next < 1) {
+                                setPassengers(1)
+                                return
+                              }
+                              setPassengers(Math.min(selectedMaxPassengers, next))
+                            }}
+                            aria-label="Passenger count"
+                          />
+                          <button
+                            type="button"
+                            className="passenger-btn"
+                            disabled={passengers >= selectedMaxPassengers}
+                            onClick={() => setPassengers((n) => Math.min(selectedMaxPassengers, n + 1))}
+                            aria-label="More passengers"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <PaymentBar
+                      payment={payment}
+                      refNo={paymentRef}
+                      allowed={lockedRider?.paymentMethods}
+                      onPayment={(method) => {
+                        setPayment(method)
+                        if (method === 'Cash') setPaymentRef('')
+                      }}
+                      onRefNo={setPaymentRef}
+                    />
+                    {showPromoField ? (
+                      <>
+                        <label className="promo-field">
+                          <span>Promo code</span>
+                          <input
+                            type="text"
+                            inputMode="text"
+                            autoComplete="off"
+                            spellCheck={false}
+                            placeholder="Save50"
+                            value={promoCode}
+                            onChange={(e) => setPromoCode(e.target.value)}
+                          />
+                        </label>
+                        {quote?.promoApplied && quote.promoCode ? (
+                          <p className="promo-hint">
+                            {quote.promoCode}
+                            {quote.discountPercent != null ? ` · ${quote.discountPercent}% off` : ' applied'}
+                            {quoteOriginal ? ` · Was ${peso(quoteOriginal)}, you pay ${peso(quotePay)}` : ''}
+                          </p>
+                        ) : null}
+                      </>
+                    ) : null}
+                    {!lockedRider && dispatchMode === 'Both' && (
+                      <div className="dispatch-choice" role="group" aria-label="How to find a rider">
+                        <button
+                          type="button"
+                          className={dispatchChoice === 'pick' ? 'on' : ''}
+                          onClick={() => setDispatchChoice('pick')}
+                        >
+                          Pick a rider
+                        </button>
+                        <button
+                          type="button"
+                          className={dispatchChoice === 'broadcast' ? 'on' : ''}
+                          onClick={() => { setDispatchChoice('broadcast'); setSelectedRiderId(null) }}
+                        >
+                          Any nearby
+                        </button>
+                      </div>
+                    )}
+                    {needsRiderPick && (
+                      <div className="rider-pick">
+                        {loadingRiders ? (
+                          <p className="muted">Looking for nearby riders…</p>
+                        ) : availableRiders.length === 0 ? (
+                          <p className="muted">No riders available right now. Try again shortly.</p>
+                        ) : (
+                          <ul className="rider-pick-list">
+                            {availableRiders.map((rider) => (
+                              <li key={rider.riderId}>
+                                <button
+                                  type="button"
+                                  className={`rider-pick-row${selectedRiderId === rider.riderId ? ' on' : ''}`}
+                                  onClick={() => setSelectedRiderId(rider.riderId)}
+                                >
+                                  {rider.photoUrl
+                                    ? <img src={mediaUrl(rider.photoUrl)} alt="" />
+                                    : <div className="hail-fallback">{rider.fullName.slice(0, 1)}</div>}
+                                  <span className="rider-pick-copy">
+                                    <b>{rider.fullName}</b>
+                                    <small>
+                                      {[rider.plateNumber, rider.vehicleModel || rider.vehicleType].filter(Boolean).join(' · ')}
+                                      {typeof rider.distanceKm === 'number' ? ` · ${kmLabel(rider.distanceKm)}` : ''}
+                                    </small>
+                                  </span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                    {error && !isOperatorCoverageError(error) && <p className="error">{error}</p>}
+                    <NoOperatorNotice show={noOperator.uncovered} />
+                    <button className={`primary${searchingArea ? ' searching pulse' : ''}`} disabled={busy || !canBook} onClick={openBoostModal}>
+                      {bookLabel}
+                    </button>
+                  </>
+                )}
                   </>
                 ) : null}
               </>
@@ -1395,6 +1498,9 @@ function Home({
             <FavoritesScreen
               onBook={(rider) => {
                 setFavoritePick(favoriteAsHail(rider))
+                setPreferredType(rider.vehicleType as VehicleType)
+                setVehicle(rider.vehicleType as VehicleType)
+                setBookStep(2)
                 setBookSheetOpen(true)
                 onTab('home')
               }}
@@ -1605,7 +1711,7 @@ function TripPanel({
                 className={`chat-btn icon-btn${unread > 0 && !chatOpen ? ' unread' : ''}`}
                 type="button"
                 aria-label={unread > 0 && !chatOpen ? `Chat, ${unread} new` : 'Chat'}
-                title="Chat"
+                title={unread > 0 && !chatOpen ? `Chat · ${unread} new` : 'Chat'}
                 onClick={() => { setChatOpen(true); setUnread(0) }}
               >
                 <ChatIcon />
@@ -1614,6 +1720,15 @@ function TripPanel({
                 )}
               </button>
             )}
+            {canView && unread > 0 && !chatOpen ? (
+              <button
+                className="chat-btn unread"
+                type="button"
+                onClick={() => { setChatOpen(true); setUnread(0) }}
+              >
+                New message
+              </button>
+            ) : null}
             <ShareTripButton trip={trip} brandName={brandName} onNote={setShareNote} />
             {trip.riderPhone && (
               <a className="call icon-btn" href={`tel:${trip.riderPhone}`} aria-label="Call rider" title="Call">
@@ -1664,12 +1779,21 @@ function TripPanel({
             className={`chat-btn icon-btn${unread > 0 ? ' unread' : ''}`}
             type="button"
             aria-label={unread > 0 ? `Chat, ${unread} new` : 'Chat'}
-            title="Chat"
+            title={unread > 0 ? `Chat · ${unread} new` : 'Chat'}
             onClick={() => { setChatOpen(true); setUnread(0) }}
           >
             <ChatIcon />
             {unread > 0 && <span className="chat-badge">{unread > 9 ? '9+' : unread}</span>}
           </button>
+          {unread > 0 ? (
+            <button
+              className="chat-btn unread"
+              type="button"
+              onClick={() => { setChatOpen(true); setUnread(0) }}
+            >
+              New message
+            </button>
+          ) : null}
         </div>
       )}
       {canView && (

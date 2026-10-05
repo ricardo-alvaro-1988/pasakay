@@ -123,18 +123,23 @@ String tripHeadline(String status) {
 }
 
 String tripStatusCode(dynamic value) {
+  // Matches YaPasakay.Domain.Enums.TripStatus:
+  // Completed=1, Cancelled=2, Ongoing=3, Pending=4, Waiting=5
   switch (asText(value)) {
-    case '0':
-      return 'Pending';
     case '1':
-      return 'Waiting';
-    case '2':
-      return 'Ongoing';
-    case '3':
+    case 'Completed':
       return 'Completed';
-    case '4':
+    case '2':
+    case 'Cancelled':
       return 'Cancelled';
+    case '3':
+    case 'Ongoing':
+      return 'Ongoing';
+    case '4':
+    case 'Pending':
+      return 'Pending';
     case '5':
+    case 'Waiting':
       return 'Waiting';
     default:
       return asText(value, 'Pending');

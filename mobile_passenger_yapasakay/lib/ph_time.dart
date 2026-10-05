@@ -11,15 +11,25 @@ String scheduledAtUtcIsoFromManila(DateTime wall) {
   return utcFromManilaWallClock(wall).toIso8601String();
 }
 
-DateTime manilaWallClockFromUtcString(String iso) {
-  final utc = DateTime.parse(iso).toUtc();
-  return utc.add(_manilaOffset);
+/// Parse API *Utc stamps as UTC even when the trailing Z is missing (same as web `phWhen`).
+DateTime parseApiUtc(String iso) {
+  final raw = iso.trim();
+  if (raw.isEmpty) return DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  final hasZone = RegExp(r'[zZ]$|[+-]\d{2}:?\d{2}$').hasMatch(raw);
+  if (hasZone) return DateTime.parse(raw).toUtc();
+  final normalized = raw.contains('T') ? '${raw}Z' : '${raw}T00:00:00Z';
+  return DateTime.parse(normalized).toUtc();
 }
 
+DateTime manilaWallClockFromUtcString(String iso) {
+  return parseApiUtc(iso).add(_manilaOffset);
+}
+
+/// Philippine time, e.g. `Sep 5, 2026 : 10:00 PM`.
 String phWhen(String? value) {
   if (value == null || value.trim().isEmpty) return '—';
   final manila = manilaWallClockFromUtcString(value);
-  return DateFormat('MMM d, yyyy · h:mm a').format(manila);
+  return DateFormat('MMM d, yyyy : h:mm a').format(manila);
 }
 
 DateTime defaultRentalWhenManila() {
