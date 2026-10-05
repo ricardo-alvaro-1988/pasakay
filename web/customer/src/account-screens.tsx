@@ -26,8 +26,6 @@ import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from '
 import { BookingHistoryRating, RateRidePanel } from './rate-ride'
 import { ServiceReceipt } from './service-receipt'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
-import { PinPad } from './pin-pad'
-
 const PAYMENT_METHODS: PaymentMethod[] = ['Cash', 'GCash', 'Maya', 'Other']
 
 export function PaymentBar({
@@ -845,7 +843,7 @@ export function FavoritesScreen({
   )
 }
 
-export type AccountPage = 'menu' | 'profile' | 'pin' | 'mobile' | 'delete' | 'terms' | 'privacy'
+export type AccountPage = 'menu' | 'profile' | 'mobile' | 'delete' | 'terms' | 'privacy'
 
 export function AccountHub({
   desk,
@@ -861,7 +859,6 @@ export function AccountHub({
   onLogout: () => void
 }) {
   if (page === 'profile') return <ProfileForm desk={desk} onDesk={onDesk} onBack={() => onPage('menu')} />
-  if (page === 'pin') return <PinForm desk={desk} onDesk={onDesk} onBack={() => onPage('menu')} />
   if (page === 'mobile') return <MobileForm desk={desk} onDesk={onDesk} onBack={() => onPage('menu')} />
   if (page === 'delete') return <DeleteForm desk={desk} onDesk={onDesk} onBack={() => onPage('menu')} />
   if (page === 'terms') return <Legal title="Terms and Condition" body={TERMS} onBack={() => onPage('menu')} />
@@ -875,7 +872,6 @@ export function AccountHub({
         <h3>Account management</h3>
         <div className="account-list">
           <button className="menu-row" type="button" onClick={() => onPage('profile')}>Profile</button>
-          <button className="menu-row" type="button" onClick={() => onPage('pin')}>{desk.hasPin ? 'Change PIN' : 'Set PIN'}</button>
           <button className="menu-row" type="button" onClick={() => onPage('mobile')}>Change mobile</button>
           <button className="menu-row danger-row" type="button" onClick={() => onPage('delete')}>Account deletion</button>
         </div>
@@ -992,108 +988,6 @@ function AccountHero({ desk, onDesk }: { desk: Desk; onDesk: (desk: Desk) => voi
   )
 }
 
-function PinForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk) => void; onBack: () => void }) {
-  type Step = 'current' | 'create' | 'confirm'
-  const [step, setStep] = useState<Step>(desk.hasPin ? 'current' : 'create')
-  const [currentPin, setCurrentPin] = useState('')
-  const [pin, setPin] = useState('')
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [resetToken, setResetToken] = useState(0)
-
-  async function onSubmit(value: string) {
-    if (busy) return
-    if (step === 'current') {
-      setCurrentPin(value)
-      setStep('create')
-      setError('')
-      setResetToken((n) => n + 1)
-      return
-    }
-    if (step === 'create') {
-      if (!/^\d{4,6}$/.test(value)) {
-        setError('PIN must be 4 to 6 digits.')
-        setResetToken((n) => n + 1)
-        return
-      }
-      setPin(value)
-      setStep('confirm')
-      setError('')
-      setResetToken((n) => n + 1)
-      return
-    }
-    if (value !== pin) {
-      setError('PINs do not match. Try again.')
-      setResetToken((n) => n + 1)
-      return
-    }
-    setBusy(true)
-    setError('')
-    try {
-      onDesk(await api.setPin(pin, desk.hasPin ? currentPin : undefined))
-      onBack()
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not save PIN.'
-      setError(message)
-      if (message.toLowerCase().includes('current')) {
-        setStep('current')
-        setCurrentPin('')
-        setPin('')
-      } else {
-        setStep('create')
-        setPin('')
-      }
-      setResetToken((n) => n + 1)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const copy = step === 'current'
-    ? { title: 'Current PIN', subtitle: 'Enter your current PIN to continue.', action: 'Continue' }
-    : step === 'create'
-      ? { title: desk.hasPin ? 'New PIN' : 'Set PIN', subtitle: 'Choose a 4 to 6 digit PIN for faster sign-in.', action: 'Continue' }
-      : { title: 'Confirm PIN', subtitle: 'Enter the same PIN again to save it.', action: 'Save PIN' }
-
-  return (
-    <div className="page account-form pin-form-page">
-      <button
-        className="ghost"
-        type="button"
-        disabled={busy}
-        onClick={() => {
-          if (step === 'confirm') {
-            setStep('create')
-            setPin('')
-            setError('')
-            setResetToken((n) => n + 1)
-            return
-          }
-          if (step === 'create' && desk.hasPin) {
-            setStep('current')
-            setCurrentPin('')
-            setError('')
-            setResetToken((n) => n + 1)
-            return
-          }
-          onBack()
-        }}
-      >
-        Back
-      </button>
-      <PinPad
-        title={copy.title}
-        subtitle={copy.subtitle}
-        error={error}
-        busy={busy}
-        actionLabel={copy.action}
-        resetToken={resetToken}
-        onSubmit={(value) => void onSubmit(value)}
-      />
-    </div>
-  )
-}
-
 function MobileForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk) => void; onBack: () => void }) {
   const [newPhone, setNewPhone] = useState('')
   const [error, setError] = useState('')
@@ -1127,7 +1021,6 @@ function MobileForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk)
 
 function DeleteForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk) => void; onBack: () => void }) {
   const [reason, setReason] = useState('')
-  const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -1136,7 +1029,7 @@ function DeleteForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk)
     setBusy(true)
     setError('')
     try {
-      onDesk(await api.deleteAccount(reason, desk.hasPin ? pin : undefined))
+      onDesk(await api.deleteAccount(reason))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit request.')
     } finally {
@@ -1154,7 +1047,6 @@ function DeleteForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk)
         <>
           <p className="muted">This asks Super Admin to close the account. It is not instant.</p>
           <label className="field"><span>REASON</span><input value={reason} onChange={(e) => setReason(e.target.value)} /></label>
-          {desk.hasPin && <label className="field"><span>PIN</span><input inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} /></label>}
           {error && <p className="error">{error}</p>}
           <button className="danger" disabled={busy}>{busy ? 'Submitting…' : 'Request deletion'}</button>
         </>
@@ -1175,7 +1067,7 @@ function Legal({ title, body, onBack }: { title: string; body: string; onBack: (
 
 const TERMS = `Ya! Pasakay is a ride-hailing platform that connects customers with motorcycle and tricycle riders operated by independent Operators.
 
-By creating an account you confirm that the name, mobile number, and email you provide are yours, and that you will keep your Google account and PIN confidential.
+By creating an account you confirm that the name, mobile number, and email you provide are yours, and that you will keep your Google account secure.
 
 Fares are quoted before you confirm a booking. Payment is collected according to the method you select (CASH, GCASH, MAYA, or OTHERS). The assigned rider must accept that method.
 

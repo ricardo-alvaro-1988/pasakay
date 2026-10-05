@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
 import 'api.dart';
-import 'pin_entry.dart';
 import 'session.dart';
 import 'theme.dart';
 import 'vehicle_art.dart';
@@ -19,18 +17,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
-  bool _pinStep = false;
-  String? _phone;
-  String? _pinError;
-  bool _pinBusy = false;
-  final _phoneCtrl = TextEditingController();
   static const _callbackScheme = 'yapasakay-passenger';
-
-  @override
-  void dispose() {
-    _phoneCtrl.dispose();
-    super.dispose();
-  }
 
   Future<String> _browserTicket() async {
     final authUrl = Uri.parse('${CustomerApi.productionBaseUrl}/mobile-auth').replace(
@@ -54,7 +41,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return ticket;
   }
 
-  Future<void> _signInGoogle() async {
+  Future<void> _signIn() async {
     if (_loading) return;
     setState(() => _loading = true);
     try {
@@ -75,60 +62,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _continueToPin() {
-    final phone = _phoneCtrl.text.trim();
-    if (phone.replaceAll(RegExp(r'\D'), '').length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid Philippine mobile number.')),
-      );
-      return;
-    }
-    setState(() {
-      _phone = phone;
-      _pinStep = true;
-      _pinError = null;
-    });
-  }
-
-  Future<void> _submitPin(String pin) async {
-    final phone = _phone;
-    if (phone == null || _pinBusy) return;
-    setState(() {
-      _pinBusy = true;
-      _pinError = null;
-    });
-    try {
-      await widget.session.api.customerPinLogin(phone: phone, pin: pin);
-      await widget.session.restore();
-    } on ApiException catch (ex) {
-      if (mounted) setState(() => _pinError = ex.message);
-    } catch (_) {
-      if (mounted) setState(() => _pinError = 'Could not sign in with PIN.');
-    } finally {
-      if (mounted) setState(() => _pinBusy = false);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    if (_pinStep) {
-      return PinEntryPage(
-        title: 'Enter PIN',
-        subtitle: 'Sign in as ${_phone ?? 'your number'}',
-        onBack: _pinBusy
-            ? null
-            : () => setState(() {
-                  _pinStep = false;
-                  _pinError = null;
-                }),
-        busy: _pinBusy,
-        error: _pinError,
-        actionLabel: 'Sign in',
-        autoSubmitAt: 6,
-        onSubmit: _submitPin,
-      );
-    }
-
     final error = widget.session.error;
     return Scaffold(
       backgroundColor: brandCanvas,
@@ -208,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Text('Welcome back', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 6),
                   const Text(
-                    'Sign in with Google to book rides, or use your phone and PIN after you set one in Account.',
+                    'Sign in with Google to book rides and track your driver live.',
                     style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
                   ),
                   if (error != null && error.isNotEmpty) ...[
@@ -217,7 +152,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                   const SizedBox(height: 18),
                   OutlinedButton(
-                    onPressed: _loading || widget.session.busy ? null : _signInGoogle,
+                    onPressed: _loading || widget.session.busy ? null : _signIn,
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: brandRed, width: 2),
                       foregroundColor: brandInk,
@@ -239,35 +174,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             ],
                           ),
                   ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(child: Divider(color: brandLine)),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Text('OR', style: TextStyle(color: brandMuted, fontWeight: FontWeight.w800, fontSize: 12)),
-                      ),
-                      Expanded(child: Divider(color: brandLine)),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: _phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+\s-]'))],
-                    decoration: const InputDecoration(
-                      labelText: 'Mobile number',
-                      hintText: '09XX XXX XXXX',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton(
-                    onPressed: _loading || widget.session.busy ? null : _continueToPin,
-                    child: const Text('Continue with PIN'),
-                  ),
                   const SizedBox(height: 12),
                   const Text(
-                    'First time? Sign in with Google, then Set PIN in Account.',
+                    'Your account stays on this device until you sign out.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600, fontSize: 12),
                   ),

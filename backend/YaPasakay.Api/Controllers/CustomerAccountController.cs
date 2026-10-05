@@ -201,15 +201,9 @@ public class CustomerAccountController(AppDbContext db, UploadStore uploads) : C
             return StatusCode(status, new { message });
         }
 
-        if (!string.IsNullOrWhiteSpace(customer.AppUser.GoogleSubject))
-        {
-            if (!string.IsNullOrWhiteSpace(customer.PinHash)
-                && !SecretHasher.Verify(request.Pin ?? string.Empty, customer.PinHash))
-            {
-                return BadRequest(new { message = "PIN is incorrect." });
-            }
-        }
-        else if (!SecretHasher.Verify(request.Password ?? string.Empty, customer.AppUser.PasswordHash))
+        // Google customers delete with reason only (no PIN).
+        if (string.IsNullOrWhiteSpace(customer.AppUser.GoogleSubject)
+            && !SecretHasher.Verify(request.Password ?? string.Empty, customer.AppUser.PasswordHash))
         {
             return BadRequest(new { message = "Password is incorrect." });
         }

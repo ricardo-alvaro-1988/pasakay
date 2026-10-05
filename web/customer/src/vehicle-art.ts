@@ -1,68 +1,113 @@
-import motorcycleImg from './assets/rider-motorcycle-map.png'
-import tricycleImg from './assets/tricycle.png'
 import { VehicleType } from './api'
 
 function svgArt(body: string) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" width="128" height="80">${body}</svg>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 56" width="192" height="112">${body}</svg>`
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
+const motorcycleArt = svgArt(`
+  <defs>
+    <linearGradient id="mBody" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2a2e36"/><stop offset="100%" stop-color="#121418"/></linearGradient>
+    <linearGradient id="mRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff3b45"/><stop offset="100%" stop-color="#b80510"/></linearGradient>
+    <radialGradient id="mTire" cx="50%" cy="45%" r="55%"><stop offset="0%" stop-color="#555"/><stop offset="100%" stop-color="#0d0d0d"/></radialGradient>
+  </defs>
+  <ellipse cx="48" cy="50" rx="38" ry="3.5" fill="#000" opacity=".12"/>
+  <circle cx="24" cy="38" r="11" fill="url(#mTire)"/><circle cx="24" cy="38" r="5.5" fill="#c9ccd1"/><circle cx="24" cy="38" r="2.2" fill="#333"/>
+  <circle cx="72" cy="38" r="11" fill="url(#mTire)"/><circle cx="72" cy="38" r="5.5" fill="#c9ccd1"/><circle cx="72" cy="38" r="2.2" fill="#333"/>
+  <path d="M30 36h28l8-12H42l-6 6H28z" fill="url(#mBody)"/>
+  <path d="M42 24h16l5-9H48z" fill="url(#mRed)"/>
+  <path d="M58 15h12v4H60z" fill="#1a1d22"/>
+  <rect x="36" y="20" width="12" height="7" rx="1.5" fill="#dce7f5" opacity=".9"/>
+  <path d="M22 28h9l3 8H24z" fill="url(#mRed)"/>
+`)
+
+const tricycleArt = svgArt(`
+  <defs>
+    <linearGradient id="tCab" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff3b45"/><stop offset="100%" stop-color="#b80510"/></linearGradient>
+    <linearGradient id="tBody" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2a2e36"/><stop offset="100%" stop-color="#121418"/></linearGradient>
+    <radialGradient id="tTire" cx="50%" cy="45%" r="55%"><stop offset="0%" stop-color="#555"/><stop offset="100%" stop-color="#111"/></radialGradient>
+  </defs>
+  <ellipse cx="48" cy="50" rx="40" ry="3.5" fill="#000" opacity=".12"/>
+  <circle cx="20" cy="38" r="9" fill="url(#tTire)"/><circle cx="52" cy="38" r="9" fill="url(#tTire)"/><circle cx="74" cy="39" r="7.5" fill="url(#tTire)"/>
+  <path d="M24 22h34l10 14H18z" fill="url(#tBody)"/>
+  <path d="M26 12h30l7 10H22z" fill="url(#tCab)"/>
+  <rect x="30" y="15" width="11" height="6" rx="1" fill="#e8f1ff" opacity=".92"/>
+  <rect x="44" y="15" width="11" height="6" rx="1" fill="#e8f1ff" opacity=".92"/>
+  <path d="M58 24h16l6 12H62z" fill="url(#tCab)"/>
+`)
+
 const sedanArt = svgArt(`
-  <rect x="6" y="18" width="52" height="12" rx="3" fill="#1f2329"/>
-  <path d="M14 18 20 10h24l6 8" fill="#e30613"/>
-  <circle cx="18" cy="30" r="5" fill="#444"/><circle cx="46" cy="30" r="5" fill="#444"/>
-  <rect x="22" y="12" width="10" height="6" rx="1" fill="#fff" opacity=".85"/>
-  <rect x="34" y="12" width="10" height="6" rx="1" fill="#fff" opacity=".85"/>
+  <defs>
+    <linearGradient id="sBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2f343d"/><stop offset="100%" stop-color="#14171c"/></linearGradient>
+    <linearGradient id="sRoof" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff4450"/><stop offset="100%" stop-color="#c00812"/></linearGradient>
+    <radialGradient id="sTire" cx="50%" cy="40%" r="55%"><stop offset="0%" stop-color="#666"/><stop offset="100%" stop-color="#111"/></radialGradient>
+  </defs>
+  <ellipse cx="48" cy="50" rx="42" ry="3.5" fill="#000" opacity=".12"/>
+  <path d="M10 30c2-6 8-10 16-12l8-8h30l10 8c8 2 14 6 16 12v6H10z" fill="url(#sBody)"/>
+  <path d="M30 18l6-8h24l7 8H30z" fill="url(#sRoof)"/>
+  <rect x="34" y="12" width="12" height="7" rx="1.2" fill="#dce9fb" opacity=".95"/>
+  <rect x="50" y="12" width="12" height="7" rx="1.2" fill="#dce9fb" opacity=".95"/>
+  <circle cx="28" cy="38" r="8" fill="url(#sTire)"/><circle cx="70" cy="38" r="8" fill="url(#sTire)"/>
 `)
 
 const mpvArt = svgArt(`
-  <rect x="5" y="14" width="54" height="16" rx="4" fill="#1f2329"/>
-  <path d="M12 14 18 8h28l6 6" fill="#e30613"/>
-  <circle cx="18" cy="30" r="5" fill="#444"/><circle cx="46" cy="30" r="5" fill="#444"/>
-  <rect x="20" y="10" width="24" height="7" rx="1" fill="#fff" opacity=".8"/>
+  <defs>
+    <linearGradient id="vBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#30363f"/><stop offset="100%" stop-color="#12151a"/></linearGradient>
+    <linearGradient id="vRoof" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff4450"/><stop offset="100%" stop-color="#b80510"/></linearGradient>
+    <radialGradient id="vTire" cx="50%" cy="40%" r="55%"><stop offset="0%" stop-color="#666"/><stop offset="100%" stop-color="#111"/></radialGradient>
+  </defs>
+  <ellipse cx="48" cy="50" rx="42" ry="3.5" fill="#000" opacity=".12"/>
+  <path d="M8 28c2-8 10-14 20-16l6-6h30l8 6c10 2 18 8 20 16v8H8z" fill="url(#vBody)"/>
+  <path d="M28 12l5-6h30l6 6H28z" fill="url(#vRoof)"/>
+  <rect x="32" y="8" width="28" height="8" rx="1.5" fill="#dce9fb" opacity=".92"/>
+  <circle cx="26" cy="38" r="8.5" fill="url(#vTire)"/><circle cx="72" cy="38" r="8.5" fill="url(#vTire)"/>
 `)
 
-const suvArt = svgArt(`
-  <rect x="6" y="12" width="52" height="18" rx="3" fill="#1f2329"/>
-  <path d="M14 12 20 6h24l6 6" fill="#e30613"/>
-  <circle cx="18" cy="30" r="5.5" fill="#444"/><circle cx="46" cy="30" r="5.5" fill="#444"/>
-  <rect x="22" y="8" width="20" height="7" rx="1" fill="#fff" opacity=".85"/>
-`)
-
-const vanArt = svgArt(`
-  <rect x="4" y="10" width="56" height="20" rx="3" fill="#1f2329"/>
-  <path d="M8 10h20l4 6H8z" fill="#e30613"/>
-  <circle cx="16" cy="30" r="5" fill="#444"/><circle cx="48" cy="30" r="5" fill="#444"/>
-  <rect x="30" y="12" width="26" height="12" rx="1" fill="#fff" opacity=".35"/>
-`)
+const suvArt = mpvArt
+const vanArt = mpvArt
 
 const pickupArt = svgArt(`
-  <rect x="4" y="16" width="28" height="12" rx="2" fill="#1f2329"/>
-  <rect x="30" y="18" width="30" height="10" rx="1" fill="#e30613"/>
-  <path d="M8 16 14 9h14l4 7" fill="#e30613"/>
-  <circle cx="16" cy="30" r="5" fill="#444"/><circle cx="48" cy="30" r="5" fill="#444"/>
+  <defs>
+    <linearGradient id="pBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2f343d"/><stop offset="100%" stop-color="#14171c"/></linearGradient>
+    <linearGradient id="pBed" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff4450"/><stop offset="100%" stop-color="#b80510"/></linearGradient>
+    <radialGradient id="pTire" cx="50%" cy="40%" r="55%"><stop offset="0%" stop-color="#666"/><stop offset="100%" stop-color="#111"/></radialGradient>
+  </defs>
+  <ellipse cx="48" cy="50" rx="42" ry="3.5" fill="#000" opacity=".12"/>
+  <rect x="8" y="22" width="36" height="14" rx="3" fill="url(#pBody)"/>
+  <rect x="42" y="24" width="40" height="12" rx="2" fill="url(#pBed)"/>
+  <path d="M12 22l8-10h18l6 10H12z" fill="url(#pBed)"/>
+  <circle cx="22" cy="38" r="8" fill="url(#pTire)"/><circle cx="70" cy="38" r="8" fill="url(#pTire)"/>
 `)
 
 const tuktukArt = svgArt(`
-  <path d="M18 8h22l6 8H14z" fill="#e30613"/>
-  <rect x="14" y="16" width="36" height="12" rx="2" fill="#1f2329"/>
-  <circle cx="20" cy="30" r="5" fill="#444"/>
-  <circle cx="44" cy="30" r="5" fill="#444"/>
-  <circle cx="32" cy="31" r="4" fill="#444"/>
-  <rect x="22" y="10" width="14" height="6" rx="1" fill="#fff" opacity=".85"/>
+  <defs>
+    <linearGradient id="kCab" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#ff4450"/><stop offset="100%" stop-color="#b80510"/></linearGradient>
+    <linearGradient id="kBody" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#2a2e36"/><stop offset="100%" stop-color="#121418"/></linearGradient>
+    <radialGradient id="kTire" cx="50%" cy="40%" r="55%"><stop offset="0%" stop-color="#666"/><stop offset="100%" stop-color="#111"/></radialGradient>
+  </defs>
+  <ellipse cx="48" cy="50" rx="38" ry="3.5" fill="#000" opacity=".12"/>
+  <path d="M24 12h34l10 12H18z" fill="url(#kCab)"/>
+  <rect x="18" y="22" width="52" height="14" rx="3" fill="url(#kBody)"/>
+  <rect x="32" y="14" width="18" height="7" rx="1.2" fill="#e8f1ff" opacity=".92"/>
+  <circle cx="28" cy="38" r="8" fill="url(#kTire)"/><circle cx="60" cy="38" r="8" fill="url(#kTire)"/><circle cx="44" cy="40" r="6" fill="url(#kTire)"/>
 `)
 
 const cargoArt = svgArt(`
-  <rect x="4" y="16" width="24" height="12" rx="2" fill="#1f2329"/>
-  <rect x="26" y="12" width="34" height="16" rx="2" fill="#6b7280"/>
-  <path d="M8 16 13 10h12l3 6" fill="#e30613"/>
-  <circle cx="14" cy="30" r="5" fill="#444"/><circle cx="48" cy="30" r="5" fill="#444"/>
-  <text x="36" y="23" font-size="8" fill="#fff" text-anchor="middle" font-family="sans-serif">CARGO</text>
+  <defs>
+    <linearGradient id="cBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#2f343d"/><stop offset="100%" stop-color="#14171c"/></linearGradient>
+    <radialGradient id="cTire" cx="50%" cy="40%" r="55%"><stop offset="0%" stop-color="#666"/><stop offset="100%" stop-color="#111"/></radialGradient>
+  </defs>
+  <ellipse cx="48" cy="50" rx="42" ry="3.5" fill="#000" opacity=".12"/>
+  <rect x="8" y="22" width="30" height="14" rx="3" fill="url(#cBody)"/>
+  <rect x="36" y="16" width="46" height="20" rx="3" fill="#6b7280"/>
+  <path d="M12 22l7-8h16l5 8H12z" fill="#e30613"/>
+  <circle cx="20" cy="38" r="8" fill="url(#cTire)"/><circle cx="70" cy="38" r="8" fill="url(#cTire)"/>
+  <text x="58" y="30" font-size="8" fill="#fff" text-anchor="middle" font-family="sans-serif">CARGO</text>
 `)
 
 export const VEHICLE_ART: Record<VehicleType, string> = {
-  Motorcycle: motorcycleImg,
-  Tricycle: tricycleImg,
+  Motorcycle: motorcycleArt,
+  Tricycle: tricycleArt,
   Sedan: sedanArt,
   Mpv: mpvArt,
   Suv: suvArt,

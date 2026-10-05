@@ -832,20 +832,13 @@ export const api = {
     }),
   updateProfile: (body: { firstName: string; lastName: string; gender: Gender; email: string }) =>
     request<Desk>('/api/customer/account/profile', { method: 'PUT', body: JSON.stringify(body) }),
-  setPin: (pin: string, currentPin?: string) =>
-    request<Desk>('/api/customer/account/pin', { method: 'POST', body: JSON.stringify({ pin, currentPin }) }),
   uploadProfilePhoto: async (file: File) => {
     const data = new FormData()
     data.append('photo', await compressImageFile(file))
     return requestForm<Desk>('/api/customer/account/photo', data)
   },
-  customerPinLogin: (phone: string, pin: string) =>
-    request<AuthResponse>('/api/auth/customer-pin-login', {
-      method: 'POST',
-      body: JSON.stringify({ phone, pin }),
-    }),
   updateMobile: (newPhone: string) =>
     request<Desk>('/api/customer/account/mobile', { method: 'PUT', body: JSON.stringify({ newPhone }) }),
-  deleteAccount: (reason: string, pin?: string) =>
-    request<Desk>('/api/customer/account/delete', { method: 'POST', body: JSON.stringify({ reason, pin }) }),
+  deleteAccount: (reason: string) =>
+    request<Desk>('/api/customer/account/delete', { method: 'POST', body: JSON.stringify({ reason }) }),
 }

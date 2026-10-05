@@ -1,13 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'api.dart';
-import 'pin_entry.dart';
 import 'session.dart';
 import 'theme.dart';
 
-enum _AccountPage { menu, profile, pin, mobile, delete, terms, privacy }
+enum _AccountPage { menu, profile, mobile, delete, terms, privacy }
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key, required this.session});
@@ -80,10 +79,6 @@ class _AccountScreenState extends State<AccountScreen> {
         : desk!.fullName.trim()[0].toUpperCase();
     return switch (_page) {
       _AccountPage.profile => _ProfileForm(
-          session: widget.session,
-          onBack: () => setState(() => _page = _AccountPage.menu),
-        ),
-      _AccountPage.pin => _PinForm(
           session: widget.session,
           onBack: () => setState(() => _page = _AccountPage.menu),
         ),
@@ -186,11 +181,6 @@ class _AccountScreenState extends State<AccountScreen> {
                 child: Column(
                   children: [
                     _MenuRow(label: 'Profile', onTap: () => setState(() => _page = _AccountPage.profile)),
-                    const Divider(height: 1),
-                    _MenuRow(
-                      label: desk?.hasPin == true ? 'Change PIN' : 'Set PIN',
-                      onTap: () => setState(() => _page = _AccountPage.pin),
-                    ),
                     const Divider(height: 1),
                     _MenuRow(label: 'Change mobile', onTap: () => setState(() => _page = _AccountPage.mobile)),
                     const Divider(height: 1),
@@ -352,177 +342,6 @@ class _ProfileFormState extends State<_ProfileForm> {
   }
 }
 
-class _PinForm extends StatefulWidget {
-  const _PinForm({required this.session, required this.onBack});
-
-  final CustomerSession session;
-  final VoidCallback onBack;
-
-  @override
-  State<_PinForm> createState() => _PinFormState();
-}
-
-enum _PinStep { current, create, confirm }
-
-class _PinFormState extends State<_PinForm> {
-  late _PinStep _step;
-  String? _currentPin;
-  String? _newPin;
-  bool _busy = false;
-  String? _error;
-  final _panelKey = GlobalKey<PinEntryPanelState>();
-
-  @override
-  void initState() {
-    super.initState();
-    _step = widget.session.desk?.hasPin == true ? _PinStep.current : _PinStep.create;
-  }
-
-  void _clearPanel() => _panelKey.currentState?.clear(notify: false);
-
-  Future<void> _onSubmit(String value) async {
-    if (_busy) return;
-    switch (_step) {
-      case _PinStep.current:
-        if (value.length < 4) {
-          setState(() => _error = 'PIN must be 4 to 6 digits.');
-          return;
-        }
-        setState(() {
-          _currentPin = value;
-          _step = _PinStep.create;
-          _error = null;
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) => _clearPanel());
-        return;
-      case _PinStep.create:
-        if (value.length < 4 || value.length > 6 || !RegExp(r'^\d+$').hasMatch(value)) {
-          setState(() => _error = 'PIN must be 4 to 6 digits.');
-          return;
-        }
-        setState(() {
-          _newPin = value;
-          _step = _PinStep.confirm;
-          _error = null;
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) => _clearPanel());
-        return;
-      case _PinStep.confirm:
-        if (value != _newPin) {
-          setState(() => _error = 'PINs do not match. Try again.');
-          _clearPanel();
-          return;
-        }
-        setState(() {
-          _busy = true;
-          _error = null;
-        });
-        try {
-          final desk = await widget.session.api.setPin(
-            _newPin!,
-            currentPin: widget.session.desk?.hasPin == true ? _currentPin : null,
-          );
-          widget.session.updateDesk(desk);
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('PIN saved. You can sign in with phone and PIN next time.')),
-          );
-          widget.onBack();
-        } on ApiException catch (ex) {
-          setState(() {
-            _error = ex.message;
-            if (ex.message.toLowerCase().contains('current')) {
-              _step = _PinStep.current;
-              _currentPin = null;
-              _newPin = null;
-            } else {
-              _step = _PinStep.create;
-              _newPin = null;
-            }
-          });
-          WidgetsBinding.instance.addPostFrameCallback((_) => _clearPanel());
-        } finally {
-          if (mounted) setState(() => _busy = false);
-        }
-    }
-  }
-
-  void _back() {
-    if (_busy) return;
-    switch (_step) {
-      case _PinStep.current:
-        widget.onBack();
-        return;
-      case _PinStep.create:
-        if (widget.session.desk?.hasPin == true) {
-          setState(() {
-            _step = _PinStep.current;
-            _error = null;
-            _currentPin = null;
-          });
-          WidgetsBinding.instance.addPostFrameCallback((_) => _clearPanel());
-          return;
-        }
-        widget.onBack();
-        return;
-      case _PinStep.confirm:
-        setState(() {
-          _step = _PinStep.create;
-          _error = null;
-          _newPin = null;
-        });
-        WidgetsBinding.instance.addPostFrameCallback((_) => _clearPanel());
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final hasPin = widget.session.desk?.hasPin == true;
-    final (title, subtitle, action) = switch (_step) {
-      _PinStep.current => (
-          'Current PIN',
-          'Enter your current PIN to continue.',
-          'Continue',
-        ),
-      _PinStep.create => (
-          hasPin ? 'New PIN' : 'Set PIN',
-          'Choose a 4 to 6 digit PIN for faster sign-in.',
-          'Continue',
-        ),
-      _PinStep.confirm => (
-          'Confirm PIN',
-          'Enter the same PIN again to save it.',
-          'Save PIN',
-        ),
-    };
-
-    return Scaffold(
-      backgroundColor: brandCanvas,
-      appBar: AppBar(
-        backgroundColor: brandCanvas,
-        title: Text(hasPin ? 'Change PIN' : 'Set PIN'),
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _back),
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + shellContentBottomInset(context)),
-          children: [
-            PinEntryPanel(
-              key: _panelKey,
-              title: title,
-              subtitle: subtitle,
-              busy: _busy,
-              error: _error,
-              actionLabel: action,
-              onSubmit: _onSubmit,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _MobileForm extends StatefulWidget {
   const _MobileForm({required this.session, required this.onBack});
 
@@ -630,14 +449,12 @@ class _DeleteForm extends StatefulWidget {
 
 class _DeleteFormState extends State<_DeleteForm> {
   final _reason = TextEditingController();
-  final _pin = TextEditingController();
   bool _busy = false;
   String? _error;
 
   @override
   void dispose() {
     _reason.dispose();
-    _pin.dispose();
     super.dispose();
   }
 
@@ -652,10 +469,7 @@ class _DeleteFormState extends State<_DeleteForm> {
       _error = null;
     });
     try {
-      final desk = await widget.session.api.deleteAccount(
-        reason,
-        pin: _pin.text.trim().isEmpty ? null : _pin.text.trim(),
-      );
+      final desk = await widget.session.api.deleteAccount(reason);
       widget.session.updateDesk(desk);
     } on ApiException catch (ex) {
       setState(() => _error = ex.message);
@@ -694,15 +508,6 @@ class _DeleteFormState extends State<_DeleteForm> {
                   ),
                   const SizedBox(height: 12),
                   TextField(controller: _reason, decoration: const InputDecoration(labelText: 'Reason'), maxLines: 2),
-                  if (desk?.hasPin == true) ...[
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _pin,
-                      decoration: const InputDecoration(labelText: 'PIN'),
-                      obscureText: true,
-                      keyboardType: TextInputType.number,
-                    ),
-                  ],
                   if (_error != null) ...[
                     const SizedBox(height: 8),
                     Text(_error!, style: const TextStyle(color: brandSos)),

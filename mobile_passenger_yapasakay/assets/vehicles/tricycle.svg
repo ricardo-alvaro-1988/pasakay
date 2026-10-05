@@ -1,11 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" width="128" height="80">
-  <circle cx="14" cy="30" r="6" fill="#444"/>
-  <circle cx="38" cy="30" r="6" fill="#444"/>
-  <circle cx="52" cy="30" r="5" fill="#444"/>
-  <path d="M18 18h22l6 10H14z" fill="#1f2329"/>
-  <path d="M20 12h18l4 6H18z" fill="#e30613"/>
-  <rect x="22" y="14" width="8" height="5" rx="1" fill="#fff" opacity=".85"/>
-  <rect x="32" y="14" width="8" height="5" rx="1" fill="#fff" opacity=".85"/>
-  <path d="M40 20h10l4 8H44z" fill="#e30613"/>
-  <rect x="46" y="16" width="6" height="4" rx="1" fill="#1f2329"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 56" width="192" height="112">
+  <defs>
+    <linearGradient id="tCab" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff3b45"/>
+      <stop offset="100%" stop-color="#b80510"/>
+    </linearGradient>
+    <linearGradient id="tBody" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2a2e36"/>
+      <stop offset="100%" stop-color="#121418"/>
+    </linearGradient>
+    <radialGradient id="tTire" cx="50%" cy="45%" r="55%">
+      <stop offset="0%" stop-color="#555"/>
+      <stop offset="100%" stop-color="#111"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="48" cy="50" rx="40" ry="3.5" fill="#000" opacity=".12"/>
+  <circle cx="20" cy="38" r="9" fill="url(#tTire)"/>
+  <circle cx="20" cy="38" r="4" fill="#c9ccd1"/>
+  <circle cx="52" cy="38" r="9" fill="url(#tTire)"/>
+  <circle cx="52" cy="38" r="4" fill="#c9ccd1"/>
+  <circle cx="74" cy="39" r="7.5" fill="url(#tTire)"/>
+  <circle cx="74" cy="39" r="3.2" fill="#c9ccd1"/>
+  <path d="M24 22h34l10 14H18z" fill="url(#tBody)"/>
+  <path d="M26 12h30l7 10H22z" fill="url(#tCab)"/>
+  <rect x="30" y="15" width="11" height="6" rx="1" fill="#e8f1ff" opacity=".92"/>
+  <rect x="44" y="15" width="11" height="6" rx="1" fill="#e8f1ff" opacity=".92"/>
+  <path d="M58 24h16l6 12H62z" fill="url(#tCab)"/>
+  <rect x="68" y="18" width="8" height="5" rx="1" fill="#1a1d22"/>
+  <path d="M18 28h8v8H20z" fill="#3a3f48"/>
 </svg>

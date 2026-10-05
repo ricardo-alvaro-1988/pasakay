@@ -10,6 +10,7 @@ import 'geocode.dart';
 import 'models.dart';
 import 'place_search.dart';
 import 'session.dart';
+import 'share_trip.dart';
 import 'show_qr.dart';
 import 'stop_rail.dart';
 import 'theme.dart';
@@ -663,6 +664,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           trip: active,
                           cancelling: _cancelling,
                           onCancel: active.canCancel && !_cancelling ? () => _cancelActive(active) : null,
+                          onShare: () => shareCustomerTrip(active),
                         ),
                       ] else ...[
                         if (hailed != null || hailId != null) ...[
@@ -684,7 +686,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onDropoffTap: () => _pickStop(false),
                           pickupHint: _locating ? 'Getting GPS…' : 'Tap to set pickup',
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 6),
                         _VehicleGrid(
                           vehicles: vehicles,
                           selectedType: _vehicle,
@@ -705,7 +707,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           },
                         ),
                         if (_showPassengerPicker) ...[
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 6),
                           Row(
                             children: [
                               Text(
@@ -713,24 +715,27 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style: const TextStyle(fontWeight: FontWeight.w700),
                               ),
                               const Spacer(),
-                              IconButton(
+                              _PassengerStepButton(
+                                icon: Icons.remove_circle_outline,
                                 onPressed: _passengers <= 1
                                     ? null
                                     : () {
                                         setState(() => _passengers -= 1);
                                         _scheduleQuote();
                                       },
-                                icon: const Icon(Icons.remove_circle_outline),
                               ),
-                              Text('$_passengers', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                              IconButton(
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                child: Text('$_passengers', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                              ),
+                              _PassengerStepButton(
+                                icon: Icons.add_circle_outline,
                                 onPressed: _passengers >= _maxPassengers
                                     ? null
                                     : () {
                                         setState(() => _passengers += 1);
                                         _scheduleQuote();
                                       },
-                                icon: const Icon(Icons.add_circle_outline),
                               ),
                             ],
                           ),
@@ -893,9 +898,9 @@ class _VehicleGrid extends StatelessWidget {
       itemCount: items.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        childAspectRatio: 0.95,
+        mainAxisSpacing: 6,
+        crossAxisSpacing: 6,
+        childAspectRatio: 1.05,
       ),
       itemBuilder: (context, index) {
         final item = items[index];
@@ -914,11 +919,11 @@ class _VehicleGrid extends StatelessWidget {
                 border: Border.all(color: selected ? brandRed : brandLine, width: selected ? 2 : 1),
                 color: selected ? brandAccentSoft : brandSurface,
               ),
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(6),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Expanded(child: vehicleArtImage(item.type, iconKey: item.iconKey, height: 40)),
+                  Expanded(child: vehicleArtImage(item.type, iconKey: item.iconKey, height: 42)),
                   Text(
                     item.name,
                     maxLines: 1,
@@ -956,12 +961,37 @@ class _VehicleItem {
   final double? price;
 }
 
+class _PassengerStepButton extends StatelessWidget {
+  const _PassengerStepButton({required this.icon, this.onPressed});
+
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 36,
+      height: 36,
+      child: Material(
+        color: brandChip,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(999),
+          child: Icon(icon, size: 20, color: onPressed == null ? brandMuted : brandInk),
+        ),
+      ),
+    );
+  }
+}
+
 class _ActiveTripCard extends StatelessWidget {
-  const _ActiveTripCard({required this.trip, this.onCancel, this.cancelling = false});
+  const _ActiveTripCard({required this.trip, this.onCancel, this.cancelling = false, this.onShare});
 
   final CustomerTrip trip;
   final VoidCallback? onCancel;
   final bool cancelling;
+  final VoidCallback? onShare;
 
   @override
   Widget build(BuildContext context) {
@@ -981,6 +1011,13 @@ class _ActiveTripCard extends StatelessWidget {
               Expanded(
                 child: Text(tripHeadline(trip.status), style: Theme.of(context).textTheme.titleMedium),
               ),
+              if (onShare != null)
+                IconButton(
+                  tooltip: 'Share ride',
+                  onPressed: onShare,
+                  icon: const Icon(Icons.share, size: 20),
+                  visualDensity: VisualDensity.compact,
+                ),
               Text(trip.reference, style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12)),
             ],
           ),

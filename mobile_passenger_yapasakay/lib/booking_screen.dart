@@ -6,6 +6,7 @@ import 'models.dart';
 import 'ph_time.dart';
 import 'rate_dialog.dart';
 import 'session.dart';
+import 'share_trip.dart';
 import 'theme.dart';
 
 class BookingScreen extends StatefulWidget {
@@ -420,14 +421,29 @@ class _TripBody extends StatelessWidget {
             ),
         ],
         Text(phWhen(when), style: const TextStyle(color: brandMuted, fontSize: 12)),
-        if (onCancel != null) ...[
-          const SizedBox(height: 10),
-          OutlinedButton(
-            style: OutlinedButton.styleFrom(foregroundColor: brandSos),
-            onPressed: onCancel,
-            child: const Text('Cancel'),
-          ),
-        ] else if (trip.status == 'Ongoing') ...[
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () => shareCustomerTrip(trip),
+                icon: const Icon(Icons.share, size: 18),
+                label: const Text('Share ride'),
+              ),
+            ),
+            if (onCancel != null) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(foregroundColor: brandSos),
+                  onPressed: onCancel,
+                  child: const Text('Cancel'),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (onCancel == null && trip.status == 'Ongoing') ...[
           const SizedBox(height: 8),
           const Text(
             'Trip is ongoing. Your rider will finish the ride when you arrive.',

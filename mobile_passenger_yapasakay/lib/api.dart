@@ -254,18 +254,6 @@ class CustomerApi {
     return auth;
   }
 
-  Future<AuthResponse> customerPinLogin({required String phone, required String pin}) async {
-    final body = await _request(
-      'POST',
-      '/api/auth/customer-pin-login',
-      auth: false,
-      body: jsonEncode({'phone': phone, 'pin': pin}),
-    );
-    final auth = AuthResponse.fromJson(body);
-    await saveAuth(auth);
-    return auth;
-  }
-
   Future<Desk> desk() async {
     return Desk.fromJson(await _request('GET', '/api/customer/desk'));
   }
@@ -377,14 +365,6 @@ class CustomerApi {
       'PUT',
       '/api/customer/account/profile',
       body: jsonEncode({'firstName': firstName, 'lastName': lastName, 'gender': gender, 'email': email}),
-    ));
-  }
-
-  Future<Desk> setPin(String pin, {String? currentPin}) async {
-    return Desk.fromJson(await _request(
-      'POST',
-      '/api/customer/account/pin',
-      body: jsonEncode({'pin': pin, if (currentPin != null && currentPin.isNotEmpty) 'currentPin': currentPin}),
     ));
   }
 

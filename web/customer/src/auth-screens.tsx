@@ -2,7 +2,6 @@ import { FormEvent, useEffect, useRef, useState } from 'react'
 import logo from './logo-circle.png'
 import { LoginBrandPanel, LoginTrustBar, LoginVehicleCards } from './login-brand-panel'
 import { api, Desk, saveAuth } from './api'
-import { PinPad } from './pin-pad'
 
 function loadGoogleScript() {
   return new Promise<void>((resolve, reject) => {
@@ -53,29 +52,8 @@ export function AuthScreen({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [missingClient, setMissingClient] = useState(false)
-  const [phone, setPhone] = useState('')
-  const [pinStep, setPinStep] = useState(false)
-  const [pinError, setPinError] = useState('')
-  const [pinBusy, setPinBusy] = useState(false)
-  const [pinReset, setPinReset] = useState(0)
 
   onReadyRef.current = onReady
-
-  async function submitPin(pin: string) {
-    setPinBusy(true)
-    setPinError('')
-    try {
-      const auth = await api.customerPinLogin(phone, pin)
-      if (auth.user.role !== 'Customer') throw new Error('Use a customer account.')
-      saveAuth(auth)
-      onReadyRef.current(await api.desk())
-    } catch (err) {
-      setPinError(err instanceof Error ? err.message : 'Could not sign in with PIN.')
-      setPinReset((n) => n + 1)
-    } finally {
-      setPinBusy(false)
-    }
-  }
 
   useEffect(() => {
     let cancelled = false
@@ -135,36 +113,6 @@ export function AuthScreen({
     }
   }, [])
 
-  if (pinStep) {
-    return (
-      <div className="login">
-        <LoginBrandPanel
-          kicker="Secure PIN sign-in"
-          title="Enter your PIN."
-          description="Use the PIN you set in Account after Google sign-in."
-          brandName={brandName}
-          brandLogo={brandLogo}
-        />
-        <div className="login-form">
-          <button className="ghost" type="button" disabled={pinBusy} onClick={() => { setPinStep(false); setPinError('') }}>
-            Back
-          </button>
-          <PinPad
-            title="Enter PIN"
-            subtitle={`Sign in as ${phone}`}
-            error={pinError}
-            busy={pinBusy}
-            actionLabel="Sign in"
-            autoSubmitAt={6}
-            resetToken={pinReset}
-            onSubmit={(pin) => void submitPin(pin)}
-          />
-        </div>
-        <LoginTrustBar />
-      </div>
-    )
-  }
-
   return (
     <div className="login">
       <LoginBrandPanel
@@ -179,8 +127,8 @@ export function AuthScreen({
       <div className="login-form">
         <img className="login-form-mark" src={brandLogo} alt="" />
         <h2>Welcome back</h2>
-        <p className="lede login-lede-full">Sign in with Google to book a ride, or use phone and PIN after you set one in Account.</p>
-        <p className="lede login-lede-short">Sign in with Google or phone + PIN.</p>
+        <p className="lede login-lede-full">Sign in with Google to book a ride, or create your {brandName} profile in one tap.</p>
+        <p className="lede login-lede-short">Sign in with Google to book rides and track your driver live.</p>
         {missingClient && (
           <p className="error">Google sign-in is not configured. Add GoogleAuth:ClientId in the API appsettings.</p>
         )}
@@ -193,27 +141,8 @@ export function AuthScreen({
         </div>
         {busy && <p className="muted">Signing you in…</p>}
         {error && <p className="error">{error}</p>}
-        <div className="login-or"><span>OR</span></div>
-        <label className="field">
-          <span>MOBILE NUMBER</span>
-          <input
-            inputMode="tel"
-            autoComplete="tel"
-            placeholder="09XX XXX XXXX"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-        </label>
-        <button
-          className="primary"
-          type="button"
-          disabled={busy || phone.replace(/\D/g, '').length < 10}
-          onClick={() => { setPinStep(true); setPinError(''); setPinReset((n) => n + 1) }}
-        >
-          Continue with PIN
-        </button>
-        <p className="login-safe">First time? Sign in with Google, then Set PIN in Account.</p>
         <LoginVehicleCards />
+        <p className="login-safe">Your account stays on this device until you sign out.</p>
       </div>
       <LoginTrustBar />
     </div>

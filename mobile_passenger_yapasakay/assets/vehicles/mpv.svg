@@ -1,6 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" width="128" height="80">
-  <rect x="5" y="14" width="54" height="16" rx="4" fill="#1f2329"/>
-  <path d="M12 14 18 8h28l6 6" fill="#e30613"/>
-  <circle cx="18" cy="30" r="5" fill="#444"/><circle cx="46" cy="30" r="5" fill="#444"/>
-  <rect x="20" y="10" width="24" height="7" rx="1" fill="#fff" opacity=".8"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 56" width="192" height="112">
+  <defs>
+    <linearGradient id="vBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#30363f"/>
+      <stop offset="100%" stop-color="#12151a"/>
+    </linearGradient>
+    <linearGradient id="vRoof" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff4450"/>
+      <stop offset="100%" stop-color="#b80510"/>
+    </linearGradient>
+    <radialGradient id="vTire" cx="50%" cy="40%" r="55%">
+      <stop offset="0%" stop-color="#666"/>
+      <stop offset="100%" stop-color="#111"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="48" cy="50" rx="42" ry="3.5" fill="#000" opacity=".12"/>
+  <path d="M8 28c2-8 10-14 20-16l6-6h30l8 6c10 2 18 8 20 16v8H8z" fill="url(#vBody)"/>
+  <path d="M28 12l5-6h30l6 6H28z" fill="url(#vRoof)"/>
+  <rect x="32" y="8" width="28" height="8" rx="1.5" fill="#dce9fb" opacity=".92"/>
+  <circle cx="26" cy="38" r="8.5" fill="url(#vTire)"/>
+  <circle cx="26" cy="38" r="3.8" fill="#cfd3d8"/>
+  <circle cx="72" cy="38" r="8.5" fill="url(#vTire)"/>
+  <circle cx="72" cy="38" r="3.8" fill="#cfd3d8"/>
+  <path d="M12 28h14v3H14z" fill="#f5c542" opacity=".85"/>
 </svg>

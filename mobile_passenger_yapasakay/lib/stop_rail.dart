@@ -24,7 +24,7 @@ class StopRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BrandPanel(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       child: Column(
         children: [
           _StopRow(
@@ -38,7 +38,7 @@ class StopRail extends StatelessWidget {
             padding: const EdgeInsets.only(left: 17),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Container(width: 2, height: 14, color: brandLine),
+              child: Container(width: 2, height: 10, color: brandLine),
             ),
           ),
           _StopRow(
@@ -151,7 +151,7 @@ class _StopRow extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 2),
         child: Row(
           children: [
             BeatingPin(color: isPickup ? brandSuccess : brandRed),
