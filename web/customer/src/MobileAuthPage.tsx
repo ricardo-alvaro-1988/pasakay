@@ -81,7 +81,9 @@ async function createTicket(idToken: string) {
 }
 
 function googleAuthorizeUrl(clientId: string, state: AuthState) {
-  const redirectUri = `${window.location.origin}/mobile-auth`
+  // Must match an Authorized redirect URI exactly (currently https://yapasakay.com).
+  // Do not append /mobile-auth — Google rejects that as invalid_request.
+  const redirectUri = window.location.origin
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -92,6 +94,18 @@ function googleAuthorizeUrl(clientId: string, state: AuthState) {
     prompt: 'select_account',
   })
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+}
+
+/** Google returns to origin#id_token=…; move that onto /mobile-auth so the ticket page can finish. */
+export function captureMobileAuthOAuthReturn() {
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash
+  if (!hash) return
+  const params = new URLSearchParams(hash)
+  if (!(params.get('id_token') || params.get('error'))) return
+  if (!decodeState(params.get('state'))) return
+  if (isMobileAuthPath()) return
+  const search = window.location.search || ''
+  window.location.replace(`/mobile-auth${search}${window.location.hash}`)
 }
 
 export function MobileAuthPage() {
