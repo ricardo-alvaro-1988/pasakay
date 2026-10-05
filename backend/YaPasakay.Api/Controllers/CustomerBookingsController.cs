@@ -776,7 +776,10 @@ public class CustomerBookingsController(
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        if (TripBroadcastService.IsDueForScheduleBroadcast(scheduled))
+        // Scheduled / rental bookings stay Pending for operator assign.
+        // Do not broadcast to riders on create — ScheduleBroadcastHostedService
+        // (or operator assign/reassign) handles offer timing.
+        if (scheduled is null)
         {
             await broadcast.BroadcastAsync(trip.Id, cancellationToken);
         }
