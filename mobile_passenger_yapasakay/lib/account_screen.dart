@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import 'api.dart';
+import 'pin_entry.dart';
 import 'session.dart';
 import 'theme.dart';
 
@@ -18,6 +20,7 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   _AccountPage _page = _AccountPage.menu;
+  bool _photoBusy = false;
 
   @override
   void initState() {
@@ -35,9 +38,46 @@ class _AccountScreenState extends State<AccountScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _pickPhoto() async {
+    if (_photoBusy) return;
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      imageQuality: 85,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _photoBusy = true);
+    try {
+      final desk = await widget.session.api.uploadProfilePhoto(picked.path);
+      widget.session.updateDesk(desk);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile photo updated.')),
+        );
+      }
+    } on ApiException catch (ex) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ex.message)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not upload photo.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final desk = widget.session.desk;
+    final photoUrl = widget.session.api.mediaUrl(desk?.photoUrl);
+    final initial = (desk?.fullName ?? 'C').trim().isEmpty
+        ? 'C'
+        : desk!.fullName.trim()[0].toUpperCase();
     return switch (_page) {
       _AccountPage.profile => _ProfileForm(
           session: widget.session,
@@ -68,19 +108,52 @@ class _AccountScreenState extends State<AccountScreen> {
       _AccountPage.menu => Scaffold(
           appBar: AppBar(title: const Text('Account')),
           body: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + shellContentBottomInset(context)),
             children: [
               BrandPanel(
                 child: Row(
                   children: [
-                    CircleAvatar(
-                      radius: 28,
-                      backgroundColor: brandAccentSoft,
-                      child: Text(
-                        (desk?.fullName ?? 'C').trim().isEmpty
-                            ? 'C'
-                            : (desk!.fullName.trim()[0].toUpperCase()),
-                        style: const TextStyle(color: brandRed, fontWeight: FontWeight.w800, fontSize: 22),
+                    GestureDetector(
+                      onTap: _photoBusy ? null : _pickPhoto,
+                      child: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          CircleAvatar(
+                            radius: 28,
+                            backgroundColor: brandAccentSoft,
+                            backgroundImage: photoUrl == null ? null : NetworkImage(photoUrl),
+                            child: photoUrl != null
+                                ? null
+                                : _photoBusy
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : Text(
+                                        initial,
+                                        style: const TextStyle(
+                                          color: brandRed,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 22,
+                                        ),
+                                      ),
+                          ),
+                          Positioned(
+                            right: -2,
+                            bottom: -2,
+                            child: Container(
+                              width: 22,
+                              height: 22,
+                              decoration: BoxDecoration(
+                                color: brandRed,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: const Icon(Icons.camera_alt, size: 12, color: Colors.white),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -93,6 +166,11 @@ class _AccountScreenState extends State<AccountScreen> {
                           Text(
                             (desk?.email ?? '').isEmpty ? 'No email yet' : desk!.email!,
                             style: const TextStyle(color: brandMuted),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Tap photo to change',
+                            style: TextStyle(color: brandMuted, fontSize: 12, fontWeight: FontWeight.w600),
                           ),
                         ],
                       ),
@@ -284,82 +362,162 @@ class _PinForm extends StatefulWidget {
   State<_PinForm> createState() => _PinFormState();
 }
 
+enum _PinStep { current, create, confirm }
+
 class _PinFormState extends State<_PinForm> {
-  final _pin = TextEditingController();
-  final _currentPin = TextEditingController();
+  late _PinStep _step;
+  String? _currentPin;
+  String? _newPin;
   bool _busy = false;
   String? _error;
+  final _panelKey = GlobalKey<PinEntryPanelState>();
 
   @override
-  void dispose() {
-    _pin.dispose();
-    _currentPin.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _step = widget.session.desk?.hasPin == true ? _PinStep.current : _PinStep.create;
   }
 
-  Future<void> _save() async {
-    if (_pin.text.trim().length < 4) {
-      setState(() => _error = 'PIN must be at least 4 digits.');
-      return;
+  void _clearPanel() => _panelKey.currentState?.clear(notify: false);
+
+  Future<void> _onSubmit(String value) async {
+    if (_busy) return;
+    switch (_step) {
+      case _PinStep.current:
+        if (value.length < 4) {
+          setState(() => _error = 'PIN must be 4 to 6 digits.');
+          return;
+        }
+        setState(() {
+          _currentPin = value;
+          _step = _PinStep.create;
+          _error = null;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) => _clearPanel());
+        return;
+      case _PinStep.create:
+        if (value.length < 4 || value.length > 6 || !RegExp(r'^\d+$').hasMatch(value)) {
+          setState(() => _error = 'PIN must be 4 to 6 digits.');
+          return;
+        }
+        setState(() {
+          _newPin = value;
+          _step = _PinStep.confirm;
+          _error = null;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) => _clearPanel());
+        return;
+      case _PinStep.confirm:
+        if (value != _newPin) {
+          setState(() => _error = 'PINs do not match. Try again.');
+          _clearPanel();
+          return;
+        }
+        setState(() {
+          _busy = true;
+          _error = null;
+        });
+        try {
+          final desk = await widget.session.api.setPin(
+            _newPin!,
+            currentPin: widget.session.desk?.hasPin == true ? _currentPin : null,
+          );
+          widget.session.updateDesk(desk);
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('PIN saved. You can sign in with phone and PIN next time.')),
+          );
+          widget.onBack();
+        } on ApiException catch (ex) {
+          setState(() {
+            _error = ex.message;
+            if (ex.message.toLowerCase().contains('current')) {
+              _step = _PinStep.current;
+              _currentPin = null;
+              _newPin = null;
+            } else {
+              _step = _PinStep.create;
+              _newPin = null;
+            }
+          });
+          WidgetsBinding.instance.addPostFrameCallback((_) => _clearPanel());
+        } finally {
+          if (mounted) setState(() => _busy = false);
+        }
     }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final desk = await widget.session.api.setPin(
-        _pin.text.trim(),
-        currentPin: widget.session.desk?.hasPin == true ? _currentPin.text.trim() : null,
-      );
-      widget.session.updateDesk(desk);
-      widget.onBack();
-    } on ApiException catch (ex) {
-      setState(() => _error = ex.message);
-    } finally {
-      if (mounted) setState(() => _busy = false);
+  }
+
+  void _back() {
+    if (_busy) return;
+    switch (_step) {
+      case _PinStep.current:
+        widget.onBack();
+        return;
+      case _PinStep.create:
+        if (widget.session.desk?.hasPin == true) {
+          setState(() {
+            _step = _PinStep.current;
+            _error = null;
+            _currentPin = null;
+          });
+          WidgetsBinding.instance.addPostFrameCallback((_) => _clearPanel());
+          return;
+        }
+        widget.onBack();
+        return;
+      case _PinStep.confirm:
+        setState(() {
+          _step = _PinStep.create;
+          _error = null;
+          _newPin = null;
+        });
+        WidgetsBinding.instance.addPostFrameCallback((_) => _clearPanel());
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final hasPin = widget.session.desk?.hasPin == true;
+    final (title, subtitle, action) = switch (_step) {
+      _PinStep.current => (
+          'Current PIN',
+          'Enter your current PIN to continue.',
+          'Continue',
+        ),
+      _PinStep.create => (
+          hasPin ? 'New PIN' : 'Set PIN',
+          'Choose a 4 to 6 digit PIN for faster sign-in.',
+          'Continue',
+        ),
+      _PinStep.confirm => (
+          'Confirm PIN',
+          'Enter the same PIN again to save it.',
+          'Save PIN',
+        ),
+    };
+
     return Scaffold(
+      backgroundColor: brandCanvas,
       appBar: AppBar(
+        backgroundColor: brandCanvas,
         title: Text(hasPin ? 'Change PIN' : 'Set PIN'),
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: widget.onBack),
+        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: _back),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          BrandPanel(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (hasPin) ...[
-                  TextField(
-                    controller: _currentPin,
-                    decoration: const InputDecoration(labelText: 'Current PIN'),
-                    obscureText: true,
-                    keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                TextField(
-                  controller: _pin,
-                  decoration: const InputDecoration(labelText: 'New PIN'),
-                  obscureText: true,
-                  keyboardType: TextInputType.number,
-                ),
-                if (_error != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_error!, style: const TextStyle(color: brandSos)),
-                ],
-                const SizedBox(height: 12),
-                FilledButton(onPressed: _busy ? null : _save, child: const Text('Save PIN')),
-              ],
+      body: SafeArea(
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(20, 0, 20, 16 + shellContentBottomInset(context)),
+          children: [
+            PinEntryPanel(
+              key: _panelKey,
+              title: title,
+              subtitle: subtitle,
+              busy: _busy,
+              error: _error,
+              actionLabel: action,
+              onSubmit: _onSubmit,
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

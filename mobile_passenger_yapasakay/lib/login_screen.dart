@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 
 import 'api.dart';
+import 'pin_entry.dart';
 import 'session.dart';
 import 'theme.dart';
 import 'vehicle_art.dart';
@@ -17,7 +19,18 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
+  bool _pinStep = false;
+  String? _phone;
+  String? _pinError;
+  bool _pinBusy = false;
+  final _phoneCtrl = TextEditingController();
   static const _callbackScheme = 'yapasakay-passenger';
+
+  @override
+  void dispose() {
+    _phoneCtrl.dispose();
+    super.dispose();
+  }
 
   Future<String> _browserTicket() async {
     final authUrl = Uri.parse('${CustomerApi.productionBaseUrl}/mobile-auth').replace(
@@ -41,7 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return ticket;
   }
 
-  Future<void> _signIn() async {
+  Future<void> _signInGoogle() async {
     if (_loading) return;
     setState(() => _loading = true);
     try {
@@ -62,8 +75,60 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _continueToPin() {
+    final phone = _phoneCtrl.text.trim();
+    if (phone.replaceAll(RegExp(r'\D'), '').length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid Philippine mobile number.')),
+      );
+      return;
+    }
+    setState(() {
+      _phone = phone;
+      _pinStep = true;
+      _pinError = null;
+    });
+  }
+
+  Future<void> _submitPin(String pin) async {
+    final phone = _phone;
+    if (phone == null || _pinBusy) return;
+    setState(() {
+      _pinBusy = true;
+      _pinError = null;
+    });
+    try {
+      await widget.session.api.customerPinLogin(phone: phone, pin: pin);
+      await widget.session.restore();
+    } on ApiException catch (ex) {
+      if (mounted) setState(() => _pinError = ex.message);
+    } catch (_) {
+      if (mounted) setState(() => _pinError = 'Could not sign in with PIN.');
+    } finally {
+      if (mounted) setState(() => _pinBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_pinStep) {
+      return PinEntryPage(
+        title: 'Enter PIN',
+        subtitle: 'Sign in as ${_phone ?? 'your number'}',
+        onBack: _pinBusy
+            ? null
+            : () => setState(() {
+                  _pinStep = false;
+                  _pinError = null;
+                }),
+        busy: _pinBusy,
+        error: _pinError,
+        actionLabel: 'Sign in',
+        autoSubmitAt: 6,
+        onSubmit: _submitPin,
+      );
+    }
+
     final error = widget.session.error;
     return Scaffold(
       backgroundColor: brandCanvas,
@@ -143,7 +208,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Text('Welcome back', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 6),
                   const Text(
-                    'Sign in with Google to book rides and track your driver live.',
+                    'Sign in with Google to book rides, or use your phone and PIN after you set one in Account.',
                     style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
                   ),
                   if (error != null && error.isNotEmpty) ...[
@@ -152,7 +217,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                   const SizedBox(height: 18),
                   OutlinedButton(
-                    onPressed: _loading || widget.session.busy ? null : _signIn,
+                    onPressed: _loading || widget.session.busy ? null : _signInGoogle,
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: brandRed, width: 2),
                       foregroundColor: brandInk,
@@ -165,18 +230,44 @@ class _LoginScreenState extends State<LoginScreen> {
                             height: 22,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                        : Row(
+                        : const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               _GoogleMark(),
-                              const SizedBox(width: 10),
-                              const Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.w800)),
+                              SizedBox(width: 10),
+                              Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.w800)),
                             ],
                           ),
                   ),
+                  const SizedBox(height: 18),
+                  Row(
+                    children: [
+                      Expanded(child: Divider(color: brandLine)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Text('OR', style: TextStyle(color: brandMuted, fontWeight: FontWeight.w800, fontSize: 12)),
+                      ),
+                      Expanded(child: Divider(color: brandLine)),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9+\s-]'))],
+                    decoration: const InputDecoration(
+                      labelText: 'Mobile number',
+                      hintText: '09XX XXX XXXX',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: _loading || widget.session.busy ? null : _continueToPin,
+                    child: const Text('Continue with PIN'),
+                  ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Your account stays on this device until you sign out.',
+                    'First time? Sign in with Google, then Set PIN in Account.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600, fontSize: 12),
                   ),
@@ -203,30 +294,30 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class _GoogleMark extends StatelessWidget {
+  const _GoogleMark();
+
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 20,
-      height: 20,
-      child: CustomPaint(painter: _GoogleGPainter()),
+    return Container(
+      width: 22,
+      height: 22,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(11),
+        border: Border.all(color: brandLine),
+      ),
+      child: const Text(
+        'G',
+        style: TextStyle(
+          color: Color(0xFF4285F4),
+          fontWeight: FontWeight.w900,
+          fontSize: 13,
+          height: 1,
+        ),
+      ),
     );
   }
-}
-
-class _GoogleGPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..style = PaintingStyle.fill;
-    paint.color = const Color(0xFF4285F4);
-    canvas.drawCircle(Offset(size.width * 0.5, size.height * 0.5), size.width * 0.48, paint);
-    paint.color = Colors.white;
-    canvas.drawCircle(Offset(size.width * 0.5, size.height * 0.5), size.width * 0.28, paint);
-    paint.color = const Color(0xFF4285F4);
-    canvas.drawRect(Rect.fromLTWH(size.width * 0.48, size.height * 0.42, size.width * 0.4, size.height * 0.16), paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _TrustItem extends StatelessWidget {
@@ -239,13 +330,9 @@ class _TrustItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        CircleAvatar(
-          radius: 18,
-          backgroundColor: brandChip,
-          child: Icon(icon, size: 18, color: brandInk),
-        ),
-        const SizedBox(height: 6),
-        Text(label, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11)),
+        Icon(icon, color: brandRed, size: 22),
+        const SizedBox(height: 4),
+        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: brandMuted)),
       ],
     );
   }

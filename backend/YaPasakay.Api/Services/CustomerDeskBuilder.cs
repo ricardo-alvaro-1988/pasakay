@@ -56,7 +56,8 @@ public static class CustomerDeskBuilder
             map?.Lng,
             hail,
             pendingRating,
-            !PhoneNormalizer.TryNormalizePhMobile(customer.AppUser.PhoneNumber, out _, out _));
+            !PhoneNormalizer.TryNormalizePhMobile(customer.AppUser.PhoneNumber, out _, out _),
+            UploadUrls.FromPath(customer.PhotoPath));
     }
 
     public static async Task<CustomerHailRider?> LoadHailAsync(

@@ -246,7 +246,7 @@ class _RentalScreenState extends State<RentalScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Rental')),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + shellContentBottomInset(context)),
         children: [
           Container(
             padding: const EdgeInsets.all(16),

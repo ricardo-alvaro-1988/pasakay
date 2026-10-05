@@ -172,7 +172,8 @@ public record CustomerDeskResponse(
     double? MapLng,
     CustomerHailRider? HailedRider,
     CustomerTripItem? PendingRating,
-    bool NeedsMobile);
+    bool NeedsMobile,
+    string? PhotoUrl);
 
 public record CustomerProfileUpdateRequest(
     string FirstName,

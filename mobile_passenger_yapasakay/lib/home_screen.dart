@@ -599,7 +599,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           Positioned(
             right: 14,
-            bottom: _sheetOpen ? MediaQuery.sizeOf(context).height * 0.48 : 110,
+            bottom: _sheetOpen
+                ? MediaQuery.sizeOf(context).height * 0.48
+                : 110 + shellContentBottomInset(context),
             child: FloatingActionButton.small(
               heroTag: 'locate',
               backgroundColor: Colors.white,
@@ -632,7 +634,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: ListView(
                     controller: scroll,
-                    padding: const EdgeInsets.fromLTRB(14, 10, 14, 28),
+                    padding: EdgeInsets.fromLTRB(14, 10, 14, 16 + shellContentBottomInset(context)),
                     children: [
                       Center(
                         child: Container(

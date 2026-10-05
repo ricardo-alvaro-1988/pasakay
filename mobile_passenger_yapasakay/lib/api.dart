@@ -119,7 +119,8 @@ class CustomerApi {
   bool _shouldAttemptRefresh(String path) {
     return !path.startsWith('/api/auth/refresh') &&
         !path.startsWith('/api/auth/google') &&
-        !path.startsWith('/api/auth/login');
+        !path.startsWith('/api/auth/login') &&
+        !path.startsWith('/api/auth/customer-pin-login');
   }
 
   Future<bool> _refreshSession() async {
@@ -165,6 +166,7 @@ class CustomerApi {
     final response = await call().timeout(_timeout);
     final isSignIn = path.startsWith('/api/auth/google') ||
         path.startsWith('/api/auth/login') ||
+        path.startsWith('/api/auth/customer-pin-login') ||
         path.startsWith('/api/auth/verify-otp') ||
         path.startsWith('/api/auth/request-otp');
     if (response.statusCode == 401 && !isSignIn) {
@@ -246,6 +248,18 @@ class CustomerApi {
       '/api/auth/google/mobile-ticket/redeem',
       auth: false,
       body: jsonEncode({'ticket': ticket}),
+    );
+    final auth = AuthResponse.fromJson(body);
+    await saveAuth(auth);
+    return auth;
+  }
+
+  Future<AuthResponse> customerPinLogin({required String phone, required String pin}) async {
+    final body = await _request(
+      'POST',
+      '/api/auth/customer-pin-login',
+      auth: false,
+      body: jsonEncode({'phone': phone, 'pin': pin}),
     );
     final auth = AuthResponse.fromJson(body);
     await saveAuth(auth);
@@ -372,6 +386,17 @@ class CustomerApi {
       '/api/customer/account/pin',
       body: jsonEncode({'pin': pin, if (currentPin != null && currentPin.isNotEmpty) 'currentPin': currentPin}),
     ));
+  }
+
+  Future<Desk> uploadProfilePhoto(String filePath) async {
+    final request = http.MultipartRequest('POST', _uri('/api/customer/account/photo'));
+    if (accessToken != null) {
+      request.headers['Authorization'] = 'Bearer $accessToken';
+    }
+    request.files.add(await http.MultipartFile.fromPath('photo', filePath));
+    final streamed = await _http.send(request).timeout(_timeout);
+    final response = await http.Response.fromStream(streamed);
+    return Desk.fromJson(await _decodeJson(response, fallback: 'Could not upload photo.'));
   }
 
   Future<Desk> updateMobile(String newPhone) async {

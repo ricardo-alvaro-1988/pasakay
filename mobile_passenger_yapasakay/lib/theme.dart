@@ -146,6 +146,12 @@ ThemeData passengerTheme() {
 String peso(double value) =>
     '₱${value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2)}';
 
+/// Bottom nav bar (~72) + wrapper padding (6) so CTAs clear `extendBody` shell.
+const shellNavOccupiedHeight = 78.0;
+
+double shellContentBottomInset(BuildContext context) =>
+    MediaQuery.paddingOf(context).bottom + shellNavOccupiedHeight;
+
 /// Full-bleed dialog matching passenger popup width requirement.
 Future<T?> showPassengerDialog<T>({
   required BuildContext context,

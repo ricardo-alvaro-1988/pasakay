@@ -724,6 +724,7 @@ class Desk {
     this.hailedRider,
     this.pendingRating,
     this.needsMobile,
+    this.photoUrl,
   });
 
   final String customerId;
@@ -744,6 +745,7 @@ class Desk {
   final HailRider? hailedRider;
   final CustomerTrip? pendingRating;
   final bool? needsMobile;
+  final String? photoUrl;
 
   factory Desk.fromJson(Map<String, dynamic> json) {
     List<CustomerTrip> trips(dynamic value) {
@@ -783,6 +785,7 @@ class Desk {
       hailedRider: hailed == null ? null : HailRider.fromJson(hailed),
       pendingRating: pending == null ? null : CustomerTrip.fromJson(pending),
       needsMobile: json['needsMobile'] == null ? null : asFlag(json['needsMobile']),
+      photoUrl: asTextOrNull(json['photoUrl']),
     );
   }
 }

@@ -5,6 +5,7 @@ namespace YaPasakay.Application.Auth;
 public record RequestOtpRequest(string Phone);
 public record VerifyOtpRequest(string Phone, string Code);
 public record PasswordLoginRequest(string Phone, string Password);
+public record CustomerPinLoginRequest(string Phone, string Pin);
 public record RefreshRequest(string RefreshToken);
 public record GoogleSignInRequest(string IdToken);
 public record MobileAuthTicketRedeemRequest(string? Ticket);

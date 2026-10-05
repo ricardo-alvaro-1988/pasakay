@@ -159,7 +159,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 await _loadFavorites();
               },
               child: ListView(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + shellContentBottomInset(context)),
                 children: [
                   if (_error != null) ...[
                     Text(_error!, style: const TextStyle(color: brandSos, fontWeight: FontWeight.w600)),

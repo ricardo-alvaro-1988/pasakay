@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import {
   api,
   BookBody,
@@ -26,6 +26,7 @@ import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from '
 import { BookingHistoryRating, RateRidePanel } from './rate-ride'
 import { ServiceReceipt } from './service-receipt'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
+import { PinPad } from './pin-pad'
 
 const PAYMENT_METHODS: PaymentMethod[] = ['Cash', 'GCash', 'Maya', 'Other']
 
@@ -868,14 +869,7 @@ export function AccountHub({
 
   return (
     <div className="page account-hub">
-      <header className="account-hero">
-        <div className="avatar lg">{(desk.fullName || 'C').trim().charAt(0).toUpperCase()}</div>
-        <div className="account-hero-copy">
-          <h2>{desk.fullName || 'Customer'}</h2>
-          <p className="muted">{desk.phoneNumber}</p>
-          <p className="muted">{desk.email || 'No email yet'}</p>
-        </div>
-      </header>
+      <AccountHero desk={desk} onDesk={onDesk} />
 
       <section className="account-group">
         <h3>Account management</h3>
@@ -943,36 +937,160 @@ function ProfileForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk
   )
 }
 
-function PinForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk) => void; onBack: () => void }) {
-  const [currentPin, setCurrentPin] = useState('')
-  const [pin, setPin] = useState('')
-  const [error, setError] = useState('')
+function AccountHero({ desk, onDesk }: { desk: Desk; onDesk: (desk: Desk) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const photo = mediaUrl(desk.photoUrl)
+  const initial = (desk.fullName || 'C').trim().charAt(0).toUpperCase()
 
-  async function submit(e: FormEvent) {
-    e.preventDefault()
+  async function onFile(file?: File | null) {
+    if (!file) return
     setBusy(true)
     setError('')
     try {
-      onDesk(await api.setPin(pin, desk.hasPin ? currentPin : undefined))
-      onBack()
+      onDesk(await api.uploadProfilePhoto(file))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save PIN.')
+      setError(err instanceof Error ? err.message : 'Could not upload photo.')
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <form className="page account-form" onSubmit={submit}>
-      <button className="ghost" type="button" onClick={onBack}>Back</button>
-      <h2>{desk.hasPin ? 'Change PIN' : 'Set PIN'}</h2>
-      <p className="muted">Use 4 to 6 digits. This PIN protects account changes.</p>
-      {desk.hasPin && <label className="field"><span>CURRENT PIN</span><input inputMode="numeric" value={currentPin} onChange={(e) => setCurrentPin(e.target.value)} /></label>}
-      <label className="field"><span>NEW PIN</span><input inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} /></label>
-      {error && <p className="error">{error}</p>}
-      <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save PIN'}</button>
-    </form>
+    <header className="account-hero">
+      <button
+        type="button"
+        className="avatar lg avatar-upload"
+        disabled={busy}
+        onClick={() => inputRef.current?.click()}
+        aria-label="Change profile photo"
+      >
+        {photo ? <img src={photo} alt="" /> : <span>{busy ? '…' : initial}</span>}
+        <span className="avatar-cam" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none">
+            <path d="M4 8h3l1.5-2h7L17 8h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="2" />
+            <circle cx="12" cy="13" r="3" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        </span>
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => void onFile(e.target.files?.[0])}
+      />
+      <div className="account-hero-copy">
+        <h2>{desk.fullName || 'Customer'}</h2>
+        <p className="muted">{desk.phoneNumber}</p>
+        <p className="muted">{desk.email || 'No email yet'}</p>
+        <p className="muted">Tap photo to change</p>
+        {error ? <p className="error">{error}</p> : null}
+      </div>
+    </header>
+  )
+}
+
+function PinForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk) => void; onBack: () => void }) {
+  type Step = 'current' | 'create' | 'confirm'
+  const [step, setStep] = useState<Step>(desk.hasPin ? 'current' : 'create')
+  const [currentPin, setCurrentPin] = useState('')
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [resetToken, setResetToken] = useState(0)
+
+  async function onSubmit(value: string) {
+    if (busy) return
+    if (step === 'current') {
+      setCurrentPin(value)
+      setStep('create')
+      setError('')
+      setResetToken((n) => n + 1)
+      return
+    }
+    if (step === 'create') {
+      if (!/^\d{4,6}$/.test(value)) {
+        setError('PIN must be 4 to 6 digits.')
+        setResetToken((n) => n + 1)
+        return
+      }
+      setPin(value)
+      setStep('confirm')
+      setError('')
+      setResetToken((n) => n + 1)
+      return
+    }
+    if (value !== pin) {
+      setError('PINs do not match. Try again.')
+      setResetToken((n) => n + 1)
+      return
+    }
+    setBusy(true)
+    setError('')
+    try {
+      onDesk(await api.setPin(pin, desk.hasPin ? currentPin : undefined))
+      onBack()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not save PIN.'
+      setError(message)
+      if (message.toLowerCase().includes('current')) {
+        setStep('current')
+        setCurrentPin('')
+        setPin('')
+      } else {
+        setStep('create')
+        setPin('')
+      }
+      setResetToken((n) => n + 1)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const copy = step === 'current'
+    ? { title: 'Current PIN', subtitle: 'Enter your current PIN to continue.', action: 'Continue' }
+    : step === 'create'
+      ? { title: desk.hasPin ? 'New PIN' : 'Set PIN', subtitle: 'Choose a 4 to 6 digit PIN for faster sign-in.', action: 'Continue' }
+      : { title: 'Confirm PIN', subtitle: 'Enter the same PIN again to save it.', action: 'Save PIN' }
+
+  return (
+    <div className="page account-form pin-form-page">
+      <button
+        className="ghost"
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          if (step === 'confirm') {
+            setStep('create')
+            setPin('')
+            setError('')
+            setResetToken((n) => n + 1)
+            return
+          }
+          if (step === 'create' && desk.hasPin) {
+            setStep('current')
+            setCurrentPin('')
+            setError('')
+            setResetToken((n) => n + 1)
+            return
+          }
+          onBack()
+        }}
+      >
+        Back
+      </button>
+      <PinPad
+        title={copy.title}
+        subtitle={copy.subtitle}
+        error={error}
+        busy={busy}
+        actionLabel={copy.action}
+        resetToken={resetToken}
+        onSubmit={(value) => void onSubmit(value)}
+      />
+    </div>
   )
 }
 
