@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import 'api.dart';
+import 'models.dart';
 import 'session.dart';
 import 'theme.dart';
 import 'vehicle_art.dart';
@@ -18,6 +20,36 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
   static const _callbackScheme = 'yapasakay-passenger';
+
+  Future<String> _ensureGoogleClientId() async {
+    var clientId = widget.session.googleClientId;
+    if (clientId == null || clientId.isEmpty) {
+      final auth = await widget.session.api.authConfig();
+      clientId = asTextOrNull(auth['googleClientId']);
+      widget.session.googleClientId = clientId;
+    }
+    if (clientId == null || clientId.isEmpty) {
+      throw Exception('Google sign-in is not configured.');
+    }
+    return clientId;
+  }
+
+  /// Native Google Sign-In (same path as TryGoRide). Returns false if the user cancelled.
+  Future<bool> _nativeSignIn(String clientId) async {
+    final google = GoogleSignIn(
+      scopes: const ['email', 'profile'],
+      serverClientId: clientId,
+    );
+    final account = await google.signIn();
+    if (account == null) return false;
+    final auth = await account.authentication;
+    final idToken = auth.idToken;
+    if (idToken == null || idToken.isEmpty) {
+      throw Exception('Could not get Google ID token.');
+    }
+    await widget.session.googleLogin(idToken);
+    return true;
+  }
 
   Future<String> _browserTicket() async {
     final authUrl = Uri.parse('${CustomerApi.productionBaseUrl}/mobile-auth').replace(
@@ -36,24 +68,66 @@ class _LoginScreenState extends State<LoginScreen> {
       ticket = Uri.splitQueryString(returned.fragment)['ticket']?.trim() ?? '';
     }
     if (ticket.isEmpty) {
-      throw Exception('Google sign-in did not return to the app. Tap Open Ya! Pasakay app on the browser page.');
+      throw Exception(
+        'Google sign-in did not return to the app. On the browser page tap “Open Ya! Pasakay app”.',
+      );
     }
     return ticket;
+  }
+
+  bool _isCancel(Object ex) {
+    final message = ex.toString().toLowerCase();
+    // 12501 = SIGN_IN_CANCELLED on Android Google Play Services.
+    return message.contains('canceled') ||
+        message.contains('cancelled') ||
+        message.contains('sign_in_canceled') ||
+        message.contains('sign_in_cancelled') ||
+        message.contains('12501');
+  }
+
+  bool _shouldFallbackToBrowser(Object ex) {
+    final message = ex.toString().toLowerCase();
+    // Common Android misconfig / Play Services / missing SHA-1 OAuth client.
+    return message.contains('apiexception') ||
+        message.contains('platformexception') ||
+        message.contains('developer_error') ||
+        message.contains('network_error') ||
+        message.contains('sign_in_failed') ||
+        message.contains('10:') ||
+        message.contains('12500');
   }
 
   Future<void> _signIn() async {
     if (_loading) return;
     setState(() => _loading = true);
     try {
+      final clientId = await _ensureGoogleClientId();
+
+      try {
+        final ok = await _nativeSignIn(clientId);
+        if (!ok) return;
+        if (mounted && widget.session.error != null && widget.session.error!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.session.error!)));
+        }
+        return;
+      } catch (ex) {
+        if (_isCancel(ex)) return;
+        if (!_shouldFallbackToBrowser(ex)) rethrow;
+      }
+
       final ticket = await _browserTicket();
       await widget.session.api.redeemMobileAuthTicket(ticket);
       await widget.session.restore();
+      if (mounted && widget.session.error != null && widget.session.error!.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.session.error!)));
+      }
+    } on ApiException catch (ex) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ex.message)));
     } catch (ex) {
       if (!mounted) return;
+      if (_isCancel(ex)) return;
       final message = ex.toString().replaceFirst('Exception: ', '').trim();
-      if (message.toLowerCase().contains('canceled') || message.toLowerCase().contains('cancelled')) {
-        return;
-      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message.isEmpty ? 'Google sign-in failed.' : message)),
       );
