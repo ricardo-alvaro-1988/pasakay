@@ -6,7 +6,7 @@ import 'theme.dart';
 String formatTripShare(CustomerTrip trip, {String brandName = 'Ya! Pasakay'}) {
   final brand = brandName.trim().isEmpty ? 'Ya! Pasakay' : brandName.trim();
   final pax = (trip.passengerCount ?? 1).clamp(1, 99);
-  final fare = trip.displayFare;
+  final fare = trip.customerFare ?? trip.fare;
   final vehicleBits = <String>[
     if ((trip.plateNumber ?? '').isNotEmpty) trip.plateNumber!,
     if ((trip.vehicleModel ?? '').isNotEmpty) trip.vehicleModel! else trip.vehicleType,
