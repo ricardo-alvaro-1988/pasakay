@@ -1,3 +1,5 @@
+import { compressImageFile } from './compress-image'
+
 const TOKEN_KEY = 'yapasakay-customer-access'
 const REFRESH_KEY = 'yapasakay-customer-refresh'
 
