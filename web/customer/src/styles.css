@@ -1194,8 +1194,15 @@ button.brand-pill:active { transform: scale(.98); }
     border-radius: 24px;
     padding: 12px 14px 14px;
   }
-  .book-sheet { overflow-x: hidden; overflow-y: auto; max-height: min(52vh, 420px); }
+  .book-sheet {
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    max-height: min(52vh, 420px);
+  }
   .book-sheet.step-2 { max-height: min(55vh, 480px); }
+  /* Match APK: tall sheet; scroll inside for more vehicles (MPV, SUV, …). */
   .book-sheet.step-3 { max-height: min(75vh, 720px); }
   .book-sheet.live { overflow-x: hidden; overflow-y: auto; max-height: min(52vh, 420px); }
   .page-panel {
@@ -1226,11 +1233,15 @@ button.brand-pill:active { transform: scale(.98); }
   }
   .book-sheet {
     top: auto;
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     height: auto;
     max-height: calc(100vh - 120px);
     padding: 18px;
   }
+  .book-sheet.step-3 { max-height: min(75vh, calc(100vh - 120px)); }
   .book-sheet.live { overflow-x: hidden; overflow-y: auto; }
   .nav {
     top: 16px;
