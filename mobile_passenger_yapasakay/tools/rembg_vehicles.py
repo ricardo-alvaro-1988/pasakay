@@ -1,7 +1,7 @@
-"""Cut vehicle JPGs to clean transparent PNGs with rembg + fringe cleanup + padding."""
+"""Cut vehicle JPGs to transparent PNGs with padding so UI never clips the art."""
 from pathlib import Path
 
-from PIL import Image, ImageFilter
+from PIL import Image
 from rembg import remove
 
 src_dir = Path(__file__).resolve().parents[1] / "assets" / "vehicles"
@@ -19,93 +19,68 @@ names = [
 ]
 
 
-def clean_fringe(im: Image.Image) -> Image.Image:
-    im = im.convert("RGBA")
-    px = im.load()
-    w, h = im.size
+def cutout(src: Image.Image) -> Image.Image:
+    # Extra black border so rembg does not chew helmets / tires at the frame edge.
+    border = 96
+    canvas = Image.new("RGBA", (src.width + border * 2, src.height + border * 2), (0, 0, 0, 255))
+    canvas.paste(src.convert("RGBA"), (border, border))
+    cut = remove(canvas).convert("RGBA")
+    px = cut.load()
+    w, h = cut.size
     for y in range(h):
         for x in range(w):
             r, g, b, a = px[x, y]
-            if a == 0:
-                continue
-            if a < 40:
+            if a < 16:
                 px[x, y] = (0, 0, 0, 0)
-                continue
-            if a < 250 and r >= 220 and g >= 220 and b >= 220:
+            elif a < 200 and r <= 35 and g <= 35 and b <= 35:
                 px[x, y] = (0, 0, 0, 0)
-                continue
-            if a < 250 and r <= 28 and g <= 28 and b <= 28:
-                px[x, y] = (0, 0, 0, 0)
-                continue
 
-    src = im.copy()
-    spx = src.load()
-    for y in range(h):
-        for x in range(w):
-            r, g, b, a = spx[x, y]
-            if a == 0 or a >= 250:
-                continue
-            rs = gs = bs = n = 0
-            for dy in (-2, -1, 0, 1, 2):
-                for dx in (-2, -1, 0, 1, 2):
-                    nx, ny = x + dx, y + dy
-                    if 0 <= nx < w and 0 <= ny < h:
-                        rr, gg, bb, aa = spx[nx, ny]
-                        if aa >= 245 and not (rr >= 220 and gg >= 220 and bb >= 220):
-                            rs += rr
-                            gs += gg
-                            bs += bb
-                            n += 1
-            if n > 0:
-                px[x, y] = (rs // n, gs // n, bs // n, a)
-
-    a = im.split()[3].filter(ImageFilter.GaussianBlur(radius=0.6))
-    im.putalpha(a)
-    return im
-
-
-def pad_subject(im: Image.Image, pad_frac: float = 0.12) -> Image.Image:
-    """Keep full subject with transparent margin so UI boxes never clip wheels/helmets."""
-    bbox = im.split()[3].getbbox()
+    solid = cut.split()[3].point(lambda v: 255 if v >= 128 else 0)
+    bbox = solid.getbbox()
     if not bbox:
-        return im
-    cropped = im.crop(bbox)
-    w, h = cropped.size
-    pad_x = max(24, int(w * pad_frac))
-    pad_y = max(24, int(h * pad_frac))
-    canvas = Image.new("RGBA", (w + pad_x * 2, h + pad_y * 2), (0, 0, 0, 0))
-    canvas.paste(cropped, (pad_x, pad_y), cropped)
-    return canvas
+        return cut
+    cropped = cut.crop(bbox)
+    cw, ch = cropped.size
+    mx, my = max(32, int(cw * 0.18)), max(32, int(ch * 0.18))
+    final = Image.new("RGBA", (cw + mx * 2, ch + my * 2), (0, 0, 0, 0))
+    final.paste(cropped, (mx, my), cropped)
+    return final
 
 
 def main() -> None:
     web_dir.mkdir(parents=True, exist_ok=True)
     for name in names:
         jpg = src_dir / f"{name}.jpg"
-        png_src = src_dir / f"{name}.png"
-        # Prefer jpg for cutout; sedan/suv may only have clean png already.
+        png = src_dir / f"{name}.png"
         if jpg.exists():
             print(f"rembg {name}...")
-            src = Image.open(jpg).convert("RGBA")
-            cut = remove(src)
-            cut = clean_fringe(cut)
-            cut = pad_subject(cut, 0.14)
-        elif png_src.exists():
+            out = cutout(Image.open(jpg))
+        elif png.exists():
             print(f"repad {name}...")
-            cut = pad_subject(Image.open(png_src).convert("RGBA"), 0.14)
+            # Already transparent — just ensure solid margins.
+            im = Image.open(png).convert("RGBA")
+            solid = im.split()[3].point(lambda v: 255 if v >= 128 else 0)
+            bbox = solid.getbbox()
+            if not bbox:
+                continue
+            cropped = im.crop(bbox)
+            cw, ch = cropped.size
+            mx, my = max(32, int(cw * 0.18)), max(32, int(ch * 0.18))
+            out = Image.new("RGBA", (cw + mx * 2, ch + my * 2), (0, 0, 0, 0))
+            out.paste(cropped, (mx, my), cropped)
         else:
-            print(f"skip {name}: no source")
+            print(f"skip {name}")
             continue
 
         target_w = 1536
-        if cut.width != target_w:
-            ratio = target_w / cut.width
-            cut = cut.resize((target_w, max(1, int(cut.height * ratio))), Image.Resampling.LANCZOS)
-
-        out = src_dir / f"{name}.png"
-        cut.save(out, "PNG", optimize=True)
-        cut.save(web_dir / f"{name}.png", "PNG", optimize=True)
-        print(f"  -> {out.name} {cut.size}")
+        if out.width != target_w:
+            out = out.resize(
+                (target_w, max(1, int(out.height * target_w / out.width))),
+                Image.Resampling.LANCZOS,
+            )
+        out.save(src_dir / f"{name}.png", "PNG", optimize=True)
+        out.save(web_dir / f"{name}.png", "PNG", optimize=True)
+        print(f"  -> {name}.png {out.size}")
     print("done")
 
 
