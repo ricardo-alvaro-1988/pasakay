@@ -123,4 +123,94 @@ object NoticeScheduler {
             emptyList()
         }
     }
+
+    private const val PICKUP_KEY = "pickup_items"
+
+    data class PickupItem(val id: String, val title: String, val body: String, val atUtcMs: Long)
+
+    fun syncPickup(context: Context, items: List<PickupItem>): Boolean {
+        val app = context.applicationContext
+        val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        cancelPickupStored(app, prefs.getString(PICKUP_KEY, null))
+        val stored = JSONArray()
+        val now = System.currentTimeMillis()
+        for (item in items) {
+            if (item.id.isBlank() || item.atUtcMs <= now - 30_000) continue
+            schedulePickup(app, item)
+            stored.put(
+                JSONObject()
+                    .put("id", item.id)
+                    .put("title", item.title)
+                    .put("body", item.body)
+                    .put("at", item.atUtcMs),
+            )
+        }
+        prefs.edit().putString(PICKUP_KEY, stored.toString()).apply()
+        return stored.length() > 0
+    }
+
+    fun restorePickup(context: Context) {
+        val raw = context.applicationContext
+            .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getString(PICKUP_KEY, null) ?: return
+        for (item in parsePickup(raw)) {
+            schedulePickup(context.applicationContext, item)
+        }
+    }
+
+    private fun schedulePickup(context: Context, item: PickupItem) {
+        val alarm = context.getSystemService(AlarmManager::class.java) ?: return
+        val pending = pickupPending(context, item)
+        val whenMs = maxOf(item.atUtcMs, System.currentTimeMillis() + 2_000)
+        try {
+            val exactOk = Build.VERSION.SDK_INT < 31 || alarm.canScheduleExactAlarms()
+            if (exactOk) {
+                alarm.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, whenMs, pending)
+            } else {
+                alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, whenMs, pending)
+            }
+        } catch (_: Throwable) {
+            try {
+                alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, whenMs, pending)
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun cancelPickupStored(context: Context, raw: String?) {
+        if (raw.isNullOrBlank()) return
+        val alarm = context.getSystemService(AlarmManager::class.java) ?: return
+        for (item in parsePickup(raw)) {
+            try {
+                alarm.cancel(pickupPending(context, item))
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
+    private fun pickupPending(context: Context, item: PickupItem): PendingIntent {
+        val intent = Intent(context, NoticeAlarmReceiver::class.java)
+            .putExtra("id", item.id)
+            .putExtra("title", item.title)
+            .putExtra("body", item.body)
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        return PendingIntent.getBroadcast(context, item.id.hashCode(), intent, flags)
+    }
+
+    private fun parsePickup(raw: String): List<PickupItem> {
+        return try {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    val id = obj.optString("id")
+                    val at = obj.optLong("at", 0)
+                    if (id.isBlank() || at <= 0) continue
+                    add(PickupItem(id, obj.optString("title"), obj.optString("body"), at))
+                }
+            }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+    }
 }

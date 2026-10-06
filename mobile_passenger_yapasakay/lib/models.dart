@@ -109,6 +109,10 @@ String tripHeadline(String status) {
   switch (status) {
     case 'Pending':
       return 'Finding a rider';
+    case 'Scheduled':
+      return 'Scheduled';
+    case 'ScheduledAccepted':
+      return 'Scheduled accepted';
     case 'Waiting':
       return 'Rider on the way';
     case 'Ongoing':
@@ -124,7 +128,7 @@ String tripHeadline(String status) {
 
 String tripStatusCode(dynamic value) {
   // Matches YaPasakay.Domain.Enums.TripStatus:
-  // Completed=1, Cancelled=2, Ongoing=3, Pending=4, Waiting=5
+  // Completed=1, Cancelled=2, Ongoing=3, Pending=4, Waiting=5, Scheduled=6, ScheduledAccepted=7
   switch (asText(value)) {
     case '1':
     case 'Completed':
@@ -141,6 +145,12 @@ String tripStatusCode(dynamic value) {
     case '5':
     case 'Waiting':
       return 'Waiting';
+    case '6':
+    case 'Scheduled':
+      return 'Scheduled';
+    case '7':
+    case 'ScheduledAccepted':
+      return 'ScheduledAccepted';
     default:
       return asText(value, 'Pending');
   }

@@ -52,6 +52,14 @@ class RiderAlerts {
     }
   }
 
+  static Future<bool> syncPickupAlarms(List<Map<String, dynamic>> items) async {
+    try {
+      return await _channel.invokeMethod<bool>('syncPickupAlarms', jsonEncode(items)) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<bool> pingNotice({required String title, required String body}) async {
     try {
       return await _channel.invokeMethod<bool>('pingNotice', {'title': title, 'body': body}) == true;

@@ -30,7 +30,8 @@ public static class CustomerDeskBuilder
             x.Status is TripStatus.Pending or TripStatus.Waiting or TripStatus.Ongoing
             && (x.ScheduledAtUtc is null || x.ScheduledAtUtc <= now));
         var scheduled = items
-            .Where(x => x.ScheduledAtUtc is DateTime at && at > now && x.Status is TripStatus.Pending or TripStatus.Waiting)
+            .Where(x => x.ScheduledAtUtc is DateTime at && at > now
+                && x.Status is TripStatus.Pending or TripStatus.Waiting or TripStatus.Scheduled or TripStatus.ScheduledAccepted)
             .OrderBy(x => x.ScheduledAtUtc)
             .ToList();
         var pendingRating = items.FirstOrDefault(x => x.CanRate);
@@ -156,8 +157,8 @@ public static class CustomerDeskBuilder
     public static CustomerTripItem MapTrip(Trip trip)
     {
         var rider = trip.Rider;
-        var showRider = trip.Status is TripStatus.Waiting or TripStatus.Ongoing or TripStatus.Completed
-            && rider is not null;
+        var showRider = rider is not null && trip.Status is TripStatus.Waiting or TripStatus.Ongoing or TripStatus.Completed
+            or TripStatus.ScheduledAccepted;
         var liveRider = showRider && trip.Status is TripStatus.Waiting or TripStatus.Ongoing;
         return new(
             trip.Id,
@@ -185,7 +186,7 @@ public static class CustomerDeskBuilder
             liveRider ? rider!.LastLng : null,
             DateTime.SpecifyKind(trip.RequestedAtUtc, DateTimeKind.Utc),
             trip.ScheduledAtUtc is DateTime scheduled ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc) : null,
-            trip.Status is TripStatus.Pending or TripStatus.Waiting,
+            trip.Status is TripStatus.Pending or TripStatus.Waiting or TripStatus.Scheduled or TripStatus.ScheduledAccepted,
             trip.Status is TripStatus.Waiting or TripStatus.Ongoing,
             string.Equals(trip.Notes, TripBroadcastService.DirectHailNote, StringComparison.OrdinalIgnoreCase),
             trip.Rating,

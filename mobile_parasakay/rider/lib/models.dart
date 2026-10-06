@@ -455,6 +455,7 @@ class RiderTrip {
     required this.canComplete,
     required this.canCancel,
     required this.canSos,
+    this.scheduledAt,
     this.pickupLat,
     this.pickupLng,
     this.dropoffLat,
@@ -496,6 +497,7 @@ class RiderTrip {
   final bool canComplete;
   final bool canCancel;
   final bool canSos;
+  final DateTime? scheduledAt;
   final bool canViewChat;
   final bool canSendChat;
   final double customerFare;
@@ -551,6 +553,7 @@ class RiderTrip {
         canComplete: asFlag(json['canComplete']),
         canCancel: asFlag(json['canCancel']),
         canSos: asFlag(json['canSos']),
+        scheduledAt: parseUtc(json['scheduledAtUtc']),
         canViewChat: json['canViewChat'] is bool
             ? json['canViewChat'] as bool
             : _chatStatus(asText(json['status'])),
@@ -569,7 +572,12 @@ class RiderTrip {
 
 bool _chatStatus(String status) {
   final value = status.toLowerCase();
-  return value == 'waiting' || value == 'ongoing' || value == '5' || value == '3';
+  return value == 'waiting' ||
+      value == 'ongoing' ||
+      value == 'scheduledaccepted' ||
+      value == '5' ||
+      value == '3' ||
+      value == '7';
 }
 
 class RiderTripListItem {
@@ -697,6 +705,12 @@ String tripStatusLabel(dynamic value) {
     case '5':
     case 'waiting':
       return 'Waiting';
+    case '6':
+    case 'scheduled':
+      return 'Scheduled';
+    case '7':
+    case 'scheduledaccepted':
+      return 'Scheduled accepted';
     default:
       return asText(value, 'Unknown');
   }

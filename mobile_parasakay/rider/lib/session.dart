@@ -204,6 +204,7 @@ class RiderSession extends ChangeNotifier {
       if (!alarmsSet) {
         await _syncNotices();
       }
+      await _syncPickupAlarm();
       if (desk?.isOnline == true) {
         _scheduleGps();
       } else {
@@ -515,10 +516,41 @@ class RiderSession extends ChangeNotifier {
   }
 
   void _onHubDeskChanged(String? reason) {
+    if (reason == 'schedule-alarm') {
+      unawaited(RiderAlerts.pingNotice(
+        title: 'Pickup in 10 minutes',
+        body: desk?.activeTrip == null
+            ? 'Open the app for your scheduled booking.'
+            : '${desk!.activeTrip!.reference} · ${desk!.activeTrip!.pickup}',
+      ));
+    }
     _hubDebounce?.cancel();
     _hubDebounce = Timer(const Duration(milliseconds: 280), () {
       unawaited(refresh());
     });
+  }
+
+  Future<void> _syncPickupAlarm() async {
+    final trip = desk?.activeTrip;
+    final at = trip?.scheduledAt;
+    if (trip == null || at == null) {
+      await RiderAlerts.syncPickupAlarms(const []);
+      return;
+    }
+    final status = trip.status.toLowerCase();
+    if (status != 'scheduled' && status != 'scheduledaccepted') {
+      await RiderAlerts.syncPickupAlarms(const []);
+      return;
+    }
+    final fireAt = at.subtract(const Duration(minutes: 10)).millisecondsSinceEpoch;
+    await RiderAlerts.syncPickupAlarms([
+      {
+        'id': 'pk|${trip.tripId}',
+        'title': 'Pickup in 10 minutes',
+        'body': '${trip.reference} · ${trip.pickup}',
+        'at': fireAt,
+      }
+    ]);
   }
 
   void _onDeskHubLive(bool live) {

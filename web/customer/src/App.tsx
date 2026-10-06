@@ -85,6 +85,45 @@ function addressLabel(details: string) {
   return details.split(',')[0]?.trim() || 'Current location'
 }
 
+function playPickupAlarm(body?: string, tripId?: string) {
+  if (tripId) {
+    const key = `yp-pickup-alarm:${tripId}`
+    try {
+      if (sessionStorage.getItem(key) === '1') return
+      sessionStorage.setItem(key, '1')
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    const AudioCtx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (AudioCtx) {
+      const ctx = new AudioCtx()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'square'
+      osc.frequency.value = 880
+      gain.gain.value = 0.08
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.45)
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (!('Notification' in window)) return
+    if (Notification.permission === 'granted') {
+      new Notification('Pickup in 10 minutes', { body: body || 'Your scheduled ride pickup is soon.' })
+    } else if (Notification.permission === 'default') {
+      void Notification.requestPermission()
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function App() {
   const [desk, setDesk] = useState<Desk | null>(null)
   const [boot, setBoot] = useState(true)
@@ -138,7 +177,8 @@ export default function App() {
     if (!desk) return
     let connection: HubConnection | null = null
     let cancelled = false
-    const refresh = () => {
+    const refresh = (reason?: string) => {
+      if (reason === 'schedule-alarm') playPickupAlarm()
       api.desk().then(setDesk).catch(() => {})
     }
     ;(async () => {
@@ -163,6 +203,23 @@ export default function App() {
       void stopDeskHub(connection)
     }
   }, [desk?.customerId])
+
+  useEffect(() => {
+    if (!desk) return
+    const trips = [...desk.scheduled, ...(desk.activeTrip ? [desk.activeTrip] : [])]
+      .filter((t) => t.status === 'Scheduled' || t.status === 'ScheduledAccepted')
+    const soonest = trips
+      .map((t) => ({ t, at: Date.parse(t.scheduledAtUtc || '') - 10 * 60 * 1000 }))
+      .filter((x) => Number.isFinite(x.at) && x.at > Date.now() - 120_000)
+      .sort((a, b) => a.at - b.at)[0]
+    if (!soonest) return
+    const wait = Math.max(0, soonest.at - Date.now())
+    if (wait > 2 * 24 * 60 * 60 * 1000) return
+    const id = window.setTimeout(() => {
+      playPickupAlarm(`${soonest.t.reference} · ${soonest.t.pickup}`, soonest.t.id)
+    }, wait)
+    return () => window.clearTimeout(id)
+  }, [desk])
 
   const brandName = branding?.brandName || DEFAULT_BRAND_NAME
   const brandLogo = branding?.logoUrl || logo

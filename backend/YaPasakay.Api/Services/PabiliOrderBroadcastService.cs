@@ -130,8 +130,9 @@ public class PabiliOrderBroadcastService(AppDbContext db, LiveNotify live)
     {
         var tripBusy = await db.Trips
             .Where(x => x.OperatorId == operatorId
+                && x.RiderId != null
                 && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing))
-            .Select(x => x.RiderId)
+            .Select(x => x.RiderId!.Value)
             .ToListAsync(cancellationToken);
         var pabiliBusy = await db.PabiliOrders
             .Where(x => x.OperatorId == operatorId

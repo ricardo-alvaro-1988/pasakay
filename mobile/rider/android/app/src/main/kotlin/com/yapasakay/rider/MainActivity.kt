@@ -57,6 +57,30 @@ class MainActivity : FlutterActivity() {
                         OnlineService.stopRing(this)
                         result.success(true)
                     }
+                    "syncPickupAlarms" -> {
+                        val raw = call.arguments as? String ?: "[]"
+                        val items = mutableListOf<NoticeScheduler.PickupItem>()
+                        val array = JSONArray(raw)
+                        for (i in 0 until array.length()) {
+                            val obj = array.optJSONObject(i) ?: continue
+                            val id = obj.optString("id")
+                            val at = obj.optLong("at", 0)
+                            if (id.isBlank() || at <= 0) continue
+                            items.add(
+                                NoticeScheduler.PickupItem(
+                                    id,
+                                    obj.optString("title"),
+                                    obj.optString("body"),
+                                    at,
+                                ),
+                            )
+                        }
+                        val scheduled = NoticeScheduler.syncPickup(this, items)
+                        if (scheduled) {
+                            requestExactAlarm()
+                        }
+                        result.success(scheduled)
+                    }
                     "syncNotices" -> {
                         val raw = call.arguments as? String ?: "[]"
                         val items = mutableListOf<NoticeScheduler.Item>()

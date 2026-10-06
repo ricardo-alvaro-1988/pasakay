@@ -11,8 +11,11 @@ public class TripChatRealtime(IHubContext<TripChatHub> chat, IHubContext<DeskHub
     {
         await chat.Clients.Group(TripChatHub.GroupName(trip.Id))
             .SendAsync("chatMessage", message, cancellationToken);
-        await desk.Clients.Group(DeskHub.RiderGroup(trip.RiderId))
-            .SendAsync("chatMessage", message, cancellationToken);
+        if (trip.RiderId is Guid riderId)
+        {
+            await desk.Clients.Group(DeskHub.RiderGroup(riderId))
+                .SendAsync("chatMessage", message, cancellationToken);
+        }
         if (trip.CustomerId is Guid customerId)
         {
             await desk.Clients.Group(DeskHub.CustomerGroup(customerId))

@@ -7,8 +7,9 @@ public class Trip : BaseEntity
 {
     public Guid OperatorId { get; set; }
     public Operator Operator { get; set; } = null!;
-    public Guid RiderId { get; set; }
-    public RiderProfile Rider { get; set; } = null!;
+    public Guid? RiderId { get; set; }
+    public RiderProfile? Rider { get; set; }
+    public DateTime? PickupAlarmSentAtUtc { get; set; }
     public VehicleType VehicleType { get; set; }
     public Guid? VehicleCategoryId { get; set; }
     public VehicleCategory? VehicleCategory { get; set; }

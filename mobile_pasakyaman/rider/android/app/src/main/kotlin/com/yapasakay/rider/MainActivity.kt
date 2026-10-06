@@ -50,12 +50,36 @@ class MainActivity : FlutterActivity() {
                     }
                     "ringOffer" -> {
                         val title = call.argument<String>("title") ?: "New job offer"
-                        val body = call.argument<String>("body") ?: "Open Pasakya Man to accept."
+                        val body = call.argument<String>("body") ?: "Open Ya! Pasakay to accept."
                         result.success(OnlineService.ring(this, title, body))
                     }
                     "stopRing" -> {
                         OnlineService.stopRing(this)
                         result.success(true)
+                    }
+                    "syncPickupAlarms" -> {
+                        val raw = call.arguments as? String ?: "[]"
+                        val items = mutableListOf<NoticeScheduler.PickupItem>()
+                        val array = JSONArray(raw)
+                        for (i in 0 until array.length()) {
+                            val obj = array.optJSONObject(i) ?: continue
+                            val id = obj.optString("id")
+                            val at = obj.optLong("at", 0)
+                            if (id.isBlank() || at <= 0) continue
+                            items.add(
+                                NoticeScheduler.PickupItem(
+                                    id,
+                                    obj.optString("title"),
+                                    obj.optString("body"),
+                                    at,
+                                ),
+                            )
+                        }
+                        val scheduled = NoticeScheduler.syncPickup(this, items)
+                        if (scheduled) {
+                            requestExactAlarm()
+                        }
+                        result.success(scheduled)
                     }
                     "syncNotices" -> {
                         val raw = call.arguments as? String ?: "[]"
@@ -83,12 +107,12 @@ class MainActivity : FlutterActivity() {
                     }
                     "pingNotice" -> {
                         val title = call.argument<String>("title") ?: "Announcement"
-                        val body = call.argument<String>("body") ?: "Open Pasakya Man to read it."
+                        val body = call.argument<String>("body") ?: "Open Ya! Pasakay to read it."
                         result.success(OnlineService.pingNotice(this, title, body))
                     }
                     "pingChat" -> {
                         val title = call.argument<String>("title") ?: "New chat"
-                        val body = call.argument<String>("body") ?: "Open Pasakya Man to reply."
+                        val body = call.argument<String>("body") ?: "Open Ya! Pasakay to reply."
                         result.success(OnlineService.pingChat(this, title, body))
                     }
                     "requestNotify" -> result.success(requestNotifyPermission())

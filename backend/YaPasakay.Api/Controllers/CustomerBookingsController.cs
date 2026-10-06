@@ -651,12 +651,17 @@ public class CustomerBookingsController(
         var prepared = await PrepareAsync(
             body,
             requireHailReady: isDirectHail || isFavoriteDirect,
-            requireRider: true,
+            requireRider: !isScheduled,
             customer.Id,
             cancellationToken);
-        if (prepared.Error is not null || prepared.Operator is null || prepared.Rider is null || prepared.Pickup is null || prepared.Dropoff is null)
+        if (prepared.Error is not null || prepared.Operator is null || prepared.Pickup is null || prepared.Dropoff is null)
         {
             return BadRequest(new { message = prepared.Error ?? "Could not create this booking." });
+        }
+
+        if (!isScheduled && prepared.Rider is null)
+        {
+            return BadRequest(new { message = "Could not create this booking." });
         }
 
         if (customerPicksRider)
@@ -673,7 +678,7 @@ public class CustomerBookingsController(
                 cancellationToken,
                 enforceRadius: false,
                 vehicleCategoryId: prepared.VehicleCategoryId);
-            if (eligible.All(x => x.Rider.Id != prepared.Rider.Id))
+            if (eligible.All(x => x.Rider.Id != prepared.Rider!.Id))
             {
                 return BadRequest(new { message = "That rider is not available for this pickup right now." });
             }
@@ -684,11 +689,11 @@ public class CustomerBookingsController(
         var trip = new Trip
         {
             OperatorId = prepared.Operator.Id,
-            RiderId = prepared.Rider.Id,
+            RiderId = isScheduled ? null : prepared.Rider!.Id,
             VehicleType = prepared.VehicleType,
             VehicleCategoryId = prepared.VehicleCategoryId
                 ?? (VehicleTypeRules.IsKnown(prepared.VehicleType) ? VehicleCatalog.IdFor(prepared.VehicleType) : null),
-            Status = assignImmediately ? TripStatus.Waiting : TripStatus.Pending,
+            Status = isScheduled ? TripStatus.Scheduled : (assignImmediately ? TripStatus.Waiting : TripStatus.Pending),
             Pickup = prepared.PickupDetails,
             PickupDetails = prepared.PickupDetails,
             PickupBarangayId = prepared.Pickup.Id,
@@ -738,7 +743,7 @@ public class CustomerBookingsController(
                 customer.HailAtUtc = null;
             }
 
-            var distance = Geo.DistanceKm(prepared.Rider.LastLat, prepared.Rider.LastLng, prepared.PickupLat, prepared.PickupLng);
+            var distance = Geo.DistanceKm(prepared.Rider!.LastLat, prepared.Rider.LastLng, prepared.PickupLat, prepared.PickupLng);
             db.TripOffers.Add(new TripOffer
             {
                 TripId = trip.Id,
@@ -758,7 +763,7 @@ public class CustomerBookingsController(
 
         if (isFavoriteDirect)
         {
-            var distance = Geo.DistanceKm(prepared.Rider.LastLat, prepared.Rider.LastLng, prepared.PickupLat, prepared.PickupLng);
+            var distance = Geo.DistanceKm(prepared.Rider!.LastLat, prepared.Rider.LastLng, prepared.PickupLat, prepared.PickupLng);
             db.TripOffers.Add(new TripOffer
             {
                 TripId = trip.Id,
@@ -776,9 +781,7 @@ public class CustomerBookingsController(
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        // Scheduled / rental bookings stay Pending for operator assign.
-        // Do not broadcast to riders on create — ScheduleBroadcastHostedService
-        // (or operator assign/reassign) handles offer timing.
+        // Scheduled / rental bookings stay Scheduled for operator assign. Do not broadcast.
         if (scheduled is null)
         {
             await broadcast.BroadcastAsync(trip.Id, cancellationToken);
@@ -1213,8 +1216,8 @@ public class CustomerBookingsController(
         }
 
         var busy = await db.Trips
-            .Where(x => x.OperatorId == operatorId && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing))
-            .Select(x => x.RiderId)
+            .Where(x => x.OperatorId == operatorId && x.RiderId != null && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing))
+            .Select(x => x.RiderId!.Value)
             .ToListAsync(cancellationToken);
         var free = riders.Where(x => !busy.Contains(x.Id)).ToList();
         var pool = free.Count > 0 ? free : riders;

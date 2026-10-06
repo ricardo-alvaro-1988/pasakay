@@ -768,8 +768,11 @@ function StatusTag({ active }: { active: boolean }) {
 }
 
 function TripStatusTag({ status }: { status: TripStatus }) {
-  const label = status === 'Completed' ? 'Complete' : status
-  return <span className={`tag trip ${status.toLowerCase()}`}>{label}</span>
+  const label = status === 'Completed' ? 'Complete'
+    : status === 'ScheduledAccepted' ? 'Scheduled accepted'
+    : status
+  const tone = status === 'ScheduledAccepted' ? 'waiting' : status.toLowerCase()
+  return <span className={`tag trip ${tone}`}>{label}</span>
 }
 
 function PromoTag({
@@ -823,6 +826,8 @@ function DiscountTag({ label }: { label?: string | null }) {
 const TRIP_STATUS_FILTERS: { value: TripStatus | ''; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'Pending', label: 'Pending' },
+  { value: 'Scheduled', label: 'Scheduled' },
+  { value: 'ScheduledAccepted', label: 'Scheduled accepted' },
   { value: 'Waiting', label: 'Waiting' },
   { value: 'Ongoing', label: 'Ongoing' },
   { value: 'Completed', label: 'Complete' },
@@ -4548,7 +4553,7 @@ function BookingDetailPage({
         </div>
       </div>
       <BookingDetailsBody ride={ride} commissionView={commissionView} />
-      {allowReassign && (ride.status === 'Pending' || ride.status === 'Waiting') ? (
+      {allowReassign && (ride.status === 'Pending' || ride.status === 'Waiting' || ride.status === 'Scheduled' || ride.status === 'ScheduledAccepted') ? (
         <BookingReassign ride={ride} onAssigned={setRide} />
       ) : null}
     </div>
@@ -8895,7 +8900,7 @@ function OperatorBookingDetail({ id, onBack }: { id: string; onBack: () => void 
         loadKey={id}
         load={async () => {
           const ride = await api.operatorBooking(id)
-          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting')
+          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting' || ride.status === 'Scheduled' || ride.status === 'ScheduledAccepted')
           return ride
         }}
         onBack={onBack}
@@ -9135,7 +9140,7 @@ function OperatorScheduleList({
   }, [q, statusFilter])
 
   async function cancelRow(row: ScheduledBooking) {
-    if (row.status !== 'Pending' && row.status !== 'Waiting') return
+    if (row.status !== 'Pending' && row.status !== 'Waiting' && row.status !== 'Scheduled' && row.status !== 'ScheduledAccepted') return
     if (!window.confirm(`Cancel scheduled booking ${row.reference}?`)) return
     setCancellingId(row.id)
     setError('')
@@ -9198,7 +9203,7 @@ function OperatorScheduleList({
                 </td>
               </tr>
             ) : items.map((row) => {
-              const canCancel = row.status === 'Pending' || row.status === 'Waiting'
+              const canCancel = row.status === 'Pending' || row.status === 'Waiting' || row.status === 'Scheduled' || row.status === 'ScheduledAccepted'
               return (
               <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
                 <td>
@@ -9546,7 +9551,7 @@ function OperatorDeskLiveBookingDetail({ id, onBack }: { id: string; onBack: () 
         loadKey={id}
         load={async () => {
           const ride = await api.scheduledBooking(id)
-          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting')
+          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting' || ride.status === 'Scheduled' || ride.status === 'ScheduledAccepted')
           return ride
         }}
         onBack={onBack}
@@ -9590,7 +9595,7 @@ function OperatorScheduleDetail({ id, onBack }: { id: string; onBack: () => void
         loadKey={id}
         load={async () => {
           const ride = await api.scheduledBooking(id)
-          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting')
+          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting' || ride.status === 'Scheduled' || ride.status === 'ScheduledAccepted')
           return ride
         }}
         onBack={onBack}

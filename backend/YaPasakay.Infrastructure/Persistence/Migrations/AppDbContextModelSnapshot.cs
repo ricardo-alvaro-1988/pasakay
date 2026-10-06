@@ -3043,6 +3043,9 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .HasMaxLength(400)
                         .HasColumnType("nvarchar(400)");
 
+                    b.Property<DateTime?>("PickupAlarmSentAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<Guid?>("PickupBarangayId")
                         .HasColumnType("uniqueidentifier");
 
@@ -3081,7 +3084,7 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("RequestedAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<Guid>("RiderId")
+                    b.Property<Guid?>("RiderId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime?>("ScheduledAtUtc")
@@ -4228,8 +4231,7 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.HasOne("YaPasakay.Domain.Entities.RiderProfile", "Rider")
                         .WithMany("Trips")
                         .HasForeignKey("RiderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("YaPasakay.Domain.Entities.VehicleCategory", "VehicleCategory")
                         .WithMany()

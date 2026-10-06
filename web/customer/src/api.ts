@@ -38,7 +38,7 @@ export type VehicleOffer = {
   vehicleType: VehicleType
 }
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Other'
-export type TripStatus = 'Pending' | 'Waiting' | 'Ongoing' | 'Completed' | 'Cancelled'
+export type TripStatus = 'Pending' | 'Waiting' | 'Ongoing' | 'Completed' | 'Cancelled' | 'Scheduled' | 'ScheduledAccepted'
 export type Gender = 'Male' | 'Female' | 'Other'
 export type DeleteAccountStatus = 'None' | 'Pending' | 'Approved' | 'Rejected'
 
@@ -347,6 +347,8 @@ export function passengerLabel(value: number | null | undefined) {
 
 export function tripHeadline(status: string) {
   if (status === 'Pending') return 'Finding a rider'
+  if (status === 'Scheduled') return 'Scheduled'
+  if (status === 'ScheduledAccepted') return 'Scheduled accepted'
   if (status === 'Waiting') return 'Rider on the way'
   if (status === 'Ongoing') return 'On your trip'
   if (status === 'Completed') return 'Trip completed'

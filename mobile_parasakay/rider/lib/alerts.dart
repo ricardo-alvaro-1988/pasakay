@@ -5,7 +5,7 @@ import 'package:flutter/services.dart';
 import 'models.dart';
 
 class RiderAlerts {
-  static const _channel = MethodChannel('parasakay.rider/alerts');
+  static const _channel = MethodChannel('yapasakay.rider/alerts');
   static bool _batteryAsked = false;
 
   static Future<bool> startOnline() async {
@@ -47,6 +47,14 @@ class RiderAlerts {
               })
           .toList());
       return await _channel.invokeMethod<bool>('syncNotices', payload) == true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> syncPickupAlarms(List<Map<String, dynamic>> items) async {
+    try {
+      return await _channel.invokeMethod<bool>('syncPickupAlarms', jsonEncode(items)) == true;
     } catch (_) {
       return false;
     }

@@ -4,6 +4,7 @@ import {
   BookBody,
   Desk,
   PaymentMethod,
+  PLATFORM_VEHICLE_TYPES,
   Quote,
   Stop,
   VehicleType,
@@ -104,10 +105,14 @@ const FALLBACK_VEHICLES: Array<{
   available: boolean
   maxPassengers: number
   isCargo: boolean
-}> = [
-  { id: 'Motorcycle', vehicleType: 'Motorcycle', name: vehicleLabel('Motorcycle'), available: true, maxPassengers: vehicleMaxPassengers('Motorcycle'), isCargo: vehicleIsCargo('Motorcycle') },
-  { id: 'Tricycle', vehicleType: 'Tricycle', name: vehicleLabel('Tricycle'), available: true, maxPassengers: vehicleMaxPassengers('Tricycle'), isCargo: vehicleIsCargo('Tricycle') },
-]
+}> = PLATFORM_VEHICLE_TYPES.map((type) => ({
+  id: type,
+  vehicleType: type,
+  name: vehicleLabel(type),
+  available: true,
+  maxPassengers: vehicleMaxPassengers(type),
+  isCargo: vehicleIsCargo(type),
+}))
 
 export function RentalScreen({
   desk,
@@ -217,23 +222,18 @@ export function RentalScreen({
 
   useEffect(() => {
     if (noOperator.useOffers) {
-      const available = noOperator.availableVehicles
-      const current = available.find((v) => v.id === vehicleCategoryId)
-      if (current) return
-      const first = available[0]
-      if (first) {
-        setVehicleCategoryId(first.id)
-        setVehicle(first.vehicleType as VehicleType)
+      const listed = noOperator.listedVehicles
+      const current = listed.find((v) => v.id === vehicleCategoryId)
+        ?? listed.find((v) => v.vehicleType === vehicle)
+      if (current) {
+        if (vehicleCategoryId !== current.id) setVehicleCategoryId(current.id)
+        if (vehicle !== current.vehicleType) setVehicle(current.vehicleType as VehicleType)
+        return
       }
       return
     }
     setVehicleCategoryId(null)
-    setVehicle((current) => {
-      const types = noOperator.availableTypes
-      if (types.length && !types.includes(current)) return types[0] ?? current
-      return current
-    })
-  }, [noOperator.availableTypes, noOperator.availableVehicles, noOperator.useOffers, vehicleCategoryId])
+  }, [noOperator.listedVehicles, noOperator.useOffers, vehicle, vehicleCategoryId])
 
   useEffect(() => {
     if (!showPassengerPicker) {
@@ -400,17 +400,8 @@ export function RentalScreen({
     && (payment !== 'Other' || !!paymentRef.trim())
 
   const vehicleOptions = noOperator.useOffers
-    ? noOperator.availableVehicles
-    : (noOperator.availableTypes.length
-        ? noOperator.availableTypes.map((t) => ({
-            id: t,
-            vehicleType: t,
-            name: vehicleLabel(t),
-            available: true,
-            maxPassengers: vehicleMaxPassengers(t),
-            isCargo: vehicleIsCargo(t),
-          }))
-        : FALLBACK_VEHICLES)
+    ? noOperator.listedVehicles
+    : FALLBACK_VEHICLES
 
   return (
     <div className="rental-sheet">
@@ -478,8 +469,7 @@ export function RentalScreen({
               {vehicleOptions.map((item, index) => {
                 const type = item.vehicleType as VehicleType
                 const categoryId = 'id' in item && item.id !== type ? item.id : null
-                const canSelect = !('available' in item) || item.available !== false
-                const selected = canSelect && (categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId)
+                const selected = categoryId ? vehicleCategoryId === categoryId : vehicle === type && !vehicleCategoryId
                 const max = 'maxPassengers' in item && typeof item.maxPassengers === 'number'
                   ? item.maxPassengers
                   : vehicleMaxPassengers(type)
@@ -491,11 +481,9 @@ export function RentalScreen({
                   <button
                     key={categoryId ?? type}
                     type="button"
-                    disabled={!canSelect}
                     style={{ ['--j' as string]: index }}
-                    className={`vehicle${selected ? ' on' : ''}${!canSelect ? ' dim' : ''}`}
+                    className={`vehicle${selected ? ' on' : ''}`}
                     onClick={() => {
-                      if (!canSelect) return
                       setVehicle(type)
                       setVehicleCategoryId(categoryId)
                       setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))

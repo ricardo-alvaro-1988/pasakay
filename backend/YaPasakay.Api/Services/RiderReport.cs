@@ -94,7 +94,8 @@ public static class RiderReport
             .Include(x => x.Operator)
             .Include(x => x.PickupBarangay)
             .Where(x => x.OperatorId == operatorId
-                && riderIds.Contains(x.RiderId)
+                && x.RiderId != null
+                && riderIds.Contains(x.RiderId.Value)
                 && (
                     (x.Status == TripStatus.Completed
                         && x.Fare > 0
@@ -107,10 +108,13 @@ public static class RiderReport
 
         var completedTrips = trips.Where(x => x.Status == TripStatus.Completed).ToList();
         var fares = await OperatorMaps.LoadFareMatrixLookupAsync(db, completedTrips, cancellationToken);
-        var completedByRider = completedTrips.GroupBy(x => x.RiderId).ToDictionary(g => g.Key, g => g.ToList());
+        var completedByRider = completedTrips
+            .Where(x => x.RiderId != null)
+            .GroupBy(x => x.RiderId!.Value)
+            .ToDictionary(g => g.Key, g => g.ToList());
         var cancelByRider = trips
-            .Where(x => x.Status == TripStatus.Cancelled)
-            .GroupBy(x => x.RiderId)
+            .Where(x => x.Status == TripStatus.Cancelled && x.RiderId != null)
+            .GroupBy(x => x.RiderId!.Value)
             .ToDictionary(g => g.Key, g => g.Count());
 
         return riders.Select(rider =>

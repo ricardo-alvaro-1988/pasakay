@@ -152,12 +152,13 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
         var live = await db.Trips
             .Where(x =>
                 x.OperatorId == op!.Id &&
+                x.RiderId != null &&
                 (x.Status == TripStatus.Pending || x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing) &&
                 (x.ScheduledAtUtc == null || x.Status != TripStatus.Pending || x.ScheduledAtUtc <= now))
             .Select(x => new { x.RiderId, x.Status, x.Reference, x.RequestedAtUtc })
             .ToListAsync(cancellationToken);
         var duty = live
-            .GroupBy(x => x.RiderId)
+            .GroupBy(x => x.RiderId!.Value)
             .ToDictionary(
                 group => group.Key,
                 group => group

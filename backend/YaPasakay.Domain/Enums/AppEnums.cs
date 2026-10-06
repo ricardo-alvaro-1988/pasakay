@@ -30,7 +30,11 @@ public enum TripStatus
     Cancelled = 2,
     Ongoing = 3,
     Pending = 4,
-    Waiting = 5
+    Waiting = 5,
+    /// <summary>Later pickup; waiting for operator assign and/or rider accept.</summary>
+    Scheduled = 6,
+    /// <summary>Assigned rider accepted a scheduled booking; pickup is still in the future.</summary>
+    ScheduledAccepted = 7
 }
 
 public enum PabiliOrderStatus

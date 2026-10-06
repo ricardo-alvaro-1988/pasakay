@@ -262,7 +262,7 @@ export type RiderApplicationStatusResult = {
   message: string | null
 }
 
-export type TripStatus = 'Completed' | 'Cancelled' | 'Ongoing' | 'Pending' | 'Waiting'
+export type TripStatus = 'Completed' | 'Cancelled' | 'Ongoing' | 'Pending' | 'Waiting' | 'Scheduled' | 'ScheduledAccepted'
 
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Other'
 
@@ -978,6 +978,7 @@ export function fleetDuty(
   if (status === 'Ongoing') return 'ongoing'
   if (status === 'Waiting') return 'waiting'
   if (status === 'Pending') return 'pending'
+  if (status === 'Scheduled' || status === 'ScheduledAccepted') return 'waiting'
   if (!isOnline) return 'offline'
   if (lastLocationAtUtc) {
     const age = Date.now() - new Date(lastLocationAtUtc).getTime()

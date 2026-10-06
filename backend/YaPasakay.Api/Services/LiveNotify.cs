@@ -52,6 +52,24 @@ public class LiveNotify(IHubContext<DeskHub> desk, IHubContext<OpsHub> ops, IPus
             cancellationToken);
     }
 
+    public async Task ScheduledPickupReminderAsync(Trip trip, CancellationToken cancellationToken = default)
+    {
+        var pickup = TripAddress.Display(trip.PickupDetails, trip.Pickup);
+        var body = string.IsNullOrWhiteSpace(pickup)
+            ? $"Trip {trip.Reference} pickup is in 10 minutes."
+            : $"Trip {trip.Reference} pickup in 10 minutes: {pickup}";
+        if (trip.CustomerId is Guid customerId)
+        {
+            await CustomerTripAsync(customerId, "schedule-alarm", "Pickup in 10 minutes", body, cancellationToken);
+        }
+
+        if (trip.RiderId is Guid riderId)
+        {
+            await RiderChangedAsync(riderId, "schedule-alarm", cancellationToken);
+            await PushRiderAsync(riderId, "Pickup in 10 minutes", body, "schedule-alarm", cancellationToken);
+        }
+    }
+
     private async Task PushRiderAsync(
         Guid riderId,
         string title,
@@ -101,7 +119,10 @@ public class LiveNotify(IHubContext<DeskHub> desk, IHubContext<OpsHub> ops, IPus
             await CustomerChangedAsync(customerId, reason, cancellationToken);
         }
 
-        await RiderChangedAsync(trip.RiderId, reason, cancellationToken);
+        if (trip.RiderId is Guid riderId)
+        {
+            await RiderChangedAsync(riderId, reason, cancellationToken);
+        }
     }
 
     public async Task SosPushAsync(Trip trip, SupportTicket ticket, CancellationToken cancellationToken = default)

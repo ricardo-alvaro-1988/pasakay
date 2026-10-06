@@ -217,7 +217,7 @@ public record RideDetailResponse(
     Guid OperatorId,
     string OperatorName,
     string OperatorPhone,
-    Guid RiderId,
+    Guid? RiderId,
     string RiderName,
     string RiderPhone,
     string PlateNumber,

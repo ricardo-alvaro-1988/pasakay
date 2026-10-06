@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
+import 'alerts.dart';
 import 'api.dart';
 import 'desk_hub.dart';
 import 'models.dart';
@@ -32,6 +34,7 @@ class CustomerSession extends ChangeNotifier {
   Timer? _poll;
   Timer? _hubDebounce;
   Timer? _hubRetry;
+  Timer? _pickupAlarm;
   bool _deskHubLive = false;
   bool _loopsStarted = false;
   Future<void>? _refreshInFlight;
@@ -287,6 +290,7 @@ class CustomerSession extends ChangeNotifier {
       if (!_loopsStarted && desk != null && !needsMobile && loggedIn) {
         unawaited(_startLoops());
       }
+      _armPickupAlarm();
     }
   }
 
@@ -343,6 +347,9 @@ class CustomerSession extends ChangeNotifier {
   }
 
   void _onHubDeskChanged(String? reason) {
+    if (reason == 'schedule-alarm') {
+      unawaited(_ringPickupAlarm());
+    }
     _hubDebounce?.cancel();
     // Short debounce collapses double-fires (accepted + push) without feeling laggy.
     _hubDebounce = Timer(const Duration(milliseconds: 80), () {
@@ -397,6 +404,58 @@ class CustomerSession extends ChangeNotifier {
     _hubDebounce = null;
     _hubRetry?.cancel();
     _hubRetry = null;
+    _pickupAlarm?.cancel();
+    _pickupAlarm = null;
+  }
+
+  Future<void> _ringPickupAlarm() async {
+    await HapticFeedback.heavyImpact();
+    SystemSound.play(SystemSoundType.alert);
+    await PassengerAlerts.pingNotice(
+      title: 'Pickup in 10 minutes',
+      body: 'Your scheduled ride pickup is soon.',
+    );
+  }
+
+  void _armPickupAlarm() {
+    _pickupAlarm?.cancel();
+    _pickupAlarm = null;
+    final trips = <CustomerTrip>[
+      ...?desk?.scheduled,
+      if (desk?.activeTrip != null) desk!.activeTrip!,
+    ];
+    DateTime? fireAt;
+    CustomerTrip? soonest;
+    for (final trip in trips) {
+      if (trip.status != 'Scheduled' && trip.status != 'ScheduledAccepted') continue;
+      final pickup = DateTime.tryParse(trip.scheduledAtUtc ?? '');
+      if (pickup == null) continue;
+      final candidate = pickup.toUtc().subtract(const Duration(minutes: 10));
+      if (fireAt == null || candidate.isBefore(fireAt)) {
+        fireAt = candidate;
+        soonest = trip;
+      }
+    }
+    if (fireAt == null || soonest == null) {
+      unawaited(PassengerAlerts.syncPickupAlarms(const []));
+      return;
+    }
+    unawaited(PassengerAlerts.requestNotify());
+    unawaited(PassengerAlerts.syncPickupAlarms([
+      {
+        'id': 'pk|${soonest.id}',
+        'title': 'Pickup in 10 minutes',
+        'body': '${soonest.reference} · ${soonest.pickup}',
+        'at': fireAt.millisecondsSinceEpoch,
+      }
+    ]));
+    final wait = fireAt.difference(DateTime.now().toUtc());
+    if (wait.inSeconds <= 2) {
+      if (wait.inMinutes >= -2) unawaited(_ringPickupAlarm());
+      return;
+    }
+    if (wait.inDays > 2) return;
+    _pickupAlarm = Timer(wait, () => unawaited(_ringPickupAlarm()));
   }
 
   /// Call when the app returns to foreground so accept/cancel catch up immediately.

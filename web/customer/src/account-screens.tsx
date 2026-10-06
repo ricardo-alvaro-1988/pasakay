@@ -488,7 +488,7 @@ export function ScheduleScreen({
         ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, passengers, vehicleCategoryId, selectedMaxPassengers, selectedIsCargo),
         scheduledAtUtc,
       }))
-      setNote('Scheduled. Riders are notified about an hour before pickup.')
+      setNote('Scheduled. Your operator will assign a rider. You will be alerted 10 minutes before pickup.')
       setWhen(toPhInput(new Date(Date.now() + 60 * 60 * 1000).toISOString()))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not schedule.'
@@ -1073,7 +1073,7 @@ Fares are quoted before you confirm a booking. Payment is collected according to
 
 You may cancel a booking before the trip is ongoing. SOS alerts your Operator and Super Admin with your location during an active trip.
 
-Scheduled bookings must be set at least 10 minutes in the future. Operators may assign or broadcast those jobs to riders in their service area.
+Scheduled bookings must be set at least 10 minutes in the future. Operators assign a rider; you and the rider are alerted 10 minutes before pickup.
 
 Ya! Pasakay may suspend accounts that abuse SOS, skip payment, or provide false identity details.`
 

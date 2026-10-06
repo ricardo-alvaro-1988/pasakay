@@ -165,7 +165,11 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
             return BadRequest(new { message = "The new rider does not accept this booking's payment method." });
         }
 
-        var fromName = trip.Rider.AppUser.FullName;
+        var fromName = trip.Rider?.AppUser?.FullName ?? "Unassigned";
+        if (trip.Status == TripStatus.ScheduledAccepted)
+        {
+            trip.Status = TripStatus.Scheduled;
+        }
         trip.RiderId = rider.Id;
         trip.VehicleType = rider.VehicleType;
         try
@@ -190,7 +194,14 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 ? $"{trip.Notes} {note}"
                 : trip.Notes;
         await db.SaveChangesAsync(cancellationToken);
-        await broadcast.BroadcastAsync(trip.Id, cancellationToken);
+        if (trip.ScheduledAtUtc is not null || trip.Status == TripStatus.Scheduled)
+        {
+            await broadcast.OfferToAssignedRiderAsync(trip.Id, rider.Id, cancellationToken);
+        }
+        else
+        {
+            await broadcast.BroadcastAsync(trip.Id, cancellationToken);
+        }
 
         var loaded = await OperatorMaps.RideDetailQuery(db)
             .FirstAsync(x => x.Id == trip.Id, cancellationToken);
@@ -213,7 +224,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
             return NotFound();
         }
 
-        if (trip.Status is not (TripStatus.Pending or TripStatus.Waiting))
+        if (trip.Status is not (TripStatus.Pending or TripStatus.Waiting or TripStatus.Scheduled or TripStatus.ScheduledAccepted))
         {
             return BadRequest(new { message = "This booking can no longer be cancelled." });
         }
