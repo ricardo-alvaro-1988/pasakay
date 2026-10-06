@@ -771,7 +771,7 @@ function TripStatusTag({ status }: { status: TripStatus }) {
   const label = status === 'Completed' ? 'Complete'
     : status === 'ScheduledAccepted' ? 'Scheduled accepted'
     : status
-  const tone = status === 'ScheduledAccepted' ? 'waiting' : status.toLowerCase()
+  const tone = status === 'Scheduled' || status === 'ScheduledAccepted' ? 'scheduled' : status.toLowerCase()
   return <span className={`tag trip ${tone}`}>{label}</span>
 }
 
@@ -4567,6 +4567,7 @@ function BookingReassign({
   ride: RideDetail
   onAssigned: (ride: RideDetail) => void
 }) {
+  const unassigned = !ride.riderId
   const [query, setQuery] = useState('')
   const [riderId, setRiderId] = useState('')
   const [riderName, setRiderName] = useState('')
@@ -4585,10 +4586,10 @@ function BookingReassign({
 
   async function save() {
     if (!riderId) {
-      setError('Choose another rider from your fleet.')
+      setError('Choose a rider from your fleet.')
       return
     }
-    if (!window.confirm(`Reassign this booking to ${riderName}?`)) {
+    if (!window.confirm(`${unassigned ? 'Assign' : 'Reassign'} this booking to ${riderName}? The rider gets an offer. Nearby riders are not notified.`)) {
       return
     }
     setBusy(true)
@@ -4600,20 +4601,24 @@ function BookingReassign({
       setRiderName('')
       onAssigned(next)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reassign this booking.')
+      setError(err instanceof Error ? err.message : `Could not ${unassigned ? 'assign' : 'reassign'} this booking.`)
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div className="detail-card" style={{ marginTop: 16 }}>
-      <span>Reassign rider</span>
-      <p className="muted" style={{ marginTop: 6 }}>Move this booking to another active rider. Fare updates if the vehicle type changes.</p>
+    <div className={`detail-card${unassigned ? ' assign-highlight' : ''}`} style={{ marginTop: 16 }}>
+      <span>{unassigned ? 'Assign rider' : 'Reassign rider'}</span>
+      <p className="muted" style={{ marginTop: 6 }}>
+        {unassigned
+          ? 'Pick a rider for this scheduled booking. They receive one offer. Nobody else is notified.'
+          : 'Move this booking to another active rider. Fare updates if the vehicle type changes.'}
+      </p>
       {error ? <p className="error">{error}</p> : null}
       <div className="form-grid" style={{ marginTop: 10 }}>
         <label className="field">
-          <span>New rider</span>
+          <span>{unassigned ? 'Rider' : 'New rider'}</span>
           <PersonSuggest
             value={query}
             onChange={(value) => { setQuery(value); setRiderId(''); setRiderName('') }}
@@ -4632,7 +4637,7 @@ function BookingReassign({
       </div>
       <div style={{ marginTop: 12, maxWidth: 220 }}>
         <button className="btn" type="button" disabled={busy || !riderId} onClick={() => void save()}>
-          {busy ? 'Reassigning…' : 'Reassign booking'}
+          {busy ? (unassigned ? 'Assigning…' : 'Reassigning…') : (unassigned ? 'Assign rider' : 'Reassign booking')}
         </button>
       </div>
     </div>
@@ -8831,7 +8836,11 @@ function OperatorBookingList({
                 </td>
               </tr>
             ) : items.map((row) => (
-              <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
+              <tr
+                key={row.id}
+                className={`clickable${row.status === 'Scheduled' || row.status === 'ScheduledAccepted' ? ' row-scheduled' : ''}`}
+                onClick={() => onOpen(row.id)}
+              >
                 <td>
                   <strong>{phDateTime(row.scheduledAtUtc ?? row.requestedAtUtc)}</strong>
                   <div><small>{row.reference}</small></div>
@@ -8972,7 +8981,8 @@ function OperatorDashboardPage() {
   }
 
   const columns: { key: keyof OperatorBookingBoard; title: string; hint: string }[] = [
-    { key: 'pending', title: 'Pending', hint: 'New bookings waiting to be accepted' },
+    { key: 'scheduled', title: 'Scheduled', hint: 'Future pickups. Assign a rider here. No nearby-driver search.' },
+    { key: 'pending', title: 'Pending', hint: 'New live bookings waiting to be accepted' },
     { key: 'waiting', title: 'Waiting', hint: 'Rider assigned, heading to pickup' },
     { key: 'ongoing', title: 'Ongoing', hint: 'Trip in progress' },
     { key: 'completed', title: 'Complete', hint: 'Finished trips' },
@@ -9008,6 +9018,7 @@ function OperatorDashboardPage() {
       </div>
       {error ? <p className="error">{error}</p> : null}
       <div className="stats">
+        <Stat label="Scheduled" value={board?.scheduled?.total ?? 0} tone="scheduled" />
         <Stat label="Pending" value={board?.pending.total ?? 0} tone="pending" />
         <Stat label="Waiting" value={board?.waiting.total ?? 0} tone="waiting" />
         <Stat label="Ongoing" value={board?.ongoing.total ?? 0} tone="ongoing" />
@@ -9016,7 +9027,7 @@ function OperatorDashboardPage() {
       {!board ? <p>Loading dashboard…</p> : (
         <div className="booking-board">
           {columns.map((column) => {
-            const data = board[column.key]
+            const data = board[column.key] ?? { total: 0, items: [] }
             return (
               <section key={column.key} className={`card booking-col tone-${column.key}`}>
                 <header>
@@ -9052,7 +9063,7 @@ function OperatorDashboardPage() {
                       <PaymentMethodTag method={ride.paymentMethod} other={ride.paymentMethodOther} />
                       <em><FareAmount fare={ride.fare} customerFare={ride.customerFare} /></em>
                     </span>
-                    <small>{phDateTime(ride.requestedAtUtc)}</small>
+                    <small>{phDateTime(ride.scheduledAtUtc ?? ride.requestedAtUtc)}</small>
                   </button>
                 ))}
               </section>
@@ -9174,7 +9185,7 @@ function OperatorScheduleList({
         </div>
       </div>
       <p className="muted">
-        Create Immediate (live now) or Scheduled (future pickup) bookings with map stops, vehicle type, and Select or Broadcast dispatch.
+        Scheduled bookings wait here until you assign a rider. Riders are not notified until you assign. Immediate bookings can still Broadcast or Select.
       </p>
       <TripStatusFilter value={statusFilter} onChange={setStatusFilter} />
       {error ? <p className="error">{error}</p> : null}
@@ -9205,7 +9216,7 @@ function OperatorScheduleList({
             ) : items.map((row) => {
               const canCancel = row.status === 'Pending' || row.status === 'Waiting' || row.status === 'Scheduled' || row.status === 'ScheduledAccepted'
               return (
-              <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
+              <tr key={row.id} className={`clickable${row.status === 'Scheduled' || row.status === 'ScheduledAccepted' ? ' row-scheduled' : ''}`} onClick={() => onOpen(row.id)}>
                 <td>
                   <strong>{phDateTime(row.scheduledAtUtc)}</strong>
                   <div><small>{row.reference}</small></div>
@@ -9229,6 +9240,15 @@ function OperatorScheduleList({
                     <DiscountTag label={row.fareDiscountLabel} />
                   </td>
                   <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                    {row.status === 'Scheduled' && !row.riderId ? (
+                      <button
+                        className="btn tiny"
+                        type="button"
+                        onClick={() => onOpen(row.id)}
+                      >
+                        Assign
+                      </button>
+                    ) : null}
                     {canCancel ? (
                       <button
                         className="btn tiny danger"
@@ -9275,6 +9295,10 @@ function OperatorScheduleForm({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (timing === 'scheduled') setDispatch('select')
+  }, [timing])
 
   const enabledOffers = useMemo(() => offers.filter((o) => o.isEnabled), [offers])
   const selectedOffer = enabledOffers.find((o) => o.vehicleCategoryId === vehicleCategoryId) ?? null
@@ -9341,7 +9365,7 @@ function OperatorScheduleForm({
       setError('Choose a vehicle type.')
       return
     }
-    if (dispatch === 'select' && !riderId) {
+    if (timing === 'immediate' && dispatch === 'select' && !riderId) {
       setError('Choose a rider, or switch to Broadcast.')
       return
     }
@@ -9363,7 +9387,7 @@ function OperatorScheduleForm({
       const saved = await api.createScheduledBooking({
         customerName: customerName.trim(),
         phone,
-        riderId: dispatch === 'select' ? riderId : null,
+        riderId: timing === 'scheduled' ? null : dispatch === 'select' ? riderId : null,
         isImmediate: timing === 'immediate',
         scheduledAtUtc,
         vehicleType: selectedOffer.vehicleType,
@@ -9412,6 +9436,7 @@ function OperatorScheduleForm({
         </label>
       ) : null}
 
+      {timing === 'immediate' ? (
       <div className="field wide" style={{ marginTop: 16 }}>
         <span>Rider dispatch</span>
         <div className="chips" style={{ marginTop: 6 }}>
@@ -9419,6 +9444,11 @@ function OperatorScheduleForm({
           <button type="button" className={dispatch === 'select' ? 'on' : ''} onClick={() => setDispatch('select')}>Select</button>
         </div>
       </div>
+      ) : (
+        <p className="muted" style={{ marginTop: 16 }}>
+          Scheduled bookings are saved unassigned. Assign a rider from the list after you save. Riders are not notified until then.
+        </p>
+      )}
 
       <div className="form-grid" style={{ marginTop: 12 }}>
         <label className="field">
@@ -9430,7 +9460,7 @@ function OperatorScheduleForm({
           <input value={phone} onChange={(e) => setPhone(e.target.value)} required inputMode="tel" placeholder="09…" />
         </label>
 
-        {dispatch === 'select' ? (
+        {dispatch === 'select' && timing === 'immediate' ? (
           <label className="field">
             <span>Rider *</span>
           <PersonSuggest

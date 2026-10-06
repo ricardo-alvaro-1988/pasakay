@@ -35,7 +35,8 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
             await ColumnAsync(query, TripStatus.Pending, start, endExclusive, includesNow, cancellationToken),
             await ColumnAsync(query, TripStatus.Waiting, start, endExclusive, includesNow, cancellationToken),
             await ColumnAsync(query, TripStatus.Ongoing, start, endExclusive, includesNow, cancellationToken),
-            await ColumnAsync(query, TripStatus.Completed, start, endExclusive, includesNow, cancellationToken)));
+            await ColumnAsync(query, TripStatus.Completed, start, endExclusive, includesNow, cancellationToken),
+            await ScheduledColumnAsync(query, start, endExclusive, includesNow, cancellationToken)));
     }
 
     [HttpGet("list")]
@@ -59,7 +60,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         var query = db.Trips
             .AsNoTracking()
             .Include(x => x.Rider)
-            .ThenInclude(x => x.AppUser)
+            .ThenInclude(x => x!.AppUser)
             .Where(x => x.OperatorId == op!.Id);
 
         if (!string.IsNullOrWhiteSpace(q))
@@ -73,8 +74,8 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 x.CustomerPhone.Contains(phoneTerm) ||
                 x.Pickup.Contains(term) ||
                 x.Dropoff.Contains(term) ||
-                x.Rider.AppUser.FullName.Contains(term) ||
-                x.Rider.PlateNumber.Contains(term));
+                (x.Rider != null && x.Rider.AppUser.FullName.Contains(term)) ||
+                (x.Rider != null && x.Rider.PlateNumber.Contains(term)));
         }
 
         if (tripStatus is TripStatus filterStatus)
@@ -172,6 +173,10 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         }
         trip.RiderId = rider.Id;
         trip.VehicleType = rider.VehicleType;
+        if (rider.VehicleCategoryId is Guid categoryId)
+        {
+            trip.VehicleCategoryId = categoryId;
+        }
         try
         {
             trip.Fare = await QuoteAsync(
@@ -180,14 +185,20 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
                 trip.DistanceKm,
                 trip.PassengerCount,
                 trip.PickupBarangayId,
+                rider.VehicleCategoryId ?? trip.VehicleCategoryId,
                 cancellationToken);
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            if (trip.ScheduledAtUtc is null)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
         trip.UpdatedAtUtc = DateTime.UtcNow;
-        var note = $"Reassigned from {fromName} to {rider.AppUser.FullName}.";
+        var note = fromName == "Unassigned"
+            ? $"Assigned to {rider.AppUser.FullName}."
+            : $"Reassigned from {fromName} to {rider.AppUser.FullName}.";
         trip.Notes = string.IsNullOrWhiteSpace(trip.Notes)
             ? note
             : trip.Notes.Length + 1 + note.Length <= 200
@@ -279,6 +290,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         decimal distanceKm,
         int passengerCount,
         Guid? pickupBarangayId,
+        Guid? vehicleCategoryId,
         CancellationToken cancellationToken)
     {
         if (pickupBarangayId is null)
@@ -300,7 +312,7 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
             operatorId,
             vehicleType,
             municipalityId.Value,
-            null,
+            vehicleCategoryId,
             cancellationToken);
         if (fare is null)
         {
@@ -353,6 +365,28 @@ public class OperatorBookingsController(AppDbContext db, RiderWalletService wall
         var total = await filtered.CountAsync(cancellationToken);
         var items = await OperatorMaps.LoadBoardItemsAsync(
             filtered.OrderByDescending(x => x.RequestedAtUtc).Take(ColumnSize),
+            cancellationToken);
+        return new OperatorBookingColumn(total, items);
+    }
+
+    private static async Task<OperatorBookingColumn> ScheduledColumnAsync(
+        IQueryable<YaPasakay.Domain.Entities.Trip> query,
+        DateTime start,
+        DateTime endExclusive,
+        bool includesNow,
+        CancellationToken cancellationToken)
+    {
+        var filtered = query.Where(x => x.Status == TripStatus.Scheduled || x.Status == TripStatus.ScheduledAccepted);
+        if (!includesNow)
+        {
+            filtered = filtered.Where(x =>
+                (x.ScheduledAtUtc ?? x.RequestedAtUtc) >= start
+                && (x.ScheduledAtUtc ?? x.RequestedAtUtc) < endExclusive);
+        }
+
+        var total = await filtered.CountAsync(cancellationToken);
+        var items = await OperatorMaps.LoadBoardItemsAsync(
+            filtered.OrderBy(x => x.ScheduledAtUtc ?? x.RequestedAtUtc).Take(ColumnSize),
             cancellationToken);
         return new OperatorBookingColumn(total, items);
     }

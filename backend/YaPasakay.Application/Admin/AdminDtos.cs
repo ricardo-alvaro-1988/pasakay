@@ -186,7 +186,8 @@ public record RideListItem(
     int? DiscountPercent = null,
     string? PromoCode = null,
     decimal CustomerBoostAmount = 0,
-    string? FareDiscountLabel = null);
+    string? FareDiscountLabel = null,
+    DateTime? ScheduledAtUtc = null);
 
 public record RideDetailResponse(
     Guid Id,
@@ -781,7 +782,8 @@ public record OperatorBookingBoardResponse(
     OperatorBookingColumn Pending,
     OperatorBookingColumn Waiting,
     OperatorBookingColumn Ongoing,
-    OperatorBookingColumn Completed);
+    OperatorBookingColumn Completed,
+    OperatorBookingColumn Scheduled);
 
 public record OperatorOverviewSeriesPoint(
     DateOnly Date,

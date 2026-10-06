@@ -37,7 +37,7 @@ public class OperatorScheduleController(
         pageSize = Math.Clamp(pageSize, 1, 50);
         var query = db.Trips
             .Include(x => x.Rider)
-            .ThenInclude(x => x.AppUser)
+            .ThenInclude(x => x!.AppUser)
             .Where(x => x.OperatorId == op!.Id && x.ScheduledAtUtc != null);
         if (!string.IsNullOrWhiteSpace(q))
         {

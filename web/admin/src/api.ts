@@ -652,6 +652,7 @@ export type RideListItem = {
   promoCode?: string | null
   customerBoostAmount?: number
   fareDiscountLabel?: string | null
+  scheduledAtUtc?: string | null
 }
 
 export type RideDetail = {
@@ -683,7 +684,7 @@ export type RideDetail = {
   operatorId: string
   operatorName: string
   operatorPhone: string
-  riderId: string
+  riderId: string | null
   riderName: string
   riderPhone: string
   plateNumber: string
@@ -1399,6 +1400,7 @@ export type OperatorBookingBoard = {
   waiting: OperatorBookingColumn
   ongoing: OperatorBookingColumn
   completed: OperatorBookingColumn
+  scheduled: OperatorBookingColumn
 }
 
 export type ScheduledBooking = {

@@ -812,6 +812,7 @@ public static class OperatorMaps
                 x.Id,
                 x.Reference,
                 x.RequestedAtUtc,
+                x.ScheduledAtUtc,
                 Pickup = x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
                 Dropoff = x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
                 x.CustomerName,
@@ -855,7 +856,8 @@ public static class OperatorMaps
             x.DiscountPercent,
             x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
             x.CustomerBoostAmount,
-            FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount)))
+            FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount),
+            x.ScheduledAtUtc is DateTime scheduled ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc) : null))
             .ToList();
     }
 
