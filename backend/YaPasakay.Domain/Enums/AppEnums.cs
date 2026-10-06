@@ -93,7 +93,9 @@ public enum NotificationKind
     Sos = 3,
     AccountDelete = 4,
     /// <summary>Legacy — rental leads removed; kept for old inbox rows.</summary>
-    Rental = 5
+    Rental = 5,
+    /// <summary>Customer booked a future pickup; operator still needs to assign a rider.</summary>
+    Scheduled = 6
 }
 
 public enum SurchargeKind

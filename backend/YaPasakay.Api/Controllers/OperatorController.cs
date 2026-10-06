@@ -129,7 +129,14 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
                 && db.Trips.Any(t => t.OperatorId == op.Id && t.CustomerId == x.Id),
             cancellationToken);
 
-        return Ok(new OperatorNavAlertsResponse(pendingWallet, openSos, unreadBilling, pendingAccountDeletes));
+        var unreadScheduled = await db.OperatorNotifications.CountAsync(
+            x => x.OperatorId == op.Id && x.Kind == NotificationKind.Scheduled && x.ReadAtUtc == null,
+            cancellationToken);
+        var unreadInbox = await db.OperatorNotifications.CountAsync(
+            x => x.OperatorId == op.Id && x.ReadAtUtc == null,
+            cancellationToken);
+
+        return Ok(new OperatorNavAlertsResponse(pendingWallet, openSos, unreadBilling, pendingAccountDeletes, unreadScheduled, unreadInbox));
     }
 
     [HttpGet("fleet")]

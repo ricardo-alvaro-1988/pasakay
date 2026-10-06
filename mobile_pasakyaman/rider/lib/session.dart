@@ -407,8 +407,10 @@ class RiderSession extends ChangeNotifier {
     }
     _alarmingOfferId = offer.offerId;
     final native = await RiderAlerts.ringOffer(
-      title: 'New job offer',
-      body: '${offer.reference} · ${offer.pickup}',
+      title: offer.scheduledAt == null ? 'New job offer' : 'Scheduled booking',
+      body: offer.scheduledAt == null
+          ? '${offer.reference} · ${offer.pickup}'
+          : '${offer.reference} · pickup ${formatPickupWhen(offer.scheduledAt!)}',
     );
     if (native) {
       return;

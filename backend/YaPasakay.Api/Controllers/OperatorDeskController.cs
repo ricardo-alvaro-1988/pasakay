@@ -268,6 +268,22 @@ public class OperatorDeskController(AppDbContext db) : ControllerBase
         return Ok(new { message = "Billing notifications marked read." });
     }
 
+    [HttpPost("inbox/read-scheduled")]
+    public async Task<IActionResult> MarkScheduledRead(CancellationToken cancellationToken)
+    {
+        var (op, status, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        var now = DateTime.UtcNow;
+        await db.OperatorNotifications
+            .Where(x => x.OperatorId == op.Id && x.Kind == NotificationKind.Scheduled && x.ReadAtUtc == null)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.ReadAtUtc, now), cancellationToken);
+        return Ok(new { message = "Scheduled notifications marked read." });
+    }
+
     [HttpGet("billing")]
     public async Task<ActionResult<BillingOperatorDetail>> Billing(CancellationToken cancellationToken)
     {

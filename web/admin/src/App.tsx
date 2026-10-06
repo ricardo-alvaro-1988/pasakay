@@ -1462,7 +1462,7 @@ function walletStatusClass(status: unknown) {
   }
 }
 
-function NavBadge({ count, tone }: { count: number; tone?: 'sos' | 'billing' | 'wallet' | 'delete' }) {
+function NavBadge({ count, tone }: { count: number; tone?: 'sos' | 'billing' | 'wallet' | 'delete' | 'schedule' }) {
   if (count <= 0) return null
   return <span className={`nav-badge${tone ? ` ${tone}` : ''}`}>{count > 99 ? '99+' : count}</span>
 }
@@ -7672,6 +7672,8 @@ function OperatorShell({
     openSos: 0,
     unreadBilling: 0,
     pendingAccountDeletes: 0,
+    unreadScheduled: 0,
+    unreadInbox: 0,
   })
   const [sosFlash, setSosFlash] = useState<OpsAlert | null>(null)
 
@@ -7684,13 +7686,23 @@ function OperatorShell({
   const loadAlerts = useCallback(() => {
     api.operatorAlerts()
       .then(setAlerts)
-      .catch(() => setAlerts({ pendingWalletRequests: 0, openSos: 0, unreadBilling: 0, pendingAccountDeletes: 0 }))
+      .catch(() => setAlerts({
+        pendingWalletRequests: 0,
+        openSos: 0,
+        unreadBilling: 0,
+        pendingAccountDeletes: 0,
+        unreadScheduled: 0,
+        unreadInbox: 0,
+      }))
   }, [])
 
   useEffect(() => {
     async function refresh() {
       if (page === 'billing') {
         await api.readOperatorBillingInbox().catch(() => {})
+      }
+      if (page === 'schedule') {
+        await api.readOperatorScheduledInbox().catch(() => {})
       }
       loadAlerts()
     }
@@ -7740,6 +7752,8 @@ function OperatorShell({
             if (id === 'wallet') return <NavBadge count={alerts.pendingWalletRequests} tone="wallet" />
             if (id === 'support') return <NavBadge count={alerts.openSos} tone="sos" />
             if (id === 'billing') return <NavBadge count={alerts.unreadBilling} tone="billing" />
+            if (id === 'schedule') return <NavBadge count={alerts.unreadScheduled ?? 0} tone="schedule" />
+            if (id === 'inbox') return <NavBadge count={alerts.unreadInbox ?? 0} tone="schedule" />
             if (id === 'customers') return <NavBadge count={alerts.pendingAccountDeletes} tone="delete" />
             return null
           }}
@@ -7801,6 +7815,7 @@ function OperatorShell({
           <OperatorInboxPage
             onOpenBilling={() => setPage('billing')}
             onOpenCustomers={() => setPage('customers')}
+            onOpenSchedule={() => setPage('schedule')}
           />
         )}
         {page === 'billing' && <OperatorBillingPage />}
@@ -12816,9 +12831,11 @@ function OperatorSupportDetail({ ticketId, onBack }: { ticketId: string; onBack:
 function OperatorInboxPage({
   onOpenBilling,
   onOpenCustomers,
+  onOpenSchedule,
 }: {
   onOpenBilling: () => void
   onOpenCustomers: () => void
+  onOpenSchedule: () => void
 }) {
   const [items, setItems] = useState<OperatorInboxItem[]>([])
   const [error, setError] = useState('')
@@ -12835,7 +12852,7 @@ function OperatorInboxPage({
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Inbox</h2>
-      <p className="muted">Billing records, account deletion requests, and platform announcements for your company.</p>
+      <p className="muted">Scheduled bookings, billing records, account deletion requests, and platform announcements for your company.</p>
       {error ? <p className="error">{error}</p> : null}
       {items.length === 0 ? <p>No notifications yet.</p> : (
         <div className="list">
@@ -12849,6 +12866,7 @@ function OperatorInboxPage({
               <div style={{ display: 'flex', gap: 8 }}>
                 {!item.readAtUtc ? <button className="btn tiny" type="button" onClick={() => void markRead(item.id)}>Mark read</button> : null}
                 {item.billId ? <button className="btn tiny" type="button" onClick={onOpenBilling}>Open billing</button> : null}
+                {item.kind === 'Scheduled' || item.kind === 'Rental' ? <button className="btn tiny" type="button" onClick={onOpenSchedule}>Open schedule</button> : null}
                 {item.kind === 'AccountDelete' ? <button className="btn tiny" type="button" onClick={onOpenCustomers}>Open customers</button> : null}
               </div>
             </div>

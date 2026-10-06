@@ -220,6 +220,15 @@ class TripScreen extends StatelessWidget {
                     const Text('PICKUP', style: TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12)),
                     const SizedBox(height: 4),
                     Text(trip.pickup, style: const TextStyle(fontWeight: FontWeight.w700)),
+                    if (trip.scheduledAt != null) ...[
+                      const SizedBox(height: 14),
+                      const Text('SCHEDULED PICKUP', style: TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12)),
+                      const SizedBox(height: 4),
+                      Text(
+                        formatPickupWhen(trip.scheduledAt!),
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Color(0xFFC2410C)),
+                      ),
+                    ],
                     const SizedBox(height: 14),
                     const Text('DROP-OFF', style: TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12)),
                     const SizedBox(height: 4),

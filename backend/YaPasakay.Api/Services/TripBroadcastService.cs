@@ -224,7 +224,7 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        await live.RiderOfferAsync(riderId, trip.Reference, cancellationToken);
+        await live.RiderOfferAsync(riderId, trip.Reference, trip.ScheduledAtUtc, cancellationToken);
     }
 
     public async Task<IReadOnlyList<(RiderProfile Rider, double? Distance, bool Preferred)>> RankEligibleRidersAsync(

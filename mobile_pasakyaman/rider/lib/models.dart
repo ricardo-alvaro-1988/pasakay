@@ -149,6 +149,15 @@ DateTime? parseUtc(dynamic value) {
   return parsed?.toLocal();
 }
 
+String formatPickupWhen(DateTime value) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  final local = value.toLocal();
+  final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+  final ampm = local.hour >= 12 ? 'PM' : 'AM';
+  final min = local.minute.toString().padLeft(2, '0');
+  return '${months[local.month - 1]} ${local.day}, ${local.year}  $hour:$min $ampm';
+}
+
 Map<String, dynamic>? asJsonMap(dynamic value) {
   if (value is Map<String, dynamic>) {
     return value;

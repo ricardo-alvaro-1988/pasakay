@@ -40,15 +40,6 @@ class _OffersScreenState extends State<OffersScreen> {
     await launchUrl(Uri(scheme: 'tel', path: cleaned));
   }
 
-  String _fmtWhen(DateTime value) {
-    final local = value.toLocal();
-    final mm = local.month.toString().padLeft(2, '0');
-    final dd = local.day.toString().padLeft(2, '0');
-    final hh = local.hour.toString().padLeft(2, '0');
-    final min = local.minute.toString().padLeft(2, '0');
-    return '$mm/$dd $hh:$min';
-  }
-
   Future<void> _accept(JobOffer offer) async {
     if (_busyOfferId != null) return;
     setState(() => _busyOfferId = offer.offerId);
@@ -144,7 +135,7 @@ class _OffersScreenState extends State<OffersScreen> {
                     offer: offer,
                     busy: working,
                     locked: locked && !working,
-                    whenLabel: offer.scheduledAt == null ? null : 'Scheduled · ${_fmtWhen(offer.scheduledAt!)}',
+                    whenLabel: offer.scheduledAt == null ? null : formatPickupWhen(offer.scheduledAt!),
                     onCall: offer.customerPhone.trim().isEmpty ? null : () => _call(offer.customerPhone),
                     onAccept: () => _accept(offer),
                     onDecline: () => _decline(offer),
@@ -310,10 +301,29 @@ class _OfferCard extends StatelessWidget {
             style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600, fontSize: 12),
           ),
           if (whenLabel != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              whenLabel!,
-              style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600, fontSize: 12),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF7ED),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFDBA74)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'SCHEDULED PICKUP',
+                    style: TextStyle(color: Color(0xFFC2410C), fontWeight: FontWeight.w800, fontSize: 11),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    whenLabel!,
+                    style: const TextStyle(color: Color(0xFF9A3412), fontWeight: FontWeight.w900, fontSize: 16),
+                  ),
+                ],
+              ),
             ),
           ],
           if (offer.fareDiscountAmount > 0) ...[

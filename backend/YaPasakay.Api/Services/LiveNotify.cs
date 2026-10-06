@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using YaPasakay.Api.Hubs;
 using YaPasakay.Application.Admin;
 using YaPasakay.Application.Auth;
+using YaPasakay.Application.Common;
 using YaPasakay.Domain.Entities;
 using YaPasakay.Domain.Enums;
 using YaPasakay.Infrastructure.Persistence;
@@ -19,14 +20,55 @@ public class LiveNotify(IHubContext<DeskHub> desk, IHubContext<OpsHub> ops, IPus
         desk.Clients.Group(DeskHub.CustomerGroup(customerId))
             .SendAsync("deskChanged", new { reason }, cancellationToken);
 
-    public async Task RiderOfferAsync(Guid riderId, string reference, CancellationToken cancellationToken = default)
+    public Task RiderOfferAsync(Guid riderId, string reference, CancellationToken cancellationToken = default) =>
+        RiderOfferAsync(riderId, reference, null, cancellationToken);
+
+    public async Task RiderOfferAsync(
+        Guid riderId,
+        string reference,
+        DateTime? scheduledAtUtc,
+        CancellationToken cancellationToken = default)
     {
         await RiderChangedAsync(riderId, "offer", cancellationToken);
+        var body = "Open the app to accept.";
+        if (!string.IsNullOrWhiteSpace(reference) && scheduledAtUtc is DateTime at)
+        {
+            var ph = PhilippineTime.ToPh(DateTime.SpecifyKind(at, DateTimeKind.Utc));
+            body = $"Trip {reference} pickup {ph:MMM d, h:mm tt}.";
+        }
+        else if (!string.IsNullOrWhiteSpace(reference))
+        {
+            body = $"Trip {reference} is waiting.";
+        }
+
         await PushRiderAsync(
             riderId,
-            "New job offer",
-            string.IsNullOrWhiteSpace(reference) ? "Open Ya! Pasakay to accept." : $"Trip {reference} is waiting.",
+            scheduledAtUtc is null ? "New job offer" : "Scheduled booking",
+            body,
             "offer",
+            cancellationToken);
+    }
+
+    public async Task OperatorScheduledBookingAsync(Trip trip, CancellationToken cancellationToken = default)
+    {
+        if (trip.ScheduledAtUtc is not DateTime at)
+        {
+            return;
+        }
+
+        var ph = PhilippineTime.ToPh(DateTime.SpecifyKind(at, DateTimeKind.Utc));
+        var pickup = string.IsNullOrWhiteSpace(trip.Pickup) ? "pickup" : trip.Pickup.Trim();
+        db.OperatorNotifications.Add(new OperatorNotification
+        {
+            OperatorId = trip.OperatorId,
+            Kind = NotificationKind.Scheduled,
+            Title = "Scheduled booking",
+            Body = $"{trip.Reference} · pickup {ph:MMM d, yyyy h:mm tt} · {pickup}. Assign a rider on Schedule."
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        await ops.Clients.Group(OpsHub.OperatorGroup(trip.OperatorId)).SendAsync(
+            "opsAlert",
+            new { reason = "scheduled", tripId = trip.Id, reference = trip.Reference },
             cancellationToken);
     }
 

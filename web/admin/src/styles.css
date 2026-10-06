@@ -2190,6 +2190,9 @@ tr.row-scheduled:hover td { background: rgba(255, 176, 32, 0.24); }
 .nav-badge.delete {
   background: #d48b00;
 }
+.nav-badge.schedule {
+  background: #0f766e;
+}
 .shell.collapsed .nav-badge {
   position: absolute;
   top: 6px;

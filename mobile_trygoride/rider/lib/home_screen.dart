@@ -1029,6 +1029,7 @@ class _BookingSection extends StatelessWidget {
             ? '${peso(activeTrip.collectFromCustomer)} · ${activeTrip.fareDiscountLabel ?? 'Discount'} · ${paymentLabel(activeTrip.paymentMethod)}'
             : '${peso(activeTrip.fare)} · ${paymentLabel(activeTrip.paymentMethod)}',
         distanceKm: activeTrip.distanceKm,
+        scheduledWhen: activeTrip.scheduledAt == null ? null : formatPickupWhen(activeTrip.scheduledAt!),
         tinted: unread > 0,
         detailsLabel: 'Booking details',
         primaryLabel: unread > 0 ? 'Chat ($unread)' : 'Open trip',
@@ -1097,6 +1098,7 @@ class _BookingSection extends StatelessWidget {
             : '${peso(offer.fare)} · ${paymentLabel(offer.paymentMethod)}',
         distanceKm: offer.distanceKm,
         etaMinutes: mins,
+        scheduledWhen: offer.scheduledAt == null ? null : formatPickupWhen(offer.scheduledAt!),
         tinted: true,
         detailsLabel: 'Booking details',
         primaryLabel: acceptBusy ? 'Accepting…' : 'Accept Booking',
@@ -1141,6 +1143,7 @@ class _MockBookingCard extends StatelessWidget {
     required this.onDetails,
     this.onPrimary,
     this.etaMinutes,
+    this.scheduledWhen,
     this.tinted = false,
     this.footer,
   });
@@ -1153,6 +1156,7 @@ class _MockBookingCard extends StatelessWidget {
   final String fareLine;
   final double distanceKm;
   final int? etaMinutes;
+  final String? scheduledWhen;
   final bool tinted;
   final String detailsLabel;
   final String primaryLabel;
@@ -1199,6 +1203,26 @@ class _MockBookingCard extends StatelessWidget {
                     _PinLine(text: pickup),
                     const SizedBox(height: 8),
                     _PinLine(text: dropoff, muted: true),
+                    if (scheduledWhen != null) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.event, size: 16, color: Color(0xFFC2410C)),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'Pickup $scheduledWhen',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13,
+                                color: Color(0xFF9A3412),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     Row(
                       children: [

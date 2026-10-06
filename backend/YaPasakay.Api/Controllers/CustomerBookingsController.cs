@@ -786,6 +786,10 @@ public class CustomerBookingsController(
         {
             await broadcast.BroadcastAsync(trip.Id, cancellationToken);
         }
+        else
+        {
+            await live.OperatorScheduledBookingAsync(trip, cancellationToken);
+        }
 
         await live.CustomerChangedAsync(customer.Id, "booked", cancellationToken);
 

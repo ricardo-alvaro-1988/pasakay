@@ -1351,6 +1351,8 @@ export type OperatorNavAlerts = {
   openSos: number
   unreadBilling: number
   pendingAccountDeletes: number
+  unreadScheduled?: number
+  unreadInbox?: number
 }
 
 export type AdminAlertItem = {
@@ -1449,7 +1451,7 @@ export type OperatorBookingListItem = {
 
 export type OperatorInboxItem = {
   id: string
-  kind: 'Billing' | 'Announcement' | 'Sos' | 'AccountDelete'
+  kind: 'Billing' | 'Announcement' | 'Sos' | 'AccountDelete' | 'Rental' | 'Scheduled'
   title: string
   body: string
   billId: string | null
@@ -3024,6 +3026,8 @@ export const api = {
     request<OperatorInboxItem>(`/api/operator/inbox/${id}/read`, { method: 'POST' }),
   readOperatorBillingInbox: () =>
     request<{ message: string }>('/api/operator/inbox/read-billing', { method: 'POST' }),
+  readOperatorScheduledInbox: () =>
+    request<{ message: string }>('/api/operator/inbox/read-scheduled', { method: 'POST' }),
   operatorAlerts: () => request<OperatorNavAlerts>('/api/operator/alerts'),
   operatorBilling: () => request<BillingOperatorDetail>('/api/operator/billing'),
   operatorProvinces: () => request<IdName[]>('/api/operator/territories/provinces'),

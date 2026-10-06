@@ -505,7 +505,9 @@ public record OperatorNavAlertsResponse(
     int PendingWalletRequests,
     int OpenSos,
     int UnreadBilling,
-    int PendingAccountDeletes);
+    int PendingAccountDeletes,
+    int UnreadScheduled = 0,
+    int UnreadInbox = 0);
 
 public record AdminAlertItem(
     Guid Id,
