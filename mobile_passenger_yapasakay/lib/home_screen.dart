@@ -1192,12 +1192,13 @@ class _VehicleGrid extends StatelessWidget {
                   child: Material(
                     color: selected ? brandAccentSoft : brandSurface,
                     borderRadius: BorderRadius.circular(16),
+                    clipBehavior: Clip.none,
                     child: InkWell(
                       onTap: () => onSelect(item.type, item.id),
                       borderRadius: BorderRadius.circular(16),
                       child: Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
@@ -1207,7 +1208,7 @@ class _VehicleGrid extends StatelessWidget {
                         ),
                         child: Row(
                           children: [
-                            vehicleArtImage(item.type, iconKey: item.iconKey, height: 64, width: 96),
+                            vehicleArtImage(item.type, iconKey: item.iconKey, height: 76, width: 108),
                             const SizedBox(width: 14),
                             Expanded(
                               child: Text(
@@ -1340,12 +1341,13 @@ class _VehicleOfferList extends StatelessWidget {
                 child: Material(
                   color: selected ? brandAccentSoft : brandSurface,
                   borderRadius: BorderRadius.circular(16),
+                  clipBehavior: Clip.none,
                   child: InkWell(
                     onTap: () => onSelect(item.type, item.id),
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
@@ -1355,7 +1357,7 @@ class _VehicleOfferList extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          vehicleArtImage(item.type, iconKey: item.iconKey, height: 60, width: 90),
+                          vehicleArtImage(item.type, iconKey: item.iconKey, height: 72, width: 104),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(

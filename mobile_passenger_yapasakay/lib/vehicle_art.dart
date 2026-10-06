@@ -87,8 +87,7 @@ String _assetFor(String key) {
 Widget vehicleArtImage(String? type, {String? iconKey, double height = 44, double? width}) {
   final key = _artKey(type, iconKey);
   final h = height;
-  final w = width ?? height * 1.35;
-  // Decode at ~2–3x display width so high-res PNGs stay crisp on phones.
+  final w = width ?? height * 1.5;
   final dpr = WidgetsBinding.instance.platformDispatcher.views.isEmpty
       ? 3.0
       : WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
@@ -96,18 +95,16 @@ Widget vehicleArtImage(String? type, {String? iconKey, double height = 44, doubl
   return SizedBox(
     height: h,
     width: w,
-    child: Image.asset(
-      _assetFor(key),
-      height: h,
-      width: w,
-      fit: BoxFit.contain,
-      filterQuality: FilterQuality.high,
-      isAntiAlias: true,
-      cacheWidth: cacheW,
-      errorBuilder: (_, _, _) => SizedBox(
-        height: h,
-        width: w,
-        child: const Icon(Icons.directions_car, color: Color(0xFF667085)),
+    child: Padding(
+      padding: const EdgeInsets.all(4),
+      child: Image.asset(
+        _assetFor(key),
+        fit: BoxFit.contain,
+        alignment: Alignment.center,
+        filterQuality: FilterQuality.high,
+        isAntiAlias: true,
+        cacheWidth: cacheW,
+        errorBuilder: (_, _, _) => const Icon(Icons.directions_car, color: Color(0xFF667085)),
       ),
     ),
   );
