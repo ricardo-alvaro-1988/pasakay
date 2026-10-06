@@ -942,6 +942,13 @@ class CustomerTripDetail {
   }
 }
 
+dynamic _pickJson(Map<String, dynamic> json, String key) {
+  if (json.containsKey(key)) return json[key];
+  if (key.isEmpty) return null;
+  final pascal = '${key[0].toUpperCase()}${key.substring(1)}';
+  return json[pascal];
+}
+
 class ChatMessage {
   ChatMessage({
     required this.id,
@@ -963,11 +970,11 @@ class ChatMessage {
   }
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) => ChatMessage(
-        id: asText(json['id']),
-        sender: asText(json['sender']),
-        body: asText(json['body']),
-        sentAtUtc: asText(json['sentAtUtc']),
-        photoUrl: asTextOrNull(json['photoUrl']),
+        id: asText(_pickJson(json, 'id')),
+        sender: asText(_pickJson(json, 'sender')),
+        body: asText(_pickJson(json, 'body')),
+        sentAtUtc: asText(_pickJson(json, 'sentAtUtc')),
+        photoUrl: asTextOrNull(_pickJson(json, 'photoUrl')),
       );
 }
 

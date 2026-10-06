@@ -9,6 +9,7 @@ import {
 import { ServiceReceipt } from './service-receipt'
 
 const STAR_LABELS = ['Tap to rate', 'Poor', 'Fair', 'Good', 'Great', 'Excellent'] as const
+const RATING_DISMISS_KEY = 'yapasakay.rating_dismissed_trip_id'
 
 function StarGlyph({ filled }: { filled: boolean }) {
   return (
@@ -51,6 +52,11 @@ export function RateRidePanel({
       onDesk(await api.rate(trip.id, stars, comment.trim() || undefined))
       setComment('')
       setStars(5)
+      try {
+        localStorage.removeItem(RATING_DISMISS_KEY)
+      } catch {
+        /* ignore */
+      }
       onDone?.()
     } catch (err) {
       onError?.(err instanceof Error ? err.message : 'Could not save rating.')
@@ -61,8 +67,14 @@ export function RateRidePanel({
 
   return (
     <form className="trip-panel rate-panel" onSubmit={(e) => void submit(e)}>
-      <p className="status-title">Rate your ride</p>
-      <p className="muted">{trip.reference} · {trip.operatorName}</p>
+      <div className="ride-completed-banner" role="status">
+        <span className="ride-completed-check" aria-hidden>✓</span>
+        <b>Ride Completed</b>
+      </div>
+      <p className="muted rate-ref">{trip.reference}</p>
+      <p className="rate-route">
+        {trip.pickup} → {trip.dropoff}
+      </p>
       {trip.riderName && (
         <div className="rider" style={{ marginTop: 10 }}>
           {trip.riderPhotoUrl
@@ -75,6 +87,7 @@ export function RateRidePanel({
         </div>
       )}
       <ServiceReceipt trip={trip} />
+      <p className="status-title" style={{ marginTop: 12 }}>Rate your ride</p>
       <div className="star-rating">
         <div
           className="star-row"
@@ -123,20 +136,36 @@ export function RateRidePanel({
 
 export function usePendingRating(desk: Desk) {
   const pending = desk.pendingRating ?? desk.recent.find((t) => t.canRate) ?? null
-  const [openId, setOpenId] = useState<string | null>(null)
+  const [dismissedId, setDismissedId] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(RATING_DISMISS_KEY)
+    } catch {
+      return null
+    }
+  })
 
   useEffect(() => {
-    if (pending?.id) {
-      setOpenId(pending.id)
-    } else {
-      setOpenId(null)
+    if (pending?.id && pending.id !== dismissedId) {
+      // New pending trip — show it (do not auto-clear dismiss for same id).
+      return
     }
-  }, [pending?.id])
+    if (!pending?.id) {
+      // No pending rating left.
+    }
+  }, [pending?.id, dismissedId])
 
-  const trip = pending && openId === pending.id ? pending : null
+  const trip = pending && pending.id !== dismissedId ? pending : null
   return {
     trip,
-    dismiss: () => setOpenId(null),
+    dismiss: () => {
+      if (!pending?.id) return
+      try {
+        localStorage.setItem(RATING_DISMISS_KEY, pending.id)
+      } catch {
+        /* ignore */
+      }
+      setDismissedId(pending.id)
+    },
   }
 }
 

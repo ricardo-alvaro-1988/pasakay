@@ -56,9 +56,10 @@ class DeskHubClient {
       connection.on('chatMessage', (args) {
         if (args == null || args.isEmpty) return;
         final map = asJsonMap(args.first);
-        if (map != null && map['id'] != null) {
-          onChat(ChatMessage.fromJson(map));
-        }
+        if (map == null) return;
+        final message = ChatMessage.fromJson(map);
+        if (message.id.isEmpty) return;
+        onChat(message);
       });
     }
 

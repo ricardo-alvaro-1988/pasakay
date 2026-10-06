@@ -67,7 +67,9 @@ ThemeData passengerTheme() {
         foregroundColor: Colors.white,
         disabledBackgroundColor: brandRed.withValues(alpha: 0.45),
         disabledForegroundColor: Colors.white,
-        minimumSize: const Size.fromHeight(48),
+        // Do NOT use Size.fromHeight(48) — that sets min width to infinity and
+        // crushes sibling TextFields in Rows (chat composer looked “missing”).
+        minimumSize: const Size(64, 48),
         elevation: 0,
         shadowColor: const Color(0x38E30613),
         shape: shape14,
@@ -77,7 +79,7 @@ ThemeData passengerTheme() {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         foregroundColor: brandInk,
-        minimumSize: const Size.fromHeight(48),
+        minimumSize: const Size(64, 48),
         side: const BorderSide(color: brandLine),
         backgroundColor: brandChip,
         shape: shape14,

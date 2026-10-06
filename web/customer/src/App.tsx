@@ -991,10 +991,11 @@ function Home({
   }
 
   async function sendSos() {
-    if (!trip) {
+    if (!trip?.canSos) {
       setError('SOS is available during an active ride.')
       return
     }
+    if (!window.confirm('Send SOS? Alert operators and share your location for this trip.')) return
     setSosBusy(true)
     setError('')
     const cached = lastKnownGps()
@@ -1128,11 +1129,14 @@ function Home({
     }
   }
 
+  const vehiclePickMode = tab === 'home' && !trip && !pendingRate.trip && bookStep === 1
+  const hideMap = tab === 'rental' || tab === 'account' || tab === 'favorites' || tab === 'booking' || vehiclePickMode
+
   return (
     <>
-      <div className="map" ref={mapEl} aria-hidden={tab === 'rental' || tab === 'account' || tab === 'favorites' || tab === 'booking'} style={tab === 'rental' || tab === 'account' || tab === 'favorites' || tab === 'booking' ? { visibility: 'hidden', pointerEvents: 'none' } : undefined} />
+      <div className="map" ref={mapEl} aria-hidden={hideMap} style={hideMap ? { visibility: 'hidden', pointerEvents: 'none' } : undefined} />
       <div className="hud">
-        {tab === 'home' ? (
+        {tab === 'home' && !vehiclePickMode ? (
         <div className="topbar">
           <div className="brand-col">
             {pabiliEnabled ? (
@@ -1167,17 +1171,92 @@ function Home({
             )}
             {installNote && <p className="install-note">{installNote}</p>}
           </div>
-          {!trip && !lockedRider && !pendingRate.trip && (
-            <ShowQrButton onClick={() => setShowQr(true)} />
-          )}
+          <div className="topbar-actions">
+            {trip?.canSos ? (
+              <button
+                type="button"
+                className="map-sos"
+                disabled={sosBusy}
+                onClick={() => void sendSos()}
+                aria-label="SOS"
+              >
+                {sosBusy ? '…' : 'SOS'}
+              </button>
+            ) : null}
+            {(!pendingRate.trip && (trip || (!lockedRider && bookStep > 1))) ? (
+              <ShowQrButton onClick={() => setShowQr(true)} />
+            ) : null}
+          </div>
         </div>
         ) : null}
-        {tab === 'home' && (
+
+        {vehiclePickMode && (
+          <section className="panel page-panel vehicle-pick-page">
+            <div className="vehicle-pick-head">
+              <img className="vehicle-pick-logo" src={brandLogo} alt="" />
+              <h2>Pick the type you want</h2>
+              <ShowQrButton onClick={() => setShowQr(true)} />
+            </div>
+            {lockedRider && (
+              <div className="hail">
+                {lockedRider.photoUrl
+                  ? <img src={mediaUrl(lockedRider.photoUrl)} alt="" />
+                  : <div className="hail-fallback">{lockedRider.fullName.slice(0, 1)}</div>}
+                <div>
+                  <b>{lockedRider.fullName}</b>
+                  <small>
+                    {favoritePick && !hail ? 'Favorite · ' : ''}
+                    {[lockedRider.plateNumber, lockedRider.vehicleModel || lockedRider.vehicleType].filter(Boolean).join(' · ')}
+                    {lockedRider.isOnline ? '' : ' · Offline'}
+                    {lockedRider.isBusy ? ' · On a trip' : ''}
+                  </small>
+                </div>
+                <div className="hail-actions">
+                  {lockedRider.phoneNumber && <a className="call" href={`tel:${lockedRider.phoneNumber}`}>Call</a>}
+                  <button type="button" className="ghost hail-clear" onClick={() => void clearHail()}>Clear</button>
+                </div>
+              </div>
+            )}
+            <div className="vehicles vehicles-list vehicles-pick">
+              {rideOptions.map((item) => {
+                const type = item.vehicleType as VehicleType
+                const categoryId = 'id' in item && item.id !== type ? String(item.id) : null
+                const itemKey = quoteKey(type, categoryId)
+                const canSelect = !('available' in item) || item.available !== false
+                const selected = type === preferredType
+                const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
+                return (
+                  <button
+                    key={itemKey}
+                    type="button"
+                    disabled={!canSelect}
+                    className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
+                    onClick={() => { if (canSelect) selectPreferredType(type, categoryId) }}
+                  >
+                    <span className="icon art-row">
+                      <img src={vehicleArt(type, iconKey)} alt="" />
+                    </span>
+                    <span className="copy">
+                      <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
+                      {!canSelect ? <small className="muted">Not offered</small> : null}
+                    </span>
+                    <span className="vehicle-chevron" aria-hidden>{selected ? '✓' : '›'}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {!lockedRider && !noOperator.vehiclesReady && (
+              <p className="muted" style={{ margin: '8px 0 0' }}>Checking available vehicles…</p>
+            )}
+          </section>
+        )}
+
+        {tab === 'home' && !vehiclePickMode && (
           <div className="home-dock">
             <button className="locate" type="button" disabled={locating} onClick={() => void useCurrentLocation(false)} aria-label="My location">
               <LocateIcon />
             </button>
-            <section className={`panel book-sheet${trip || pendingRate.trip ? ' live' : ''}`}>
+            <section className={`panel book-sheet${trip || pendingRate.trip ? ' live' : ''}${!trip && !pendingRate.trip && bookStep === 2 ? ' step-2' : ''}${!trip && !pendingRate.trip && bookStep === 3 ? ' step-3' : ''}`}>
             {trip ? (
               <TripPanel trip={trip} brandName={brandName} onDesk={onDesk} onError={setError} />
             ) : pendingRate.trip ? (
@@ -1207,7 +1286,7 @@ function Home({
                     aria-expanded={bookSheetOpen}
                   >
                     <h2 className="where">
-                      {bookStep === 1 ? 'Choose a vehicle' : bookStep === 2 ? 'Set your route' : 'Choose your ride'}
+                      {bookStep === 2 ? 'Pickup and drop-off' : 'Choose your ride'}
                     </h2>
                     <span className="where-chevron" aria-hidden>{bookSheetOpen ? '▾' : '▸'}</span>
                   </button>
@@ -1241,41 +1320,6 @@ function Home({
                   </div>
                 )}
 
-                {bookStep === 1 && (
-                  <>
-                    <p className="muted book-step-lead">Pick the vehicle you want first. You can still switch on the fare screen.</p>
-                    <div className="vehicles">
-                      {rideOptions.map((item) => {
-                        const type = item.vehicleType as VehicleType
-                        const categoryId = 'id' in item && item.id !== type ? String(item.id) : null
-                        const itemKey = quoteKey(type, categoryId)
-                        const canSelect = !('available' in item) || item.available !== false
-                        const selected = type === preferredType
-                        const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
-                        return (
-                          <button
-                            key={itemKey}
-                            type="button"
-                            disabled={!canSelect}
-                            className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
-                            onClick={() => { if (canSelect) selectPreferredType(type, categoryId) }}
-                          >
-                            <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
-                              <img src={vehicleArt(type, iconKey)} alt="" />
-                            </span>
-                            <span className="copy">
-                              <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                    {!lockedRider && !noOperator.vehiclesReady && (
-                      <p className="muted" style={{ margin: '8px 0 0' }}>Checking available vehicles…</p>
-                    )}
-                  </>
-                )}
-
                 {bookStep === 2 && (
                   <>
                     <p className="muted book-step-lead">Preferred: <b>{vehicleLabel(preferredType)}</b></p>
@@ -1297,7 +1341,7 @@ function Home({
                     </div>
                     {error && !isOperatorCoverageError(error) && <p className="error">{error}</p>}
                     <NoOperatorNotice show={noOperator.uncovered} />
-                    <button className="primary" type="button" onClick={goToChooseRide}>Continue</button>
+                    <button className="primary" type="button" onClick={goToChooseRide}>Continue to fares</button>
                   </>
                 )}
 
@@ -1335,7 +1379,7 @@ function Home({
                               setPassengers(cargo || max <= 1 ? 1 : Math.min(passengers, max))
                             }}
                           >
-                            <span className={`icon${type === 'Motorcycle' ? ' moto' : ''}`}>
+                            <span className="icon art-row">
                               <img src={vehicleArt(type, iconKey)} alt="" />
                             </span>
                             <span className="copy">
@@ -1523,16 +1567,6 @@ function Home({
           <button className={tab === 'booking' ? 'on' : ''} onClick={() => onTab('booking')}>
             <span className="ico"><BookingIcon /></span>
             Booking
-          </button>
-          <button
-            type="button"
-            className="nav-sos"
-            disabled={sosBusy}
-            onClick={() => void sendSos()}
-            aria-label="SOS"
-          >
-            <span className="ico"><SosIcon /></span>
-            {sosBusy ? '…' : 'SOS'}
           </button>
           {rentalEnabled ? (
             <button className={tab === 'rental' ? 'on' : ''} type="button" onClick={() => onTab('rental')}>
@@ -1949,16 +1983,6 @@ function RentalIcon() {
       <circle cx="7.5" cy="16.5" r="1.6" {...navStroke()} />
       <circle cx="16.5" cy="16.5" r="1.6" {...navStroke()} />
       <path d="M8 8.2 9.4 5.8h5.2L16 8.2" {...navStroke()} />
-    </svg>
-  )
-}
-
-function SosIcon() {
-  return (
-    <svg width="18" height="16" viewBox="0 0 24 22" aria-hidden="true">
-      <path d="M12 1.4 1.2 20.6h21.6L12 1.4z" fill="currentColor" />
-      <path d="M12 8.2v6.2" stroke="#e30613" strokeWidth="2.2" strokeLinecap="round" />
-      <circle cx="12" cy="17.2" r="1.25" fill="#e30613" />
     </svg>
   )
 }

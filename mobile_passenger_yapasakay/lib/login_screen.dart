@@ -8,6 +8,9 @@ import 'session.dart';
 import 'theme.dart';
 import 'vehicle_art.dart';
 
+/// Same pattern as Ya Pabili / TryGoRide passenger:
+/// 1) Native Google Sign-In (needs Android OAuth client + SHA-1 in Google Cloud)
+/// 2) Only if that returns developer error 10 → browser OAuth once
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.session});
 
@@ -19,40 +22,87 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _loading = false;
+  String? _localError;
+  GoogleSignIn? _google;
   static const _callbackScheme = 'yapasakay-passenger';
+
+  CustomerApi get _api => widget.session.api;
 
   Future<String> _ensureGoogleClientId() async {
     var clientId = widget.session.googleClientId;
     if (clientId == null || clientId.isEmpty) {
-      final auth = await widget.session.api.authConfig();
+      final auth = await _api.authConfig();
       clientId = asTextOrNull(auth['googleClientId']);
       widget.session.googleClientId = clientId;
     }
     if (clientId == null || clientId.isEmpty) {
-      throw Exception('Google sign-in is not configured.');
+      throw Exception('Google sign-in is not configured on the server.');
     }
     return clientId;
   }
 
-  /// Native Google Sign-In (same path as TryGoRide). Returns false if the user cancelled.
-  Future<bool> _nativeSignIn(String clientId) async {
-    final google = GoogleSignIn(
+  GoogleSignIn _googleClient(String clientId) {
+    return _google ??= GoogleSignIn(
       scopes: const ['email', 'profile'],
       serverClientId: clientId,
     );
-    final account = await google.signIn();
-    if (account == null) return false;
-    final auth = await account.authentication;
-    final idToken = auth.idToken;
-    if (idToken == null || idToken.isEmpty) {
-      throw Exception('Could not get Google ID token.');
-    }
-    await widget.session.googleLogin(idToken);
-    return true;
   }
 
-  Future<String> _browserTicket() async {
-    final authUrl = Uri.parse('${CustomerApi.productionBaseUrl}/mobile-auth').replace(
+  bool _isCancel(Object ex) {
+    final message = ex.toString().toLowerCase();
+    return message.contains('canceled') ||
+        message.contains('cancelled') ||
+        message.contains('sign_in_canceled') ||
+        message.contains('sign_in_cancelled') ||
+        message.contains('12501');
+  }
+
+  /// ApiException: 10 = DEVELOPER_ERROR (SHA-1 / Android OAuth client missing).
+  bool _needsBrowserFallback(Object ex) {
+    final message = ex.toString().toLowerCase();
+    if (message.contains('developer_error')) return true;
+    if (message.contains('q1: 10')) return true;
+    if (message.contains('sign_in_failed') && message.contains('10')) return true;
+    return false;
+  }
+
+  Future<void> _finishWithIdToken(String idToken) async {
+    await widget.session.googleLogin(idToken);
+    if (!widget.session.loggedIn) {
+      throw ApiException(widget.session.error ?? 'Could not sign in with Google.');
+    }
+  }
+
+  Future<GoogleSignInAccount?> _interactiveAccount(GoogleSignIn google) async {
+    var account = await google.signIn();
+    if (account != null) return account;
+    // Common Android quirk: first picker select returns null.
+    try {
+      await google.signOut();
+    } catch (_) {}
+    return google.signIn();
+  }
+
+  Future<String?> _idTokenFor(GoogleSignIn google, GoogleSignInAccount account) async {
+    var idToken = (await account.authentication).idToken;
+    if (idToken != null && idToken.isNotEmpty) return idToken;
+    try {
+      await google.disconnect();
+    } catch (_) {
+      try {
+        await google.signOut();
+      } catch (_) {}
+    }
+    final again = await google.signIn();
+    if (again == null) return null;
+    idToken = (await again.authentication).idToken;
+    if (idToken != null && idToken.isNotEmpty) return idToken;
+    return null;
+  }
+
+  Future<void> _browserSignIn() async {
+    final base = _api.baseUrl.trim().replaceAll(RegExp(r'/$'), '');
+    final authUrl = Uri.parse('$base/mobile-auth').replace(
       queryParameters: {
         'scheme': _callbackScheme,
         'package': 'com.yapasakay.passenger',
@@ -69,68 +119,58 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     if (ticket.isEmpty) {
       throw Exception(
-        'Google sign-in did not return to the app. On the browser page tap “Open Ya! Pasakay app”.',
+        'Sign-in did not return to the app. On the browser page tap “Open Ya! Pasakay app”.',
       );
     }
-    return ticket;
-  }
-
-  bool _isCancel(Object ex) {
-    final message = ex.toString().toLowerCase();
-    // 12501 = SIGN_IN_CANCELLED on Android Google Play Services.
-    return message.contains('canceled') ||
-        message.contains('cancelled') ||
-        message.contains('sign_in_canceled') ||
-        message.contains('sign_in_cancelled') ||
-        message.contains('12501');
-  }
-
-  bool _shouldFallbackToBrowser(Object ex) {
-    final message = ex.toString().toLowerCase();
-    // Common Android misconfig / Play Services / missing SHA-1 OAuth client.
-    return message.contains('apiexception') ||
-        message.contains('platformexception') ||
-        message.contains('developer_error') ||
-        message.contains('network_error') ||
-        message.contains('sign_in_failed') ||
-        message.contains('10:') ||
-        message.contains('12500');
+    await _api.redeemMobileAuthTicket(ticket);
+    await widget.session.restore();
+    if (!widget.session.loggedIn) {
+      throw ApiException(widget.session.error ?? 'Could not finish Google sign-in.');
+    }
   }
 
   Future<void> _signIn() async {
     if (_loading) return;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _localError = null;
+      widget.session.error = null;
+    });
     try {
       final clientId = await _ensureGoogleClientId();
+      final google = _googleClient(clientId);
 
+      // --- Native first (retry once on null account / missing id token) ---
       try {
-        final ok = await _nativeSignIn(clientId);
-        if (!ok) return;
-        if (mounted && widget.session.error != null && widget.session.error!.isNotEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.session.error!)));
+        final account = await _interactiveAccount(google);
+        if (account == null) return; // user cancelled
+        final idToken = await _idTokenFor(google, account);
+        if (idToken == null || idToken.isEmpty) {
+          throw Exception('Google sign-in failed. Try again.');
         }
+        await _finishWithIdToken(idToken);
         return;
       } catch (ex) {
         if (_isCancel(ex)) return;
-        if (!_shouldFallbackToBrowser(ex)) rethrow;
+        if (ex is ApiException) rethrow;
+        if (!_needsBrowserFallback(ex)) {
+          throw Exception('Google sign-in failed. Try again.');
+        }
+        // SHA-1 / Android OAuth client missing → browser once.
       }
 
-      final ticket = await _browserTicket();
-      await widget.session.api.redeemMobileAuthTicket(ticket);
-      await widget.session.restore();
-      if (mounted && widget.session.error != null && widget.session.error!.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(widget.session.error!)));
-      }
+      await _browserSignIn();
     } on ApiException catch (ex) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ex.message)));
+      setState(() => _localError = ex.message);
     } catch (ex) {
       if (!mounted) return;
       if (_isCancel(ex)) return;
       final message = ex.toString().replaceFirst('Exception: ', '').trim();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message.isEmpty ? 'Google sign-in failed.' : message)),
-      );
+      final friendly = message.contains('PlatformException') || message.contains('sign_in_failed')
+          ? 'Google sign-in failed. Try again.'
+          : (message.isEmpty ? 'Google sign-in failed. Try again.' : message);
+      setState(() => _localError = friendly);
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -138,7 +178,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final error = widget.session.error;
+    final error = _localError ?? widget.session.error;
     return Scaffold(
       backgroundColor: brandCanvas,
       body: SafeArea(
@@ -225,28 +265,31 @@ class _LoginScreenState extends State<LoginScreen> {
                     Text(error, style: const TextStyle(color: brandSos, fontWeight: FontWeight.w600)),
                   ],
                   const SizedBox(height: 18),
-                  OutlinedButton(
-                    onPressed: _loading || widget.session.busy ? null : _signIn,
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: brandRed, width: 2),
-                      foregroundColor: brandInk,
-                      minimumSize: const Size.fromHeight(52),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: _loading || widget.session.busy ? null : _signIn,
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: brandRed, width: 2),
+                        foregroundColor: brandInk,
+                        minimumSize: const Size(64, 52),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+                      ),
+                      child: _loading || widget.session.busy
+                          ? const SizedBox(
+                              width: 22,
+                              height: 22,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _GoogleMark(),
+                                SizedBox(width: 10),
+                                Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.w800)),
+                              ],
+                            ),
                     ),
-                    child: _loading || widget.session.busy
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              _GoogleMark(),
-                              SizedBox(width: 10),
-                              Text('Sign in with Google', style: TextStyle(fontWeight: FontWeight.w800)),
-                            ],
-                          ),
                   ),
                   const SizedBox(height: 12),
                   const Text(

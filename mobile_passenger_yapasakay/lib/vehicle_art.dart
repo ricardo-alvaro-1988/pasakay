@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 String vehicleLabel(String type) {
   switch (type) {
@@ -61,20 +60,55 @@ String _artKey(String? type, String? iconKey) {
   return type ?? 'Sedan';
 }
 
-Widget vehicleArtImage(String? type, {String? iconKey, double height = 44}) {
-  final key = _artKey(type, iconKey);
+String _assetFor(String key) {
   switch (key) {
     case 'Motorcycle':
-      return SvgPicture.asset('assets/vehicles/motorcycle.svg', height: height, fit: BoxFit.contain);
+      return 'assets/vehicles/motorcycle.png';
     case 'Tricycle':
-      return SvgPicture.asset('assets/vehicles/tricycle.svg', height: height, fit: BoxFit.contain);
+      return 'assets/vehicles/tricycle.png';
     case 'Tuktuk':
-      return SvgPicture.asset('assets/vehicles/tuktuk.svg', height: height);
+      return 'assets/vehicles/tuktuk.png';
     case 'Mpv':
+      return 'assets/vehicles/mpv.png';
     case 'Suv':
+      return 'assets/vehicles/suv.png';
     case 'Van':
-      return SvgPicture.asset('assets/vehicles/mpv.svg', height: height);
+      return 'assets/vehicles/van.png';
+    case 'PickupL300':
+      return 'assets/vehicles/pickup_l300.png';
+    case 'PickupCargo':
+      return 'assets/vehicles/pickup_cargo.png';
+    case 'Sedan':
     default:
-      return SvgPicture.asset('assets/vehicles/sedan.svg', height: height);
+      return 'assets/vehicles/sedan.png';
   }
+}
+
+Widget vehicleArtImage(String? type, {String? iconKey, double height = 44, double? width}) {
+  final key = _artKey(type, iconKey);
+  final h = height;
+  final w = width ?? height * 1.35;
+  // Decode at ~2–3x display width so high-res PNGs stay crisp on phones.
+  final dpr = WidgetsBinding.instance.platformDispatcher.views.isEmpty
+      ? 3.0
+      : WidgetsBinding.instance.platformDispatcher.views.first.devicePixelRatio;
+  final cacheW = (w * dpr * 1.5).round().clamp(128, 1536);
+  return SizedBox(
+    height: h,
+    width: w,
+    child: Image.asset(
+      _assetFor(key),
+      height: h,
+      width: w,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.high,
+      isAntiAlias: true,
+      cacheWidth: cacheW,
+      errorBuilder: (_, _, _) => SizedBox(
+        height: h,
+        width: w,
+        child: const Icon(Icons.directions_car, color: Color(0xFF667085)),
+      ),
+    ),
+  );
 }

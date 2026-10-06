@@ -91,7 +91,6 @@ function googleAuthorizeUrl(clientId: string, state: AuthState) {
     scope: 'openid email profile',
     nonce: state.nonce,
     state: encodeState(state),
-    prompt: 'select_account',
   })
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
 }

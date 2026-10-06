@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
 import 'chat_action_button.dart';
@@ -10,6 +11,7 @@ import 'directions.dart';
 import 'geocode.dart';
 import 'models.dart';
 import 'place_search.dart';
+import 'rate_dialog.dart';
 import 'session.dart';
 import 'share_trip.dart';
 import 'show_qr.dart';
@@ -52,6 +54,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _quoteDebounce;
   Set<Polyline> _polylines = {};
   String? _routeKey;
+  String? _ratingDismissedId;
+  bool _ratingPromptOpen = false;
+  bool _sosBusy = false;
+  static const _ratingDismissKey = 'yapasakay.rating_dismissed_trip_id';
 
   @override
   void initState() {
@@ -60,6 +66,23 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_initPickupGps());
     _applyHailIntent();
     unawaited(_syncRoute());
+    unawaited(_loadRatingDismissedThenPrompt());
+  }
+
+  Future<void> _loadRatingDismissedThenPrompt() async {
+    final prefs = await SharedPreferences.getInstance();
+    _ratingDismissedId = prefs.getString(_ratingDismissKey);
+    if (mounted) await _maybePromptRating();
+  }
+
+  Future<void> _persistRatingDismissed(String? tripId) async {
+    _ratingDismissedId = tripId;
+    final prefs = await SharedPreferences.getInstance();
+    if (tripId == null || tripId.isEmpty) {
+      await prefs.remove(_ratingDismissKey);
+    } else {
+      await prefs.setString(_ratingDismissKey, tripId);
+    }
   }
 
   @override
@@ -80,9 +103,73 @@ class _HomeScreenState extends State<HomeScreen> {
     final hasActive = widget.session.desk?.activeTrip != null;
     setState(() {
       // Never keep the Book spinner after a trip already exists on the desk.
-      if (hasActive) _booking = false;
+      if (hasActive) {
+        _booking = false;
+        _bookStep = 1;
+      }
     });
     unawaited(_syncRoute());
+    _maybePromptRating();
+  }
+
+  Future<void> _maybePromptRating() async {
+    if (!mounted || _ratingPromptOpen) return;
+    final pending = widget.session.desk?.pendingRating;
+    if (pending == null) return;
+    if (pending.id == _ratingDismissedId) return;
+    _ratingPromptOpen = true;
+    final result = await showCompletedRideRateDialog(
+      context,
+      trip: pending,
+      session: widget.session,
+    );
+    if (!mounted) return;
+    _ratingPromptOpen = false;
+    if (result == true) {
+      await _persistRatingDismissed(null);
+      await widget.session.refreshDesk(silent: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Thanks for your rating.')),
+        );
+      }
+    } else {
+      // Later / dismiss — persist so reopen does not re-spam the same trip.
+      await _persistRatingDismissed(pending.id);
+    }
+  }
+
+  Future<void> _sendSos(CustomerTrip trip) async {
+    if (_sosBusy || !trip.canSos) return;
+    final ok = await showPassengerConfirm(
+      context,
+      title: 'Send SOS?',
+      message: 'Alert operators and share your location for this trip.',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Send SOS',
+      confirmColor: brandSos,
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _sosBusy = true);
+    try {
+      double? lat;
+      double? lng;
+      try {
+        final pos = await Geolocator.getCurrentPosition();
+        lat = pos.latitude;
+        lng = pos.longitude;
+      } catch (_) {}
+      await widget.session.api.sos(trip.id, lat: lat, lng: lng);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SOS sent.')));
+      }
+    } on ApiException catch (ex) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(ex.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _sosBusy = false);
+    }
   }
 
   void _applyHailIntent() {
@@ -604,7 +691,72 @@ class _HomeScreenState extends State<HomeScreen> {
     final trikeOk = _serviceCheck?.tricycleAvailable ?? true;
     final customerId = widget.session.desk?.customerId ?? '';
     final topPad = MediaQuery.paddingOf(context).top;
+    final bottomInset = shellContentBottomInset(context);
 
+    // PAGE 1 — plain vehicle selection (no map)
+    if (active == null && _bookStep == 1) {
+      return Scaffold(
+        backgroundColor: brandCanvas,
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    ClipOval(
+                      child: Image.asset('assets/logo-circle.png', width: 36, height: 36, fit: BoxFit.cover),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text('Pick the type you want', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
+                    ),
+                    if (customerId.isNotEmpty)
+                      ShowQrButton(
+                        onPressed: () => showCustomerQrOverlay(context, customerId: customerId),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (hailed != null || hailId != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                  child: BrandPanel(
+                    child: Text(
+                      hailed != null
+                          ? 'Booking with ${hailed.fullName}'
+                          : 'Booking your favorite rider',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottomInset),
+                  children: [
+                    _VehicleGrid(
+                      vehicles: vehicles,
+                      selectedType: _preferredType,
+                      selectedCategoryId: null,
+                      quotes: const {},
+                      motoOk: motoOk,
+                      trikeOk: trikeOk,
+                      preferType: _preferredType,
+                      onSelect: _selectPreferredType,
+                      plainLarge: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // PAGE 2 (map + stops) / PAGE 3 (fares) / active trip
     return Scaffold(
       body: Stack(
         children: [
@@ -626,25 +778,74 @@ class _HomeScreenState extends State<HomeScreen> {
             right: 12,
             child: Row(
               children: [
-                Material(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(999),
-                  elevation: 2,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        ClipOval(
-                          child: Image.asset('assets/logo-circle.png', width: 28, height: 28, fit: BoxFit.cover),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text('Ya! Pasakay', style: TextStyle(fontWeight: FontWeight.w800)),
-                      ],
+                if (active == null && _bookStep > 1)
+                  Material(
+                    color: Colors.white,
+                    shape: const CircleBorder(),
+                    elevation: 2,
+                    child: IconButton(
+                      tooltip: 'Back',
+                      onPressed: () => setState(() {
+                        _bookStep -= 1;
+                        _error = null;
+                      }),
+                      icon: const Icon(Icons.arrow_back, color: brandInk),
+                    ),
+                  )
+                else
+                  Material(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(999),
+                    elevation: 2,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ClipOval(
+                            child: Image.asset('assets/logo-circle.png', width: 28, height: 28, fit: BoxFit.cover),
+                          ),
+                          const SizedBox(width: 8),
+                          const Text('Ya! Pasakay', style: TextStyle(fontWeight: FontWeight.w800)),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 const Spacer(),
+                if (active != null && active.canSos)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Material(
+                      color: brandSos,
+                      borderRadius: BorderRadius.circular(999),
+                      elevation: 3,
+                      child: InkWell(
+                        onTap: _sosBusy ? null : () => _sendSos(active),
+                        borderRadius: BorderRadius.circular(999),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_sosBusy)
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                )
+                              else
+                                const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'SOS',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 if (active == null && customerId.isNotEmpty)
                   ShowQrButton(
                     onPressed: () => showCustomerQrOverlay(context, customerId: customerId),
@@ -655,8 +856,8 @@ class _HomeScreenState extends State<HomeScreen> {
           Positioned(
             right: 14,
             bottom: _sheetOpen
-                ? MediaQuery.sizeOf(context).height * 0.48
-                : 110 + shellContentBottomInset(context),
+                ? MediaQuery.sizeOf(context).height * (_bookStep == 2 ? 0.52 : 0.78)
+                : 110 + bottomInset,
             child: FloatingActionButton.small(
               heroTag: 'locate',
               backgroundColor: Colors.white,
@@ -671,9 +872,10 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           DraggableScrollableSheet(
-            initialChildSize: 0.48,
+            key: ValueKey('book-sheet-${active?.id ?? 'none'}-$_bookStep'),
+            initialChildSize: active != null ? 0.42 : (_bookStep == 2 ? 0.50 : 0.75),
             minChildSize: 0.22,
-            maxChildSize: 0.9,
+            maxChildSize: 0.92,
             builder: (ctx, scroll) {
               return NotificationListener<DraggableScrollableNotification>(
                 onNotification: (n) {
@@ -689,7 +891,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   child: ListView(
                     controller: scroll,
-                    padding: EdgeInsets.fromLTRB(14, 10, 14, 16 + shellContentBottomInset(context)),
+                    padding: EdgeInsets.fromLTRB(14, 10, 14, 16 + bottomInset),
                     children: [
                       Center(
                         child: Container(
@@ -699,35 +901,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      InkWell(
-                        onTap: () => setState(() => _sheetOpen = !_sheetOpen),
-                        child: Row(
-                          children: [
-                            Text(
-                              active != null
-                                  ? 'Your ride'
-                                  : _bookStep == 1
-                                      ? 'Choose a vehicle'
-                                      : _bookStep == 2
-                                          ? 'Set your route'
-                                          : 'Choose your ride',
-                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
-                            ),
-                            const Spacer(),
-                            if (active == null && _bookStep > 1)
-                              IconButton(
-                                tooltip: 'Back',
-                                onPressed: () => setState(() {
-                                  _bookStep -= 1;
-                                  _error = null;
-                                }),
-                                icon: const Icon(Icons.arrow_back, color: brandMuted),
-                                visualDensity: VisualDensity.compact,
-                              )
-                            else
-                              const Icon(Icons.expand_more, color: brandMuted),
-                          ],
-                        ),
+                      Text(
+                        active != null
+                            ? 'Your ride'
+                            : _bookStep == 2
+                                ? 'Pickup and drop-off'
+                                : 'Choose your ride',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
                       ),
                       if (active != null) ...[
                         const SizedBox(height: 10),
@@ -737,189 +917,163 @@ class _HomeScreenState extends State<HomeScreen> {
                           unreadChat: widget.session.unreadChatCount,
                           onCancel: active.canCancel && !_cancelling ? () => _cancelActive(active) : null,
                           onShare: () => shareCustomerTrip(active),
-                          onChat: tripCanViewChat(status: active.status, canViewChat: active.canViewChat)
-                              ? () => openTripChatSheet(
-                                    context,
-                                    api: widget.session.api,
-                                    tripId: active.id,
-                                    status: active.status,
-                                    canChat: active.canChat,
-                                    onOpened: widget.session.clearChatUnread,
-                                  )
-                              : null,
+                          onChat: () => openTripChatSheet(
+                            context,
+                            session: widget.session,
+                            tripId: active.id,
+                            status: active.status,
+                            canChat: active.canChat,
+                            onOpened: widget.session.clearChatUnread,
+                          ),
+                        ),
+                      ] else if (_bookStep == 2) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Preferred: ${vehicleLabel(_preferredType)}',
+                          style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                        const SizedBox(height: 10),
+                        StopRail(
+                          pickup: _pickup,
+                          dropoff: _dropoff,
+                          onPickupTap: () => _pickStop(true),
+                          onDropoffTap: () => _pickStop(false),
+                          pickupHint: _locating ? 'Getting GPS…' : 'Tap to set pickup',
+                        ),
+                        if (_error != null) ...[
+                          const SizedBox(height: 8),
+                          Text(_error!, style: const TextStyle(color: brandSos, fontWeight: FontWeight.w600)),
+                        ],
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: _goToChooseRide,
+                            child: const Text('Continue to fares'),
+                          ),
                         ),
                       ] else ...[
-                        if (hailed != null || hailId != null) ...[
-                          const SizedBox(height: 10),
-                          BrandPanel(
-                            child: Text(
-                              hailed != null
-                                  ? 'Booking with ${hailed.fullName}'
-                                  : 'Booking your favorite rider',
-                              style: const TextStyle(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ],
-                        if (_bookStep == 1) ...[
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Pick the vehicle you want first. You can still switch on the fare screen.',
-                            style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600, fontSize: 13),
-                          ),
-                          const SizedBox(height: 12),
-                          _VehicleGrid(
-                            vehicles: vehicles,
-                            selectedType: _preferredType,
-                            selectedCategoryId: null,
-                            quotes: const {},
-                            motoOk: motoOk,
-                            trikeOk: trikeOk,
-                            preferType: _preferredType,
-                            onSelect: _selectPreferredType,
-                          ),
-                        ] else if (_bookStep == 2) ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            'Preferred: ${vehicleLabel(_preferredType)}',
-                            style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 13),
-                          ),
-                          const SizedBox(height: 10),
-                          StopRail(
-                            pickup: _pickup,
-                            dropoff: _dropoff,
-                            onPickupTap: () => _pickStop(true),
-                            onDropoffTap: () => _pickStop(false),
-                            pickupHint: _locating ? 'Getting GPS…' : 'Tap to set pickup',
-                          ),
-                          if (_error != null) ...[
-                            const SizedBox(height: 8),
-                            Text(_error!, style: const TextStyle(color: brandSos, fontWeight: FontWeight.w600)),
-                          ],
-                          const SizedBox(height: 14),
-                          FilledButton(
-                            onPressed: _goToChooseRide,
-                            child: const Text('Continue'),
-                          ),
-                        ] else ...[
-                          const SizedBox(height: 8),
-                          Text(
-                            '${_pickup?.label ?? 'Pickup'} → ${_dropoff?.label ?? 'Drop-off'}',
-                            style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12),
-                          ),
-                          const SizedBox(height: 10),
-                          _VehicleOfferList(
-                            vehicles: vehicles,
-                            selectedType: _vehicle,
-                            selectedCategoryId: _vehicleCategoryId,
-                            quotes: _quotes,
-                            motoOk: motoOk,
-                            trikeOk: trikeOk,
-                            preferType: _preferredType,
-                            quoting: _quoting,
-                            onSelect: (type, categoryId) {
-                              setState(() {
-                                _vehicle = type;
-                                _vehicleCategoryId = categoryId;
-                                _passengers = vehicleIsCargo(type)
-                                    ? 1
-                                    : _passengers.clamp(1, vehicleMaxPassengers(type));
-                                if (categoryId != null) {
-                                  _quote = _quotes[categoryId];
-                                } else {
-                                  Quote? match;
-                                  for (final q in _quotes.values) {
-                                    if (q.vehicleType == type) {
-                                      match = q;
-                                      break;
-                                    }
+                        const SizedBox(height: 6),
+                        Text(
+                          '${_pickup?.label ?? 'Pickup'} → ${_dropoff?.label ?? 'Drop-off'}',
+                          style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w700, fontSize: 12),
+                        ),
+                        const SizedBox(height: 10),
+                        _VehicleOfferList(
+                          vehicles: vehicles,
+                          selectedType: _vehicle,
+                          selectedCategoryId: _vehicleCategoryId,
+                          quotes: _quotes,
+                          motoOk: motoOk,
+                          trikeOk: trikeOk,
+                          preferType: _preferredType,
+                          quoting: _quoting,
+                          onSelect: (type, categoryId) {
+                            setState(() {
+                              _vehicle = type;
+                              _vehicleCategoryId = categoryId;
+                              _passengers = vehicleIsCargo(type)
+                                  ? 1
+                                  : _passengers.clamp(1, vehicleMaxPassengers(type));
+                              if (categoryId != null) {
+                                _quote = _quotes[categoryId];
+                              } else {
+                                Quote? match;
+                                for (final q in _quotes.values) {
+                                  if (q.vehicleType == type) {
+                                    match = q;
+                                    break;
                                   }
-                                  _quote = match ?? _quote;
                                 }
-                              });
-                              _scheduleQuote();
-                            },
-                          ),
-                          if (_showPassengerPicker) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                Text(
-                                  'Passengers (max $_maxPassengers)',
-                                  style: const TextStyle(fontWeight: FontWeight.w700),
-                                ),
-                                const Spacer(),
-                                _PassengerStepButton(
-                                  icon: Icons.remove_circle_outline,
-                                  onPressed: _passengers <= 1
-                                      ? null
-                                      : () {
-                                          setState(() => _passengers -= 1);
-                                          _scheduleQuote();
-                                        },
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  child: Text('$_passengers', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                                ),
-                                _PassengerStepButton(
-                                  icon: Icons.add_circle_outline,
-                                  onPressed: _passengers >= _maxPassengers
-                                      ? null
-                                      : () {
-                                          setState(() => _passengers += 1);
-                                          _scheduleQuote();
-                                        },
-                                ),
-                              ],
-                            ),
-                          ],
+                                _quote = match ?? _quote;
+                              }
+                            });
+                            _scheduleQuote();
+                          },
+                        ),
+                        if (_showPassengerPicker) ...[
                           const SizedBox(height: 8),
                           Row(
-                            children: ['Cash', 'GCash', 'Maya', 'Other'].map((p) {
-                              final on = _payment == p;
-                              return Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                                  child: Material(
-                                    color: on ? brandRed : brandChip,
-                                    borderRadius: BorderRadius.circular(999),
-                                    child: InkWell(
-                                      onTap: () {
-                                        setState(() => _payment = p);
+                            children: [
+                              Text(
+                                'Passengers (max $_maxPassengers)',
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const Spacer(),
+                              _PassengerStepButton(
+                                icon: Icons.remove_circle_outline,
+                                onPressed: _passengers <= 1
+                                    ? null
+                                    : () {
+                                        setState(() => _passengers -= 1);
                                         _scheduleQuote();
                                       },
-                                      borderRadius: BorderRadius.circular(999),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(vertical: 10),
-                                        child: Text(
-                                          p.toUpperCase(),
-                                          textAlign: TextAlign.center,
-                                          style: TextStyle(
-                                            color: on ? Colors.white : brandInk,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 11,
-                                          ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                child: Text('$_passengers', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                              ),
+                              _PassengerStepButton(
+                                icon: Icons.add_circle_outline,
+                                onPressed: _passengers >= _maxPassengers
+                                    ? null
+                                    : () {
+                                        setState(() => _passengers += 1);
+                                        _scheduleQuote();
+                                      },
+                              ),
+                            ],
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        Row(
+                          children: ['Cash', 'GCash', 'Maya', 'Other'].map((p) {
+                            final on = _payment == p;
+                            return Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 3),
+                                child: Material(
+                                  color: on ? brandRed : brandChip,
+                                  borderRadius: BorderRadius.circular(999),
+                                  child: InkWell(
+                                    onTap: () {
+                                      setState(() => _payment = p);
+                                      _scheduleQuote();
+                                    },
+                                    borderRadius: BorderRadius.circular(999),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      child: Text(
+                                        p.toUpperCase(),
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: on ? Colors.white : brandInk,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 11,
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              );
-                            }).toList(),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        if (_payment == 'Other') ...[
+                          const SizedBox(height: 8),
+                          TextField(
+                            decoration: const InputDecoration(labelText: 'Payment reference'),
+                            onChanged: (v) => _paymentRef = v,
                           ),
-                          if (_payment == 'Other') ...[
-                            const SizedBox(height: 8),
-                            TextField(
-                              decoration: const InputDecoration(labelText: 'Payment reference'),
-                              onChanged: (v) => _paymentRef = v,
-                            ),
-                          ],
-                          if (_error != null) ...[
-                            const SizedBox(height: 8),
-                            Text(_error!, style: const TextStyle(color: brandSos, fontWeight: FontWeight.w600)),
-                          ],
-                          const SizedBox(height: 14),
-                          FilledButton(
+                        ],
+                        if (_error != null) ...[
+                          const SizedBox(height: 8),
+                          Text(_error!, style: const TextStyle(color: brandSos, fontWeight: FontWeight.w600)),
+                        ],
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
                             onPressed: _booking || _quoting
                                 ? null
                                 : _quote == null
@@ -937,7 +1091,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         : 'Book ${vehicleLabel(_vehicle)} · ${peso(_quote!.displayFare)}',
                                   ),
                           ),
-                        ],
+                        ),
                       ],
                     ],
                   ),
@@ -1000,6 +1154,7 @@ class _VehicleGrid extends StatelessWidget {
     required this.trikeOk,
     required this.onSelect,
     this.preferType,
+    this.plainLarge = false,
   });
 
   final List<VehicleOffer> vehicles;
@@ -1010,6 +1165,7 @@ class _VehicleGrid extends StatelessWidget {
   final bool trikeOk;
   final String? preferType;
   final void Function(String type, String? categoryId) onSelect;
+  final bool plainLarge;
 
   @override
   Widget build(BuildContext context) {
@@ -1021,9 +1177,63 @@ class _VehicleGrid extends StatelessWidget {
       preferType: preferType,
     );
 
+    // Step 1: full-width rows — icon left, name aligned beside it.
+    if (plainLarge) {
+      return Column(
+        children: [
+          for (final item in items)
+            Builder(
+              builder: (context) {
+                final selected = item.id != null
+                    ? selectedCategoryId == item.id
+                    : selectedCategoryId == null && selectedType == item.type;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Material(
+                    color: selected ? brandAccentSoft : brandSurface,
+                    borderRadius: BorderRadius.circular(16),
+                    child: InkWell(
+                      onTap: () => onSelect(item.type, item.id),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: selected ? brandRed : brandLine,
+                            width: selected ? 2 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            vehicleArtImage(item.type, iconKey: item.iconKey, height: 64, width: 96),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Text(
+                                item.name,
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                              ),
+                            ),
+                            Icon(
+                              selected ? Icons.check_circle : Icons.chevron_right,
+                              color: selected ? brandRed : brandMuted,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      );
+    }
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        const gap = 6.0;
+        const gap = 10.0;
         final tileWidth = (constraints.maxWidth - gap * 2) / 3;
         return Wrap(
           spacing: gap,
@@ -1037,7 +1247,7 @@ class _VehicleGrid extends StatelessWidget {
                       : selectedCategoryId == null && selectedType == item.type;
                   return SizedBox(
                     width: tileWidth,
-                    height: item.price != null ? 84 : 76,
+                    height: 88,
                     child: Material(
                       color: brandSurface,
                       borderRadius: BorderRadius.circular(16),
@@ -1050,12 +1260,12 @@ class _VehicleGrid extends StatelessWidget {
                             border: Border.all(color: selected ? brandRed : brandLine, width: selected ? 2 : 1),
                             color: selected ? brandAccentSoft : brandSurface,
                           ),
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                          padding: const EdgeInsets.all(8),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              vehicleArtImage(item.type, iconKey: item.iconKey, height: 36),
-                              const SizedBox(height: 4),
+                              vehicleArtImage(item.type, iconKey: item.iconKey, height: 48, width: 68),
+                              const SizedBox(height: 6),
                               Text(
                                 item.name,
                                 maxLines: 1,
@@ -1063,11 +1273,6 @@ class _VehicleGrid extends StatelessWidget {
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11),
                               ),
-                              if (item.price != null)
-                                Text(
-                                  peso(item.price!),
-                                  style: const TextStyle(color: brandRed, fontWeight: FontWeight.w800, fontSize: 11),
-                                ),
                             ],
                           ),
                         ),
@@ -1150,13 +1355,13 @@ class _VehicleOfferList extends StatelessWidget {
                       ),
                       child: Row(
                         children: [
-                          vehicleArtImage(item.type, iconKey: item.iconKey, height: 40),
+                          vehicleArtImage(item.type, iconKey: item.iconKey, height: 60, width: 90),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(item.name, style: const TextStyle(fontWeight: FontWeight.w800)),
+                                Text(item.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                                 if (preferred)
                                   const Text(
                                     'Your first choice',

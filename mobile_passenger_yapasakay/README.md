@@ -23,6 +23,21 @@ Or pass Gradle property: `-PMAPS_API_KEY=...`
 
 Uses the web OAuth client id from `GET /api/public/auth` (`googleClientId`) as `serverClientId` so the backend can verify the ID token.
 
+Native Google Sign-In on Android also needs an **Android OAuth client** (same as Ya Pabili). Without it you get `ApiException: 10` (DEVELOPER_ERROR).
+
+**One-time Google Cloud setup** (same project as `GoogleAuth__ClientId`):
+
+1. Open [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials)
+2. **Create credentials → OAuth client ID → Android**
+3. Package name: `com.yapasakay.passenger`
+4. SHA-1 (debug / current APK signing key on this PC):
+
+   `B2:E7:DA:9F:56:16:2D:38:20:06:73:01:48:F5:22:51:73:40:68:68`
+
+5. Save. Wait ~5 minutes, reinstall the APK, then **Sign in with Google** works in-app like Pabili.
+
+If SHA-1 is missing, the app falls back to browser `/mobile-auth` once (no error 10 shown).
+
 ## Run / build
 
 ```bash

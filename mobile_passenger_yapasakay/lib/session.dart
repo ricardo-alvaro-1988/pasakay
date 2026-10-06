@@ -25,6 +25,9 @@ class CustomerSession extends ChangeNotifier {
   String? hailBookVehicleType;
   int unreadChatCount = 0;
   String? unreadChatTripId;
+  bool chatSheetOpen = false;
+  String? chatSheetTripId;
+  final List<ChatMessage> _liveChat = [];
 
   Timer? _poll;
   Timer? _hubDebounce;
@@ -71,13 +74,46 @@ class CustomerSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  void markChatOpen(String tripId) {
+    chatSheetOpen = true;
+    chatSheetTripId = tripId;
+    unreadChatCount = 0;
+    unreadChatTripId = null;
+    notifyListeners();
+  }
+
+  void markChatClosed() {
+    chatSheetOpen = false;
+    chatSheetTripId = null;
+    notifyListeners();
+  }
+
+  List<ChatMessage> takeLiveChat(String tripId) {
+    if (_liveChat.isEmpty) return const [];
+    final rows = _liveChat.where((m) {
+      final activeId = desk?.activeTrip?.id;
+      return activeId == null || activeId == tripId || chatSheetTripId == tripId;
+    }).toList();
+    _liveChat.clear();
+    return rows;
+  }
+
   void _onChatMessage(ChatMessage message) {
     if (!message.fromRider) return;
     final tripId = desk?.activeTrip?.id;
     if (tripId == null || tripId.isEmpty) return;
-    unreadChatCount += 1;
-    unreadChatTripId = tripId;
+
+    _liveChat.removeWhere((m) => m.id == message.id);
+    _liveChat.add(message);
+
+    final openHere = chatSheetOpen && chatSheetTripId == tripId;
+    if (!openHere) {
+      unreadChatCount += 1;
+      unreadChatTripId = tripId;
+    }
     notifyListeners();
+    // Rider chat means the trip is live — pull desk so canChat/status catch up.
+    unawaited(refreshDesk(silent: true));
   }
 
   void updateDesk(Desk next) {
@@ -173,10 +209,13 @@ class CustomerSession extends ChangeNotifier {
       busy = false;
       error = ex.message;
       notifyListeners();
-    } catch (_) {
+      throw ApiException(ex.message);
+    } catch (ex) {
       busy = false;
       error = 'Could not sign in.';
       notifyListeners();
+      if (ex is ApiException) rethrow;
+      throw ApiException(error!);
     }
   }
 
@@ -281,6 +320,9 @@ class CustomerSession extends ChangeNotifier {
     hailBookVehicleType = null;
     unreadChatCount = 0;
     unreadChatTripId = null;
+    chatSheetOpen = false;
+    chatSheetTripId = null;
+    _liveChat.clear();
     if (!silent) error = null;
     notifyListeners();
   }
