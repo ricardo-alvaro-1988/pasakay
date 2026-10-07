@@ -153,6 +153,7 @@ import {
 } from './side-nav'
 import { BrandingSettingsPage } from './BrandingSettings'
 import { RiderAppSettingsPage } from './RiderAppSettings'
+import { PassengerAppSettingsPage } from './PassengerAppSettings'
 import {
   applyBrand,
   DEFAULT_BRAND_NAME,
@@ -164,7 +165,7 @@ const OPERATOR_MENUS = flattenMenuGroups(OPERATOR_MENU_GROUPS)
 
 const COMING_SOON: Record<string, string> = {}
 
-type SettingsSection = 'general' | 'branding' | 'rider-app'
+type SettingsSection = 'general' | 'branding' | 'rider-app' | 'passenger-app'
 
 export default function App() {
   const [me, setMe] = useState<Me | null>(null)
@@ -767,8 +768,11 @@ function StatusTag({ active }: { active: boolean }) {
 }
 
 function TripStatusTag({ status }: { status: TripStatus }) {
-  const label = status === 'Completed' ? 'Complete' : status
-  return <span className={`tag trip ${status.toLowerCase()}`}>{label}</span>
+  const label = status === 'Completed' ? 'Complete'
+    : status === 'ScheduledAccepted' ? 'Scheduled accepted'
+    : status
+  const tone = status === 'Scheduled' || status === 'ScheduledAccepted' ? 'scheduled' : status.toLowerCase()
+  return <span className={`tag trip ${tone}`}>{label}</span>
 }
 
 function PromoTag({
@@ -822,6 +826,8 @@ function DiscountTag({ label }: { label?: string | null }) {
 const TRIP_STATUS_FILTERS: { value: TripStatus | ''; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'Pending', label: 'Pending' },
+  { value: 'Scheduled', label: 'Scheduled' },
+  { value: 'ScheduledAccepted', label: 'Scheduled accepted' },
   { value: 'Waiting', label: 'Waiting' },
   { value: 'Ongoing', label: 'Ongoing' },
   { value: 'Completed', label: 'Complete' },
@@ -1456,7 +1462,7 @@ function walletStatusClass(status: unknown) {
   }
 }
 
-function NavBadge({ count, tone }: { count: number; tone?: 'sos' | 'billing' | 'wallet' | 'delete' }) {
+function NavBadge({ count, tone }: { count: number; tone?: 'sos' | 'billing' | 'wallet' | 'delete' | 'schedule' }) {
   if (count <= 0) return null
   return <span className={`nav-badge${tone ? ` ${tone}` : ''}`}>{count > 99 ? '99+' : count}</span>
 }
@@ -3468,6 +3474,7 @@ function OperatorFormPage({
     pabiliFareSystemCommissionPercent: '10',
     pabiliMarkupSystemCommissionPercent: '10',
     pabiliEnabled: false,
+    rentalEnabled: false,
   })
   const [vehicleCommissions, setVehicleCommissions] = useState<Array<{
     vehicleCategoryId: string
@@ -3506,18 +3513,19 @@ function OperatorFormPage({
     }
     Promise.all([api.operator(operatorId), api.adminOperatorVehicleOffers(operatorId)])
       .then(([op, offers]) => {
-        setExisting(op)
-        setForm({
-          companyName: op.companyName,
-          contactName: op.contactName,
-          phone: op.contactPhone,
-          governmentIdType: op.governmentIdType ?? '',
-          governmentId: op.governmentId,
-          motorcycleCommissionPercent: String(op.motorcycleCommissionPercent ?? 10),
-          tricycleCommissionPercent: String(op.tricycleCommissionPercent ?? 5),
+      setExisting(op)
+      setForm({
+        companyName: op.companyName,
+        contactName: op.contactName,
+        phone: op.contactPhone,
+        governmentIdType: op.governmentIdType ?? '',
+        governmentId: op.governmentId,
+        motorcycleCommissionPercent: String(op.motorcycleCommissionPercent ?? 10),
+        tricycleCommissionPercent: String(op.tricycleCommissionPercent ?? 5),
           pabiliFareSystemCommissionPercent: String(op.pabiliFareSystemCommissionPercent ?? 10),
           pabiliMarkupSystemCommissionPercent: String(op.pabiliMarkupSystemCommissionPercent ?? 10),
           pabiliEnabled: !!op.pabiliEnabled,
+          rentalEnabled: !!op.rentalEnabled,
         })
         setVehicleCommissions(
           offers.map((offer) => ({
@@ -3528,13 +3536,13 @@ function OperatorFormPage({
             isEnabled: offer.isEnabled,
           })),
         )
-        setAddress({
-          province: op.address?.provinceId ? { id: op.address.provinceId, name: op.address.province } : null,
-          municipality: op.address?.municipalityId ? { id: op.address.municipalityId, name: op.address.municipality } : null,
-          barangay: op.address?.barangayId ? { id: op.address.barangayId, name: op.address.barangay } : null,
-          details: op.address?.details ?? '',
-        })
-        setAreas(op.areas ?? [])
+      setAddress({
+        province: op.address?.provinceId ? { id: op.address.provinceId, name: op.address.province } : null,
+        municipality: op.address?.municipalityId ? { id: op.address.municipalityId, name: op.address.municipality } : null,
+        barangay: op.address?.barangayId ? { id: op.address.barangayId, name: op.address.barangay } : null,
+        details: op.address?.details ?? '',
+      })
+      setAreas(op.areas ?? [])
       })
       .catch((err: Error) => setError(err.message))
   }, [operatorId])
@@ -3625,6 +3633,7 @@ function OperatorFormPage({
       data.append('pabiliFareSystemCommissionPercent', String(pabiliFareSystem))
       data.append('pabiliMarkupSystemCommissionPercent', String(pabiliMarkupSystem))
       data.append('pabiliEnabled', form.pabiliEnabled ? 'true' : 'false')
+      data.append('rentalEnabled', form.rentalEnabled ? 'true' : 'false')
       for (const area of areas) {
         data.append('barangayIds', area.barangayId)
       }
@@ -3816,6 +3825,16 @@ function OperatorFormPage({
               >
                 <option value="no">Off — customers see Scan instead</option>
                 <option value="yes">On — Pasakay / Pabili toggle available</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Activate Rental</span>
+              <select
+                value={form.rentalEnabled ? 'yes' : 'no'}
+                onChange={(e) => setForm({ ...form, rentalEnabled: e.target.value === 'yes' })}
+              >
+                <option value="no">Off — customers hide Rental tab</option>
+                <option value="yes">On — customers can schedule via Rental tab</option>
               </select>
             </label>
             <label className="field">
@@ -4534,7 +4553,7 @@ function BookingDetailPage({
         </div>
       </div>
       <BookingDetailsBody ride={ride} commissionView={commissionView} />
-      {allowReassign && (ride.status === 'Pending' || ride.status === 'Waiting') ? (
+      {allowReassign && (ride.status === 'Pending' || ride.status === 'Waiting' || ride.status === 'Scheduled' || ride.status === 'ScheduledAccepted') ? (
         <BookingReassign ride={ride} onAssigned={setRide} />
       ) : null}
     </div>
@@ -4548,6 +4567,7 @@ function BookingReassign({
   ride: RideDetail
   onAssigned: (ride: RideDetail) => void
 }) {
+  const unassigned = !ride.riderId
   const [query, setQuery] = useState('')
   const [riderId, setRiderId] = useState('')
   const [riderName, setRiderName] = useState('')
@@ -4566,10 +4586,10 @@ function BookingReassign({
 
   async function save() {
     if (!riderId) {
-      setError('Choose another rider from your fleet.')
+      setError('Choose a rider from your fleet.')
       return
     }
-    if (!window.confirm(`Reassign this booking to ${riderName}?`)) {
+    if (!window.confirm(`${unassigned ? 'Assign' : 'Reassign'} this booking to ${riderName}? The rider gets an offer. Nearby riders are not notified.`)) {
       return
     }
     setBusy(true)
@@ -4581,20 +4601,24 @@ function BookingReassign({
       setRiderName('')
       onAssigned(next)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reassign this booking.')
+      setError(err instanceof Error ? err.message : `Could not ${unassigned ? 'assign' : 'reassign'} this booking.`)
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <div className="detail-card" style={{ marginTop: 16 }}>
-      <span>Reassign rider</span>
-      <p className="muted" style={{ marginTop: 6 }}>Move this booking to another active rider. Fare updates if the vehicle type changes.</p>
+    <div className={`detail-card${unassigned ? ' assign-highlight' : ''}`} style={{ marginTop: 16 }}>
+      <span>{unassigned ? 'Assign rider' : 'Reassign rider'}</span>
+      <p className="muted" style={{ marginTop: 6 }}>
+        {unassigned
+          ? 'Pick a rider for this scheduled booking. They receive one offer. Nobody else is notified.'
+          : 'Move this booking to another active rider. Fare updates if the vehicle type changes.'}
+      </p>
       {error ? <p className="error">{error}</p> : null}
       <div className="form-grid" style={{ marginTop: 10 }}>
         <label className="field">
-          <span>New rider</span>
+          <span>{unassigned ? 'Rider' : 'New rider'}</span>
           <PersonSuggest
             value={query}
             onChange={(value) => { setQuery(value); setRiderId(''); setRiderName('') }}
@@ -4613,7 +4637,7 @@ function BookingReassign({
       </div>
       <div style={{ marginTop: 12, maxWidth: 220 }}>
         <button className="btn" type="button" disabled={busy || !riderId} onClick={() => void save()}>
-          {busy ? 'Reassigning…' : 'Reassign booking'}
+          {busy ? (unassigned ? 'Assigning…' : 'Reassigning…') : (unassigned ? 'Assign rider' : 'Reassign booking')}
         </button>
       </div>
     </div>
@@ -5513,32 +5537,32 @@ function RelatedFareRatesTable({
         passengerTiers: [{ ...tier, passengerCount: '1', [key]: value }],
       })
     }
-    return (
+  return (
       <div className="fare-tier-editor">
         <table className="fare-tier-table">
-          <thead>
-            <tr>
+        <thead>
+          <tr>
               <th>Base</th>
               <th>Incl. km</th>
               <th>Per km</th>
               <th>Min</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
               <td>
                 <input value={tier.baseFare} disabled={locked} onChange={(e) => patchRate('baseFare', e.target.value)} />
-              </td>
-              <td>
+            </td>
+            <td>
                 <input value={tier.includedKm} disabled={locked} onChange={(e) => patchRate('includedKm', e.target.value)} />
-              </td>
-              <td>
+            </td>
+            <td>
                 <input value={tier.perKm} disabled={locked} onChange={(e) => patchRate('perKm', e.target.value)} />
-              </td>
+            </td>
               <td>
                 <input value={tier.minimumFare} disabled={locked} onChange={(e) => patchRate('minimumFare', e.target.value)} />
               </td>
-            </tr>
+          </tr>
           </tbody>
         </table>
         <p className="muted" style={{ margin: '8px 0 0', fontSize: 12 }}>
@@ -5587,40 +5611,40 @@ function RelatedFareRatesTable({
             {tiers.map((tier, index) => (
               <tr key={`${vehicle}-${index}`}>
                 <td>
-                  <input
+                <input
                     value={tier.passengerCount}
                     disabled={locked}
                     onChange={(e) => updateTier(vehicle, tiers, index, 'passengerCount', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
+                />
+            </td>
+            <td>
+                <input
                     value={tier.baseFare}
                     disabled={locked}
                     onChange={(e) => updateTier(vehicle, tiers, index, 'baseFare', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
+                />
+            </td>
+            <td>
+                <input
                     value={tier.includedKm}
                     disabled={locked}
                     onChange={(e) => updateTier(vehicle, tiers, index, 'includedKm', e.target.value)}
-                  />
-                </td>
-                <td>
-                  <input
+                />
+            </td>
+            <td>
+                <input
                     value={tier.perKm}
                     disabled={locked}
                     onChange={(e) => updateTier(vehicle, tiers, index, 'perKm', e.target.value)}
-                  />
-                </td>
+                />
+            </td>
                 <td>
                   <input
                     value={tier.minimumFare}
                     disabled={locked}
                     onChange={(e) => updateTier(vehicle, tiers, index, 'minimumFare', e.target.value)}
                   />
-                </td>
+            </td>
                 {editable ? (
                   <td className="fare-tier-actions">
                     <button
@@ -5631,12 +5655,12 @@ function RelatedFareRatesTable({
                     >
                       Remove
                     </button>
-                  </td>
+            </td>
                 ) : null}
-              </tr>
+          </tr>
             ))}
-          </tbody>
-        </table>
+        </tbody>
+      </table>
         {editable ? (
           <button type="button" className="btn tiny" disabled={locked} onClick={() => addTier(vehicle, tiers)} style={{ width: 'auto', justifySelf: 'start' }}>
             Add person tier
@@ -6242,8 +6266,8 @@ function BillingDetailPage({ operatorId, onBack }: { operatorId: string; onBack:
                   ))
                 : (
                   <>
-                    <VehicleTag type="Motorcycle" />
-                    <VehicleTag type="Tricycle" />
+              <VehicleTag type="Motorcycle" />
+              <VehicleTag type="Tricycle" />
                   </>
                 )}
             </div>
@@ -6270,8 +6294,8 @@ function BillingDetailPage({ operatorId, onBack }: { operatorId: string; onBack:
             ))
           ) : (
             <>
-              <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
-              <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
+          <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
+          <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
             </>
           )}
           <p className="muted">{data.riderCount} rider{data.riderCount === 1 ? '' : 's'}</p>
@@ -6587,31 +6611,36 @@ function SettingsPage({
         <button type="button" className={section === 'rider-app' ? 'on' : ''} onClick={() => onSection('rider-app')}>
           Rider app
         </button>
+        <button type="button" className={section === 'passenger-app' ? 'on' : ''} onClick={() => onSection('passenger-app')}>
+          Passenger app
+        </button>
       </div>
       {section === 'branding' ? (
         <BrandingSettingsPage onApplied={onBranding} />
       ) : section === 'rider-app' ? (
         <RiderAppSettingsPage />
+      ) : section === 'passenger-app' ? (
+        <PassengerAppSettingsPage />
       ) : (
-        <div className="grid-2">
-          <div className="card">
-            <h2>Vehicle types</h2>
-            <p>Locked for this product. Operators will assign one of these when they create a rider.</p>
-            <div className="chips" style={{ marginTop: 12 }}>
+      <div className="grid-2">
+        <div className="card">
+          <h2>Vehicle types</h2>
+          <p>Locked for this product. Operators will assign one of these when they create a rider.</p>
+          <div className="chips" style={{ marginTop: 12 }}>
               {PLATFORM_VEHICLE_TYPES.map((type) => (
                 <button key={type} type="button" className="on">{vehicleTypeLabel(type)}</button>
               ))}
               <button type="button" className="on">Custom</button>
-            </div>
-          </div>
-          <div className="card">
-            <h2>Appearance</h2>
-            <p>Same dashboard in dark and light. Choice is saved on this browser.</p>
-            <button className="btn" type="button" onClick={onTheme} style={{ maxWidth: 220, marginTop: 12 }}>
-              Switch to {theme === 'dark' ? 'light' : 'dark'} mode
-            </button>
           </div>
         </div>
+        <div className="card">
+          <h2>Appearance</h2>
+          <p>Same dashboard in dark and light. Choice is saved on this browser.</p>
+          <button className="btn" type="button" onClick={onTheme} style={{ maxWidth: 220, marginTop: 12 }}>
+            Switch to {theme === 'dark' ? 'light' : 'dark'} mode
+          </button>
+        </div>
+      </div>
       )}
     </div>
   )
@@ -7643,6 +7672,8 @@ function OperatorShell({
     openSos: 0,
     unreadBilling: 0,
     pendingAccountDeletes: 0,
+    unreadScheduled: 0,
+    unreadInbox: 0,
   })
   const [sosFlash, setSosFlash] = useState<OpsAlert | null>(null)
 
@@ -7655,13 +7686,23 @@ function OperatorShell({
   const loadAlerts = useCallback(() => {
     api.operatorAlerts()
       .then(setAlerts)
-      .catch(() => setAlerts({ pendingWalletRequests: 0, openSos: 0, unreadBilling: 0, pendingAccountDeletes: 0 }))
+      .catch(() => setAlerts({
+        pendingWalletRequests: 0,
+        openSos: 0,
+        unreadBilling: 0,
+        pendingAccountDeletes: 0,
+        unreadScheduled: 0,
+        unreadInbox: 0,
+      }))
   }, [])
 
   useEffect(() => {
     async function refresh() {
       if (page === 'billing') {
         await api.readOperatorBillingInbox().catch(() => {})
+      }
+      if (page === 'schedule') {
+        await api.readOperatorScheduledInbox().catch(() => {})
       }
       loadAlerts()
     }
@@ -7711,6 +7752,8 @@ function OperatorShell({
             if (id === 'wallet') return <NavBadge count={alerts.pendingWalletRequests} tone="wallet" />
             if (id === 'support') return <NavBadge count={alerts.openSos} tone="sos" />
             if (id === 'billing') return <NavBadge count={alerts.unreadBilling} tone="billing" />
+            if (id === 'schedule') return <NavBadge count={alerts.unreadScheduled ?? 0} tone="schedule" />
+            if (id === 'inbox') return <NavBadge count={alerts.unreadInbox ?? 0} tone="schedule" />
             if (id === 'customers') return <NavBadge count={alerts.pendingAccountDeletes} tone="delete" />
             return null
           }}
@@ -7772,6 +7815,7 @@ function OperatorShell({
           <OperatorInboxPage
             onOpenBilling={() => setPage('billing')}
             onOpenCustomers={() => setPage('customers')}
+            onOpenSchedule={() => setPage('schedule')}
           />
         )}
         {page === 'billing' && <OperatorBillingPage />}
@@ -8749,7 +8793,7 @@ function OperatorBookingList({
         <h2 style={{ margin: 0 }}>Booking</h2>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <PersonSuggest
-            value={q}
+              value={q}
             onChange={(value) => { setQ(value); setPage(1) }}
             placeholder="Search booking number, customer, or rider"
             items={suggestItems}
@@ -8807,7 +8851,11 @@ function OperatorBookingList({
                 </td>
               </tr>
             ) : items.map((row) => (
-              <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
+              <tr
+                key={row.id}
+                className={`clickable${row.status === 'Scheduled' || row.status === 'ScheduledAccepted' ? ' row-scheduled' : ''}`}
+                onClick={() => onOpen(row.id)}
+              >
                 <td>
                   <strong>{phDateTime(row.scheduledAtUtc ?? row.requestedAtUtc)}</strong>
                   <div><small>{row.reference}</small></div>
@@ -8876,7 +8924,7 @@ function OperatorBookingDetail({ id, onBack }: { id: string; onBack: () => void 
         loadKey={id}
         load={async () => {
           const ride = await api.operatorBooking(id)
-          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting')
+          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting' || ride.status === 'Scheduled' || ride.status === 'ScheduledAccepted')
           return ride
         }}
         onBack={onBack}
@@ -8948,7 +8996,8 @@ function OperatorDashboardPage() {
   }
 
   const columns: { key: keyof OperatorBookingBoard; title: string; hint: string }[] = [
-    { key: 'pending', title: 'Pending', hint: 'New bookings waiting to be accepted' },
+    { key: 'scheduled', title: 'Scheduled', hint: 'Future pickups. Assign a rider here. No nearby-driver search.' },
+    { key: 'pending', title: 'Pending', hint: 'New live bookings waiting to be accepted' },
     { key: 'waiting', title: 'Waiting', hint: 'Rider assigned, heading to pickup' },
     { key: 'ongoing', title: 'Ongoing', hint: 'Trip in progress' },
     { key: 'completed', title: 'Complete', hint: 'Finished trips' },
@@ -8984,6 +9033,7 @@ function OperatorDashboardPage() {
       </div>
       {error ? <p className="error">{error}</p> : null}
       <div className="stats">
+        <Stat label="Scheduled" value={board?.scheduled?.total ?? 0} tone="scheduled" />
         <Stat label="Pending" value={board?.pending.total ?? 0} tone="pending" />
         <Stat label="Waiting" value={board?.waiting.total ?? 0} tone="waiting" />
         <Stat label="Ongoing" value={board?.ongoing.total ?? 0} tone="ongoing" />
@@ -8992,7 +9042,7 @@ function OperatorDashboardPage() {
       {!board ? <p>Loading dashboard…</p> : (
         <div className="booking-board">
           {columns.map((column) => {
-            const data = board[column.key]
+            const data = board[column.key] ?? { total: 0, items: [] }
             return (
               <section key={column.key} className={`card booking-col tone-${column.key}`}>
                 <header>
@@ -9018,7 +9068,7 @@ function OperatorDashboardPage() {
                           discountPercent={ride.discountPercent}
                         />
                         <DiscountTag label={ride.fareDiscountLabel} />
-                        <TripStatusTag status={ride.status} />
+                      <TripStatusTag status={ride.status} />
                       </span>
                     </span>
                     <small>{ride.customerName}</small>
@@ -9028,7 +9078,7 @@ function OperatorDashboardPage() {
                       <PaymentMethodTag method={ride.paymentMethod} other={ride.paymentMethodOther} />
                       <em><FareAmount fare={ride.fare} customerFare={ride.customerFare} /></em>
                     </span>
-                    <small>{phDateTime(ride.requestedAtUtc)}</small>
+                    <small>{phDateTime(ride.scheduledAtUtc ?? ride.requestedAtUtc)}</small>
                   </button>
                 ))}
               </section>
@@ -9100,9 +9150,9 @@ function OperatorScheduleList({
   const pageSize = 10
 
   function reload() {
-    api.scheduledBookings(q, page, pageSize, statusFilter)
-      .then((data) => { setItems(data.items); setTotal(data.total); setError('') })
-      .catch((err: Error) => setError(err.message))
+      api.scheduledBookings(q, page, pageSize, statusFilter)
+        .then((data) => { setItems(data.items); setTotal(data.total); setError('') })
+        .catch((err: Error) => setError(err.message))
   }
 
   useEffect(() => {
@@ -9116,7 +9166,7 @@ function OperatorScheduleList({
   }, [q, statusFilter])
 
   async function cancelRow(row: ScheduledBooking) {
-    if (row.status !== 'Pending' && row.status !== 'Waiting') return
+    if (row.status !== 'Pending' && row.status !== 'Waiting' && row.status !== 'Scheduled' && row.status !== 'ScheduledAccepted') return
     if (!window.confirm(`Cancel scheduled booking ${row.reference}?`)) return
     setCancellingId(row.id)
     setError('')
@@ -9150,7 +9200,7 @@ function OperatorScheduleList({
         </div>
       </div>
       <p className="muted">
-        Create Immediate (live now) or Scheduled (future pickup) bookings with map stops, vehicle type, and Select or Broadcast dispatch.
+        Scheduled bookings wait here until you assign a rider. Riders are not notified until you assign. Immediate bookings can still Broadcast or Select.
       </p>
       <TripStatusFilter value={statusFilter} onChange={setStatusFilter} />
       {error ? <p className="error">{error}</p> : null}
@@ -9179,32 +9229,41 @@ function OperatorScheduleList({
                 </td>
               </tr>
             ) : items.map((row) => {
-              const canCancel = row.status === 'Pending' || row.status === 'Waiting'
+              const canCancel = row.status === 'Pending' || row.status === 'Waiting' || row.status === 'Scheduled' || row.status === 'ScheduledAccepted'
               return (
-                <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
-                  <td>
-                    <strong>{phDateTime(row.scheduledAtUtc)}</strong>
-                    <div><small>{row.reference}</small></div>
-                  </td>
-                  <td>
-                    <strong>{row.customerName}</strong>
-                    <div><small>{row.customerPhone}</small></div>
-                  </td>
-                  <td>
-                    {row.riderName}
-                    <div><small>{row.plateNumber}</small></div>
-                  </td>
-                  <td>
+              <tr key={row.id} className={`clickable${row.status === 'Scheduled' || row.status === 'ScheduledAccepted' ? ' row-scheduled' : ''}`} onClick={() => onOpen(row.id)}>
+                <td>
+                  <strong>{phDateTime(row.scheduledAtUtc)}</strong>
+                  <div><small>{row.reference}</small></div>
+                </td>
+                <td>
+                  <strong>{row.customerName}</strong>
+                  <div><small>{row.customerPhone}</small></div>
+                </td>
+                <td>
+                  {row.riderName}
+                  <div><small>{row.plateNumber}</small></div>
+                </td>
+                <td>
                     <small>{stopAddress(row.pickup)}</small>
                     <div><small>→ {stopAddress(row.dropoff)}</small></div>
-                  </td>
-                  <td><PaymentMethodTag method={row.paymentMethod} other={row.paymentMethodOther} /></td>
-                  <td><TripStatusTag status={row.status} /></td>
+                </td>
+                <td><PaymentMethodTag method={row.paymentMethod} other={row.paymentMethodOther} /></td>
+                <td><TripStatusTag status={row.status} /></td>
                   <td>
                     <FareAmount fare={row.fare} customerFare={row.customerFare} emphasize />
                     <DiscountTag label={row.fareDiscountLabel} />
                   </td>
                   <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                    {row.status === 'Scheduled' && !row.riderId ? (
+                      <button
+                        className="btn tiny"
+                        type="button"
+                        onClick={() => onOpen(row.id)}
+                      >
+                        Assign
+                      </button>
+                    ) : null}
                     {canCancel ? (
                       <button
                         className="btn tiny danger"
@@ -9216,7 +9275,7 @@ function OperatorScheduleList({
                       </button>
                     ) : null}
                   </td>
-                </tr>
+              </tr>
               )
             })}
           </tbody>
@@ -9251,6 +9310,10 @@ function OperatorScheduleForm({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (timing === 'scheduled') setDispatch('select')
+  }, [timing])
 
   const enabledOffers = useMemo(() => offers.filter((o) => o.isEnabled), [offers])
   const selectedOffer = enabledOffers.find((o) => o.vehicleCategoryId === vehicleCategoryId) ?? null
@@ -9317,7 +9380,7 @@ function OperatorScheduleForm({
       setError('Choose a vehicle type.')
       return
     }
-    if (dispatch === 'select' && !riderId) {
+    if (timing === 'immediate' && dispatch === 'select' && !riderId) {
       setError('Choose a rider, or switch to Broadcast.')
       return
     }
@@ -9339,7 +9402,7 @@ function OperatorScheduleForm({
       const saved = await api.createScheduledBooking({
         customerName: customerName.trim(),
         phone,
-        riderId: dispatch === 'select' ? riderId : null,
+        riderId: timing === 'scheduled' ? null : dispatch === 'select' ? riderId : null,
         isImmediate: timing === 'immediate',
         scheduledAtUtc,
         vehicleType: selectedOffer.vehicleType,
@@ -9388,6 +9451,7 @@ function OperatorScheduleForm({
         </label>
       ) : null}
 
+      {timing === 'immediate' ? (
       <div className="field wide" style={{ marginTop: 16 }}>
         <span>Rider dispatch</span>
         <div className="chips" style={{ marginTop: 6 }}>
@@ -9395,6 +9459,11 @@ function OperatorScheduleForm({
           <button type="button" className={dispatch === 'select' ? 'on' : ''} onClick={() => setDispatch('select')}>Select</button>
         </div>
       </div>
+      ) : (
+        <p className="muted" style={{ marginTop: 16 }}>
+          Scheduled bookings are saved unassigned. Assign a rider from the list after you save. Riders are not notified until then.
+        </p>
+      )}
 
       <div className="form-grid" style={{ marginTop: 12 }}>
         <label className="field">
@@ -9406,27 +9475,27 @@ function OperatorScheduleForm({
           <input value={phone} onChange={(e) => setPhone(e.target.value)} required inputMode="tel" placeholder="09…" />
         </label>
 
-        {dispatch === 'select' ? (
+        {dispatch === 'select' && timing === 'immediate' ? (
           <label className="field">
             <span>Rider *</span>
-            <PersonSuggest
-              value={riderQuery}
-              onChange={(value) => { setRiderQuery(value); setRiderId('') }}
-              placeholder="Search rider name, phone, or plate"
-              items={riders.map((row) => ({
-                id: row.id,
-                name: row.fullName,
-                phone: row.phoneNumber,
-                photoUrl: row.profilePhotoUrl,
-                extra: row.plateNumber,
-                vehicleType: row.vehicleType,
-              }))}
-              onPick={(item) => {
-                setRiderQuery(item.name)
-                setRiderId(item.id)
-              }}
-            />
-          </label>
+          <PersonSuggest
+            value={riderQuery}
+            onChange={(value) => { setRiderQuery(value); setRiderId('') }}
+            placeholder="Search rider name, phone, or plate"
+            items={riders.map((row) => ({
+              id: row.id,
+              name: row.fullName,
+              phone: row.phoneNumber,
+              photoUrl: row.profilePhotoUrl,
+              extra: row.plateNumber,
+              vehicleType: row.vehicleType,
+            }))}
+            onPick={(item) => {
+              setRiderQuery(item.name)
+              setRiderId(item.id)
+            }}
+          />
+        </label>
         ) : null}
 
         <div className="field wide">
@@ -9527,7 +9596,7 @@ function OperatorDeskLiveBookingDetail({ id, onBack }: { id: string; onBack: () 
         loadKey={id}
         load={async () => {
           const ride = await api.scheduledBooking(id)
-          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting')
+          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting' || ride.status === 'Scheduled' || ride.status === 'ScheduledAccepted')
           return ride
         }}
         onBack={onBack}
@@ -9571,7 +9640,7 @@ function OperatorScheduleDetail({ id, onBack }: { id: string; onBack: () => void
         loadKey={id}
         load={async () => {
           const ride = await api.scheduledBooking(id)
-          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting')
+          setCanCancel(ride.status === 'Pending' || ride.status === 'Waiting' || ride.status === 'Scheduled' || ride.status === 'ScheduledAccepted')
           return ride
         }}
         onBack={onBack}
@@ -9901,10 +9970,10 @@ function OperatorCustomerListPage({ onOpen }: { onOpen: (id: string) => void }) 
                 <td>{row.phoneNumber}</td>
                 <td>{phDate(row.registeredAtUtc)}</td>
                 <td>
-                <div className="tag-row" style={{ marginTop: 0 }}>
+                  <div className="tag-row" style={{ marginTop: 0 }}>
                   {row.isBlocked ? <span className="tag status inactive">Blocked</span> : <StatusTag active={row.isActive} />}
-                  {row.deleteStatus === 'Pending' ? <span className="tag pending">Delete requested</span> : null}
-                </div>
+                    {row.deleteStatus === 'Pending' ? <span className="tag pending">Delete requested</span> : null}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -10178,7 +10247,7 @@ function OperatorRiderList({
                   <div className="person-cell">
                     <ClickableAvatar name={row.fullName} photoUrl={row.profilePhotoUrl} />
                     <div>
-                      <strong>{row.fullName}</strong>
+                    <strong>{row.fullName}</strong>
                       {row.acceptsPabili ? (
                         <div className="tag-row" style={{ marginTop: 4 }}>
                           <span className="tag kind">Pabili</span>
@@ -11828,15 +11897,15 @@ function OperatorFaresPage() {
   function changeRates(vehicle: VehicleType, patch: Partial<FareDraft>) {
     const commissionPatch = patch.operatorCommissionPercent != null || patch.driverCommissionPercent != null
     if (vehicle === 'Motorcycle' || vehicle === 'Tricycle') {
-      if (linked && !commissionPatch) {
-        setMotorcycle((current) => ({ ...current, ...patch }))
-        setTricycle((current) => ({ ...current, ...patch }))
-        return
-      }
-      if (vehicle === 'Motorcycle') {
-        setMotorcycle((current) => applyCommission(current, data?.motorcycleCommissionPercent ?? 0, patch))
-      } else {
-        setTricycle((current) => applyCommission(current, data?.tricycleCommissionPercent ?? 0, patch))
+    if (linked && !commissionPatch) {
+      setMotorcycle((current) => ({ ...current, ...patch }))
+      setTricycle((current) => ({ ...current, ...patch }))
+      return
+    }
+    if (vehicle === 'Motorcycle') {
+      setMotorcycle((current) => applyCommission(current, data?.motorcycleCommissionPercent ?? 0, patch))
+    } else {
+      setTricycle((current) => applyCommission(current, data?.tricycleCommissionPercent ?? 0, patch))
       }
     }
   }
@@ -12464,17 +12533,17 @@ function OperatorSurchargesPage() {
                       ))}
                     </div>
                   </div>
-                  <div className="field wide">
-                    <span>Applies to</span>
-                    <div className="chips" style={{ marginTop: 8 }}>
+                <div className="field wide">
+                  <span>Applies to</span>
+                  <div className="chips" style={{ marginTop: 8 }}>
                       <button type="button" className={applyTo === 'Both' ? 'on' : ''} onClick={() => setApplyTo('Both')}>All platform types</button>
                       {PLATFORM_VEHICLE_TYPES.map((type) => (
                         <button key={type} type="button" className={applyTo === type ? 'on' : ''} onClick={() => setApplyTo(type)}>
                           {vehicleTypeLabel(type)}
                         </button>
                       ))}
-                    </div>
                   </div>
+                </div>
                 </>
               ) : null}
               <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Night" /></label>
@@ -12762,9 +12831,11 @@ function OperatorSupportDetail({ ticketId, onBack }: { ticketId: string; onBack:
 function OperatorInboxPage({
   onOpenBilling,
   onOpenCustomers,
+  onOpenSchedule,
 }: {
   onOpenBilling: () => void
   onOpenCustomers: () => void
+  onOpenSchedule: () => void
 }) {
   const [items, setItems] = useState<OperatorInboxItem[]>([])
   const [error, setError] = useState('')
@@ -12781,7 +12852,7 @@ function OperatorInboxPage({
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Inbox</h2>
-      <p className="muted">Billing records, account deletion requests, and platform announcements for your company.</p>
+      <p className="muted">Scheduled bookings, billing records, account deletion requests, and platform announcements for your company.</p>
       {error ? <p className="error">{error}</p> : null}
       {items.length === 0 ? <p>No notifications yet.</p> : (
         <div className="list">
@@ -12795,6 +12866,7 @@ function OperatorInboxPage({
               <div style={{ display: 'flex', gap: 8 }}>
                 {!item.readAtUtc ? <button className="btn tiny" type="button" onClick={() => void markRead(item.id)}>Mark read</button> : null}
                 {item.billId ? <button className="btn tiny" type="button" onClick={onOpenBilling}>Open billing</button> : null}
+                {item.kind === 'Scheduled' || item.kind === 'Rental' ? <button className="btn tiny" type="button" onClick={onOpenSchedule}>Open schedule</button> : null}
                 {item.kind === 'AccountDelete' ? <button className="btn tiny" type="button" onClick={onOpenCustomers}>Open customers</button> : null}
               </div>
             </div>
@@ -12839,8 +12911,8 @@ function OperatorBillingPage() {
             ))
           ) : (
             <>
-              <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
-              <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
+          <p className="muted" style={{ marginTop: 10 }}>Motorcycle {percent(data.motorcycleCommissionPercent)} · {peso(data.pendingMotorcycle)}</p>
+          <p className="muted">Tricycle {percent(data.tricycleCommissionPercent)} · {peso(data.pendingTricycle)}</p>
             </>
           )}
         </div>

@@ -415,7 +415,7 @@ public class RiderDeskController(
             return BadRequest(new { message = "This job offer expired." });
         }
 
-        if (offer.Trip.Status != TripStatus.Pending)
+        if (offer.Trip.Status is not (TripStatus.Pending or TripStatus.Scheduled))
         {
             return BadRequest(new { message = "Another rider already took this job." });
         }
@@ -452,7 +452,7 @@ public class RiderDeskController(
         var now = DateTime.UtcNow;
         offer.Trip.RiderId = rider.Id;
         offer.Trip.VehicleType = rider.VehicleType;
-        offer.Trip.Status = TripStatus.Waiting;
+        offer.Trip.Status = offer.Trip.ScheduledAtUtc is not null ? TripStatus.ScheduledAccepted : TripStatus.Waiting;
         offer.Trip.UpdatedAtUtc = now;
         offer.Status = OfferStatus.Accepted;
         offer.RespondedAtUtc = now;
@@ -543,7 +543,7 @@ public class RiderDeskController(
             return NotFound();
         }
 
-        if (trip.Status != TripStatus.Waiting)
+        if (trip.Status is not (TripStatus.Waiting or TripStatus.ScheduledAccepted))
         {
             return BadRequest(new { message = "Start the trip after you accept and arrive at pickup." });
         }
@@ -576,7 +576,7 @@ public class RiderDeskController(
             return NotFound();
         }
 
-        if (trip.Status is not (TripStatus.Waiting or TripStatus.Ongoing))
+        if (trip.Status is not (TripStatus.Waiting or TripStatus.Ongoing or TripStatus.ScheduledAccepted))
         {
             return BadRequest(new { message = "Apply the discount while the trip is with you." });
         }
@@ -823,7 +823,7 @@ public class RiderDeskController(
             return BadRequest(new { message = "This trip can no longer be cancelled." });
         }
 
-        if (trip.Status is not (TripStatus.Pending or TripStatus.Waiting))
+        if (trip.Status is not (TripStatus.Pending or TripStatus.Waiting or TripStatus.Scheduled or TripStatus.ScheduledAccepted))
         {
             return BadRequest(new { message = "This trip can no longer be cancelled." });
         }
@@ -859,7 +859,7 @@ public class RiderDeskController(
         var now = DateTime.UtcNow;
 
         var active = await db.Trips
-            .Where(x => x.RiderId == rider.Id && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing))
+            .Where(x => x.RiderId == rider.Id && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing || x.Status == TripStatus.ScheduledAccepted))
             .OrderByDescending(x => x.UpdatedAtUtc ?? x.RequestedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -891,7 +891,7 @@ public class RiderDeskController(
                 .Where(x => x.RiderId == rider.Id
                     && x.Status == OfferStatus.Offered
                     && x.ExpiresAtUtc >= now
-                    && x.Trip.Status == TripStatus.Pending)
+                    && (x.Trip.Status == TripStatus.Pending || x.Trip.Status == TripStatus.Scheduled))
                 .OrderByDescending(x => x.IsPreferred)
                 .ThenBy(x => x.DistanceKm ?? 999)
                 .ToListAsync(cancellationToken);

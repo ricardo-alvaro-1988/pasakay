@@ -129,7 +129,14 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
                 && db.Trips.Any(t => t.OperatorId == op.Id && t.CustomerId == x.Id),
             cancellationToken);
 
-        return Ok(new OperatorNavAlertsResponse(pendingWallet, openSos, unreadBilling, pendingAccountDeletes));
+        var unreadScheduled = await db.OperatorNotifications.CountAsync(
+            x => x.OperatorId == op.Id && x.Kind == NotificationKind.Scheduled && x.ReadAtUtc == null,
+            cancellationToken);
+        var unreadInbox = await db.OperatorNotifications.CountAsync(
+            x => x.OperatorId == op.Id && x.ReadAtUtc == null,
+            cancellationToken);
+
+        return Ok(new OperatorNavAlertsResponse(pendingWallet, openSos, unreadBilling, pendingAccountDeletes, unreadScheduled, unreadInbox));
     }
 
     [HttpGet("fleet")]
@@ -152,12 +159,13 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
         var live = await db.Trips
             .Where(x =>
                 x.OperatorId == op!.Id &&
+                x.RiderId != null &&
                 (x.Status == TripStatus.Pending || x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing) &&
                 (x.ScheduledAtUtc == null || x.Status != TripStatus.Pending || x.ScheduledAtUtc <= now))
             .Select(x => new { x.RiderId, x.Status, x.Reference, x.RequestedAtUtc })
             .ToListAsync(cancellationToken);
         var duty = live
-            .GroupBy(x => x.RiderId)
+            .GroupBy(x => x.RiderId!.Value)
             .ToDictionary(
                 group => group.Key,
                 group => group
@@ -219,6 +227,7 @@ public class OperatorController(AppDbContext db, TripBroadcastService broadcast)
             UploadUrls.FromPath(loaded.GovernmentIdPhotoPath),
             loaded.IsActive,
             loaded.PabiliEnabled,
+            loaded.RentalEnabled,
             loaded.MotorcycleCommissionPercent,
             loaded.TricycleCommissionPercent,
             loaded.PabiliFareSystemCommissionPercent,

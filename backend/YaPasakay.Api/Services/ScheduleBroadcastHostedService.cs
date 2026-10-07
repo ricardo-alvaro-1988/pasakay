@@ -1,6 +1,6 @@
 namespace YaPasakay.Api.Services;
 
-/// <summary>Wakes Pending scheduled trips when they enter the broadcast lead window.</summary>
+/// <summary>Sends T−10 pickup alarms for scheduled/rental trips. Does not broadcast to nearby riders.</summary>
 public sealed class ScheduleBroadcastHostedService(IServiceScopeFactory scopes, ILogger<ScheduleBroadcastHostedService> log)
     : BackgroundService
 {
@@ -15,6 +15,7 @@ public sealed class ScheduleBroadcastHostedService(IServiceScopeFactory scopes, 
                 await using var scope = scopes.CreateAsyncScope();
                 var broadcast = scope.ServiceProvider.GetRequiredService<TripBroadcastService>();
                 await broadcast.BroadcastDueScheduledAsync(stoppingToken);
+                await broadcast.SendDuePickupAlarmsAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

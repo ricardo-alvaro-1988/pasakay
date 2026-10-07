@@ -262,7 +262,7 @@ export type RiderApplicationStatusResult = {
   message: string | null
 }
 
-export type TripStatus = 'Completed' | 'Cancelled' | 'Ongoing' | 'Pending' | 'Waiting'
+export type TripStatus = 'Completed' | 'Cancelled' | 'Ongoing' | 'Pending' | 'Waiting' | 'Scheduled' | 'ScheduledAccepted'
 
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Other'
 
@@ -652,6 +652,7 @@ export type RideListItem = {
   promoCode?: string | null
   customerBoostAmount?: number
   fareDiscountLabel?: string | null
+  scheduledAtUtc?: string | null
 }
 
 export type RideDetail = {
@@ -683,7 +684,7 @@ export type RideDetail = {
   operatorId: string
   operatorName: string
   operatorPhone: string
-  riderId: string
+  riderId: string | null
   riderName: string
   riderPhone: string
   plateNumber: string
@@ -775,6 +776,7 @@ export type OperatorDetail = OperatorListItem & {
   liveBookingExpiryMinutes?: number
   scheduledBookingGraceMinutes?: number
   pabiliEnabled?: boolean
+  rentalEnabled?: boolean
 }
 
 export type CustomerListItem = {
@@ -977,6 +979,7 @@ export function fleetDuty(
   if (status === 'Ongoing') return 'ongoing'
   if (status === 'Waiting') return 'waiting'
   if (status === 'Pending') return 'pending'
+  if (status === 'Scheduled' || status === 'ScheduledAccepted') return 'waiting'
   if (!isOnline) return 'offline'
   if (lastLocationAtUtc) {
     const age = Date.now() - new Date(lastLocationAtUtc).getTime()
@@ -1348,6 +1351,8 @@ export type OperatorNavAlerts = {
   openSos: number
   unreadBilling: number
   pendingAccountDeletes: number
+  unreadScheduled?: number
+  unreadInbox?: number
 }
 
 export type AdminAlertItem = {
@@ -1397,6 +1402,7 @@ export type OperatorBookingBoard = {
   waiting: OperatorBookingColumn
   ongoing: OperatorBookingColumn
   completed: OperatorBookingColumn
+  scheduled: OperatorBookingColumn
 }
 
 export type ScheduledBooking = {
@@ -1445,7 +1451,7 @@ export type OperatorBookingListItem = {
 
 export type OperatorInboxItem = {
   id: string
-  kind: 'Billing' | 'Announcement' | 'Sos' | 'AccountDelete'
+  kind: 'Billing' | 'Announcement' | 'Sos' | 'AccountDelete' | 'Rental' | 'Scheduled'
   title: string
   body: string
   billId: string | null
@@ -2041,6 +2047,80 @@ export const api = {
     return new Promise<ReleasePayload>((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.open('POST', '/api/admin/rider-app')
+      const token = getToken()
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress?.(event.loaded, event.total)
+      }
+      xhr.onerror = () => reject(new Error('Upload failed before the server accepted the file.'))
+      xhr.onabort = () => reject(new Error('Upload was cancelled.'))
+      xhr.onload = () => {
+        if (xhr.status === 401) {
+          clearAuth()
+          reject(new Error(messageFromFailedResponse(xhr.status, xhr.responseText || 'Session expired. Sign in again.')))
+          return
+        }
+        if (xhr.status < 200 || xhr.status >= 300) {
+          reject(new Error(messageFromFailedResponse(xhr.status, xhr.responseText)))
+          return
+        }
+        try {
+          resolve(JSON.parse(xhr.responseText) as ReleasePayload)
+        } catch {
+          reject(new Error('The server did not return the published release.'))
+        }
+      }
+      xhr.send(data)
+    })
+  },
+  getPassengerApp: () =>
+    request<{
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }>('/api/admin/passenger-app'),
+  publishPassengerApp: (
+    body: { version: string; notes?: string; file: File },
+    onProgress?: (loaded: number, total: number) => void,
+  ) => {
+    const data = new FormData()
+    data.append('file', body.file)
+    data.append('version', body.version)
+    if (body.notes) data.append('notes', body.notes)
+    type ReleasePayload = {
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }
+    return new Promise<ReleasePayload>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', '/api/admin/passenger-app')
       const token = getToken()
       if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
       xhr.upload.onprogress = (event) => {
@@ -2946,6 +3026,8 @@ export const api = {
     request<OperatorInboxItem>(`/api/operator/inbox/${id}/read`, { method: 'POST' }),
   readOperatorBillingInbox: () =>
     request<{ message: string }>('/api/operator/inbox/read-billing', { method: 'POST' }),
+  readOperatorScheduledInbox: () =>
+    request<{ message: string }>('/api/operator/inbox/read-scheduled', { method: 'POST' }),
   operatorAlerts: () => request<OperatorNavAlerts>('/api/operator/alerts'),
   operatorBilling: () => request<BillingOperatorDetail>('/api/operator/billing'),
   operatorProvinces: () => request<IdName[]>('/api/operator/territories/provinces'),

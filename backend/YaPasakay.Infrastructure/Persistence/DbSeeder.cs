@@ -613,7 +613,7 @@ public static class DbSeeder
         var trips = await db.Trips.ToListAsync(cancellationToken);
         foreach (var trip in trips)
         {
-            if (!riders.TryGetValue(trip.RiderId, out var rider) || rider.PaymentMethods.Count == 0)
+            if (trip.RiderId is not Guid riderId || !riders.TryGetValue(riderId, out var rider) || rider.PaymentMethods.Count == 0)
             {
                 continue;
             }
@@ -672,12 +672,17 @@ public static class DbSeeder
 
         foreach (var trip in trips)
         {
-            if (!wallets.TryGetValue(trip.RiderId, out var wallet))
+            if (trip.RiderId is not Guid riderId)
             {
-                wallet = new RiderWallet { RiderId = trip.RiderId, Balance = 0 };
+                continue;
+            }
+
+            if (!wallets.TryGetValue(riderId, out var wallet))
+            {
+                wallet = new RiderWallet { RiderId = riderId, Balance = 0 };
                 db.RiderWallets.Add(wallet);
                 await db.SaveChangesAsync(cancellationToken);
-                wallets[trip.RiderId] = wallet;
+                wallets[riderId] = wallet;
             }
 
             var fare = fares.FirstOrDefault(x => x.OperatorId == trip.OperatorId && x.VehicleType == trip.VehicleType);
@@ -694,7 +699,7 @@ public static class DbSeeder
             db.RiderWalletTransactions.Add(new RiderWalletTransaction
             {
                 WalletId = wallet.Id,
-                RiderId = trip.RiderId,
+                RiderId = riderId,
                 Kind = WalletTransactionKind.Commission,
                 Status = WalletTransactionStatus.Approved,
                 Amount = amount,

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import {
   api,
   BookBody,
@@ -26,7 +26,6 @@ import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from '
 import { BookingHistoryRating, RateRidePanel } from './rate-ride'
 import { ServiceReceipt } from './service-receipt'
 import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
-
 const PAYMENT_METHODS: PaymentMethod[] = ['Cash', 'GCash', 'Maya', 'Other']
 
 export function PaymentBar({
@@ -489,7 +488,7 @@ export function ScheduleScreen({
         ...bookBody(vehicle, pickup, dropoff, payment, paymentRef, passengers, vehicleCategoryId, selectedMaxPassengers, selectedIsCargo),
         scheduledAtUtc,
       }))
-      setNote('Scheduled. Riders are notified about an hour before pickup.')
+      setNote('Scheduled. Your operator will assign a rider. You will be alerted 10 minutes before pickup.')
       setWhen(toPhInput(new Date(Date.now() + 60 * 60 * 1000).toISOString()))
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not schedule.'
@@ -844,7 +843,7 @@ export function FavoritesScreen({
   )
 }
 
-export type AccountPage = 'menu' | 'profile' | 'pin' | 'mobile' | 'delete' | 'terms' | 'privacy'
+export type AccountPage = 'menu' | 'profile' | 'mobile' | 'delete' | 'terms' | 'privacy'
 
 export function AccountHub({
   desk,
@@ -860,7 +859,6 @@ export function AccountHub({
   onLogout: () => void
 }) {
   if (page === 'profile') return <ProfileForm desk={desk} onDesk={onDesk} onBack={() => onPage('menu')} />
-  if (page === 'pin') return <PinForm desk={desk} onDesk={onDesk} onBack={() => onPage('menu')} />
   if (page === 'mobile') return <MobileForm desk={desk} onDesk={onDesk} onBack={() => onPage('menu')} />
   if (page === 'delete') return <DeleteForm desk={desk} onDesk={onDesk} onBack={() => onPage('menu')} />
   if (page === 'terms') return <Legal title="Terms and Condition" body={TERMS} onBack={() => onPage('menu')} />
@@ -868,20 +866,12 @@ export function AccountHub({
 
   return (
     <div className="page account-hub">
-      <header className="account-hero">
-        <div className="avatar lg">{(desk.fullName || 'C').trim().charAt(0).toUpperCase()}</div>
-        <div className="account-hero-copy">
-          <h2>{desk.fullName || 'Customer'}</h2>
-          <p className="muted">{desk.phoneNumber}</p>
-          <p className="muted">{desk.email || 'No email yet'}</p>
-        </div>
-      </header>
+      <AccountHero desk={desk} onDesk={onDesk} />
 
       <section className="account-group">
         <h3>Account management</h3>
         <div className="account-list">
           <button className="menu-row" type="button" onClick={() => onPage('profile')}>Profile</button>
-          <button className="menu-row" type="button" onClick={() => onPage('pin')}>{desk.hasPin ? 'Change PIN' : 'Set PIN'}</button>
           <button className="menu-row" type="button" onClick={() => onPage('mobile')}>Change mobile</button>
           <button className="menu-row danger-row" type="button" onClick={() => onPage('delete')}>Account deletion</button>
         </div>
@@ -943,36 +933,58 @@ function ProfileForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk
   )
 }
 
-function PinForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk) => void; onBack: () => void }) {
-  const [currentPin, setCurrentPin] = useState('')
-  const [pin, setPin] = useState('')
-  const [error, setError] = useState('')
+function AccountHero({ desk, onDesk }: { desk: Desk; onDesk: (desk: Desk) => void }) {
+  const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const photo = mediaUrl(desk.photoUrl)
+  const initial = (desk.fullName || 'C').trim().charAt(0).toUpperCase()
 
-  async function submit(e: FormEvent) {
-    e.preventDefault()
+  async function onFile(file?: File | null) {
+    if (!file) return
     setBusy(true)
     setError('')
     try {
-      onDesk(await api.setPin(pin, desk.hasPin ? currentPin : undefined))
-      onBack()
+      onDesk(await api.uploadProfilePhoto(file))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not save PIN.')
+      setError(err instanceof Error ? err.message : 'Could not upload photo.')
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <form className="page account-form" onSubmit={submit}>
-      <button className="ghost" type="button" onClick={onBack}>Back</button>
-      <h2>{desk.hasPin ? 'Change PIN' : 'Set PIN'}</h2>
-      <p className="muted">Use 4 to 6 digits. This PIN protects account changes.</p>
-      {desk.hasPin && <label className="field"><span>CURRENT PIN</span><input inputMode="numeric" value={currentPin} onChange={(e) => setCurrentPin(e.target.value)} /></label>}
-      <label className="field"><span>NEW PIN</span><input inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} /></label>
-      {error && <p className="error">{error}</p>}
-      <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save PIN'}</button>
-    </form>
+    <header className="account-hero">
+      <button
+        type="button"
+        className="avatar lg avatar-upload"
+        disabled={busy}
+        onClick={() => inputRef.current?.click()}
+        aria-label="Change profile photo"
+      >
+        {photo ? <img src={photo} alt="" /> : <span>{busy ? '…' : initial}</span>}
+        <span className="avatar-cam" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none">
+            <path d="M4 8h3l1.5-2h7L17 8h3a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z" stroke="currentColor" strokeWidth="2" />
+            <circle cx="12" cy="13" r="3" stroke="currentColor" strokeWidth="2" />
+          </svg>
+        </span>
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={(e) => void onFile(e.target.files?.[0])}
+      />
+      <div className="account-hero-copy">
+        <h2>{desk.fullName || 'Customer'}</h2>
+        <p className="muted">{desk.phoneNumber}</p>
+        <p className="muted">{desk.email || 'No email yet'}</p>
+        <p className="muted">Tap photo to change</p>
+        {error ? <p className="error">{error}</p> : null}
+      </div>
+    </header>
   )
 }
 
@@ -1009,7 +1021,6 @@ function MobileForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk)
 
 function DeleteForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk) => void; onBack: () => void }) {
   const [reason, setReason] = useState('')
-  const [pin, setPin] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -1018,7 +1029,7 @@ function DeleteForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk)
     setBusy(true)
     setError('')
     try {
-      onDesk(await api.deleteAccount(reason, desk.hasPin ? pin : undefined))
+      onDesk(await api.deleteAccount(reason))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit request.')
     } finally {
@@ -1036,7 +1047,6 @@ function DeleteForm({ desk, onDesk, onBack }: { desk: Desk; onDesk: (desk: Desk)
         <>
           <p className="muted">This asks Super Admin to close the account. It is not instant.</p>
           <label className="field"><span>REASON</span><input value={reason} onChange={(e) => setReason(e.target.value)} /></label>
-          {desk.hasPin && <label className="field"><span>PIN</span><input inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} /></label>}
           {error && <p className="error">{error}</p>}
           <button className="danger" disabled={busy}>{busy ? 'Submitting…' : 'Request deletion'}</button>
         </>
@@ -1057,13 +1067,13 @@ function Legal({ title, body, onBack }: { title: string; body: string; onBack: (
 
 const TERMS = `Ya! Pasakay is a ride-hailing platform that connects customers with motorcycle and tricycle riders operated by independent Operators.
 
-By creating an account you confirm that the name, mobile number, and email you provide are yours, and that you will keep your Google account and PIN confidential.
+By creating an account you confirm that the name, mobile number, and email you provide are yours, and that you will keep your Google account secure.
 
 Fares are quoted before you confirm a booking. Payment is collected according to the method you select (CASH, GCASH, MAYA, or OTHERS). The assigned rider must accept that method.
 
 You may cancel a booking before the trip is ongoing. SOS alerts your Operator and Super Admin with your location during an active trip.
 
-Scheduled bookings must be set at least 10 minutes in the future. Operators may assign or broadcast those jobs to riders in their service area.
+Scheduled bookings must be set at least 10 minutes in the future. Operators assign a rider; you and the rider are alerted 10 minutes before pickup.
 
 Ya! Pasakay may suspend accounts that abuse SOS, skip payment, or provide false identity details.`
 

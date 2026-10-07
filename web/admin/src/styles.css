@@ -1028,6 +1028,7 @@ input:-webkit-autofill:focus {
 .tag.trip.ongoing { background: rgba(122, 162, 255, 0.16); color: #7aa2ff; }
 .tag.trip.available { background: rgba(62, 207, 142, 0.16); color: #1ea36a; }
 .tag.trip.pending { background: rgba(255, 176, 32, 0.18); color: #d48b00; }
+.tag.trip.scheduled { background: #d48b00; color: #fff; font-weight: 700; }
 .tag.trip.waiting { background: rgba(155, 120, 255, 0.16); color: #9b78ff; }
 .tag.trip.offline { background: rgba(139, 147, 167, 0.18); color: #6b7280; }
 .tag.sos {
@@ -2062,6 +2063,11 @@ tr.clickable:hover { background: var(--bg-soft); }
   border-color: rgba(76, 175, 42, 0.4);
   background: linear-gradient(180deg, rgba(139, 227, 74, 0.14), var(--bg-elev) 88px);
 }
+.booking-col.tone-scheduled,
+.stats .tone-scheduled {
+  border-color: rgba(212, 139, 0, 0.7);
+  background: linear-gradient(180deg, rgba(255, 176, 32, 0.28), var(--bg-elev) 88px);
+}
 .stats .tone-pending label,
 .stats .tone-pending strong,
 .booking-col.tone-pending h2,
@@ -2078,10 +2084,15 @@ tr.clickable:hover { background: var(--bg-soft); }
 .stats .tone-completed strong,
 .booking-col.tone-completed h2,
 .booking-col.tone-completed header span { color: #4caf2a; }
+.stats .tone-scheduled label,
+.stats .tone-scheduled strong,
+.booking-col.tone-scheduled h2,
+.booking-col.tone-scheduled header span { color: #b36f00; }
 .booking-col.tone-pending { box-shadow: inset 5px 0 0 #d48b00; }
 .booking-col.tone-waiting { box-shadow: inset 5px 0 0 #9b78ff; }
 .booking-col.tone-ongoing { box-shadow: inset 5px 0 0 #7aa2ff; }
 .booking-col.tone-completed { box-shadow: inset 5px 0 0 #4caf2a; }
+.booking-col.tone-scheduled { box-shadow: inset 5px 0 0 #d48b00; }
 .booking-col header {
   display: flex;
   align-items: baseline;
@@ -2122,6 +2133,13 @@ tr.clickable:hover { background: var(--bg-soft); }
 .booking-col.tone-waiting .booking-card { border-left: 3px solid #9b78ff; }
 .booking-col.tone-ongoing .booking-card { border-left: 3px solid #7aa2ff; }
 .booking-col.tone-completed .booking-card { border-left: 3px solid #4caf2a; }
+.booking-col.tone-scheduled .booking-card { border-left: 3px solid #d48b00; }
+tr.row-scheduled td { background: rgba(255, 176, 32, 0.16); }
+tr.row-scheduled:hover td { background: rgba(255, 176, 32, 0.24); }
+.detail-card.assign-highlight {
+  border: 2px solid #d48b00;
+  background: rgba(255, 176, 32, 0.1);
+}
 .booking-card strong {
   font-size: 13px;
 }
@@ -2171,6 +2189,9 @@ tr.clickable:hover { background: var(--bg-soft); }
 }
 .nav-badge.delete {
   background: #d48b00;
+}
+.nav-badge.schedule {
+  background: #0f766e;
 }
 .shell.collapsed .nav-badge {
   position: absolute;

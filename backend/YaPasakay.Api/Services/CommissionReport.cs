@@ -93,8 +93,8 @@ public static class CommissionReport
             return new CommissionReportItem(
                 trip.Id,
                 trip.Reference,
-                trip.Rider.AppUser.FullName,
-                trip.RiderId,
+                trip.Rider?.AppUser.FullName ?? "Unassigned",
+                trip.RiderId ?? Guid.Empty,
                 trip.Operator.CompanyName,
                 trip.OperatorId,
                 breakdown?.DriverAmount ?? 0,

@@ -49,6 +49,59 @@ public class AuthController(
         return Ok(new { message = "OTP sent." });
     }
 
+    [HttpPost("customer-pin-login")]
+    public async Task<ActionResult<AuthResponse>> CustomerPinLogin(
+        [FromBody] CustomerPinLoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!PhoneNormalizer.TryNormalizePhMobile(request.Phone, out var phone, out var phoneError))
+        {
+            return BadRequest(new { message = phoneError });
+        }
+
+        var pin = (request.Pin ?? string.Empty).Trim();
+        if (!SecretHasher.IsPin(pin))
+        {
+            return BadRequest(new { message = "PIN must be 4 to 6 digits." });
+        }
+
+        var user = await db.Users.FirstOrDefaultAsync(x => x.PhoneNumber == phone, cancellationToken);
+        if (user?.IsLoginBlocked == true || await LoginBlocks.IsBlockedAsync(db, user?.Email, phone, cancellationToken))
+        {
+            return Unauthorized(new { message = LoginBlocks.Message });
+        }
+
+        if (user is null || !user.IsActive)
+        {
+            return Unauthorized(new { message = "No account for this number." });
+        }
+
+        if (user.Role != UserRole.Customer)
+        {
+            return Unauthorized(new { message = "Use the rider or operator sign-in for this number." });
+        }
+
+        var customer = await db.CustomerProfiles.FirstOrDefaultAsync(x => x.AppUserId == user.Id, cancellationToken);
+        if (customer is null || string.IsNullOrWhiteSpace(customer.PinHash))
+        {
+            return Unauthorized(new { message = "Set a PIN in Account after signing in with Google first." });
+        }
+
+        if (!SecretHasher.Verify(pin, customer.PinHash))
+        {
+            return Unauthorized(new { message = "Wrong phone or PIN." });
+        }
+
+        var blocked = await GateAsync(user, cancellationToken);
+        if (blocked is not null)
+        {
+            return blocked;
+        }
+
+        var me = await AdminAccess.ToMeAsync(db, user, cancellationToken);
+        return Ok(await IssueAsync(user, me, cancellationToken));
+    }
+
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] PasswordLoginRequest request, CancellationToken cancellationToken)
     {
@@ -235,6 +288,42 @@ public class AuthController(
 
         var me = await AdminAccess.ToMeAsync(db, user, cancellationToken);
         return Ok(await IssueAsync(user, me, cancellationToken));
+    }
+
+    [HttpPost("google/mobile-ticket")]
+    public async Task<ActionResult<object>> GoogleMobileTicket(
+        [FromBody] GoogleSignInRequest request,
+        CancellationToken cancellationToken)
+    {
+        var signedIn = await Google(request, cancellationToken);
+        AuthResponse? auth = signedIn.Value;
+        if (auth is null && signedIn.Result is OkObjectResult { Value: AuthResponse okAuth })
+        {
+            auth = okAuth;
+        }
+
+        if (auth is not null)
+        {
+            return Ok(new
+            {
+                ticket = MobileAuthTicketStore.Issue(auth),
+                expiresInSeconds = 300,
+            });
+        }
+
+        return signedIn.Result ?? BadRequest(new { message = "Google sign-in failed." });
+    }
+
+    [HttpPost("google/mobile-ticket/redeem")]
+    public ActionResult<AuthResponse> RedeemMobileTicket([FromBody] MobileAuthTicketRedeemRequest request)
+    {
+        var auth = MobileAuthTicketStore.Take(request.Ticket);
+        if (auth is null)
+        {
+            return BadRequest(new { message = "This sign-in link expired. Try Continue with Google again." });
+        }
+
+        return Ok(auth);
     }
 
     [HttpPost("refresh")]

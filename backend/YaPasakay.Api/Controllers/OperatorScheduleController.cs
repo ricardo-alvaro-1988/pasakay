@@ -37,7 +37,7 @@ public class OperatorScheduleController(
         pageSize = Math.Clamp(pageSize, 1, 50);
         var query = db.Trips
             .Include(x => x.Rider)
-            .ThenInclude(x => x.AppUser)
+            .ThenInclude(x => x!.AppUser)
             .Where(x => x.OperatorId == op!.Id && x.ScheduledAtUtc != null);
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -203,16 +203,20 @@ public class OperatorScheduleController(
         var passengers = VehicleCatalog.ClampPassengers(vehicle, isCargo, maxPassengers, request.PassengerCount);
         var fare = DeriveFarePricingService.ComputeMunicipalityWithSurcharges(fareRow, passengers, distance);
 
-        var provisionalRider = assignedRider ?? await PickProvisionalRiderAsync(
-            op.Id, vehicle, vehicleCategoryId, pickupLat, pickupLng, cancellationToken);
-        if (provisionalRider is null)
+        RiderProfile? tripRider = assignedRider;
+        if (scheduled is null)
         {
-            return BadRequest(new
+            tripRider = assignedRider ?? await PickProvisionalRiderAsync(
+                op.Id, vehicle, vehicleCategoryId, pickupLat, pickupLng, cancellationToken);
+            if (tripRider is null)
             {
-                message = selectMode
-                    ? "Choose an active rider from your fleet."
-                    : "No rider is available for that vehicle type yet. Add a rider or use Select."
-            });
+                return BadRequest(new
+                {
+                    message = selectMode
+                        ? "Choose an active rider from your fleet."
+                        : "No rider is available for that vehicle type yet. Add a rider or use Select."
+                });
+            }
         }
 
         var customer = await db.CustomerProfiles
@@ -223,11 +227,11 @@ public class OperatorScheduleController(
         var trip = new Trip
         {
             OperatorId = op.Id,
-            RiderId = provisionalRider.Id,
+            RiderId = tripRider?.Id,
             VehicleType = vehicle,
             VehicleCategoryId = vehicleCategoryId
                 ?? (VehicleTypeRules.IsKnown(vehicle) ? VehicleCatalog.IdFor(vehicle) : null),
-            Status = TripStatus.Pending,
+            Status = scheduled is null ? TripStatus.Pending : TripStatus.Scheduled,
             Pickup = pickupDetails,
             PickupDetails = pickupDetails,
             PickupBarangayId = pickup.Id,
@@ -258,7 +262,14 @@ public class OperatorScheduleController(
         };
         db.Trips.Add(trip);
         await db.SaveChangesAsync(cancellationToken);
-        await broadcast.BroadcastAsync(trip.Id, cancellationToken);
+        if (scheduled is null)
+        {
+            await broadcast.BroadcastAsync(trip.Id, cancellationToken);
+        }
+        else if (tripRider is not null)
+        {
+            await broadcast.OfferToAssignedRiderAsync(trip.Id, tripRider.Id, cancellationToken);
+        }
 
         var loaded = await OperatorMaps.RideDetailQuery(db)
             .FirstAsync(x => x.Id == trip.Id, cancellationToken);
@@ -282,7 +293,7 @@ public class OperatorScheduleController(
             return NotFound();
         }
 
-        if (trip.Status is not (TripStatus.Pending or TripStatus.Waiting))
+        if (trip.Status is not (TripStatus.Pending or TripStatus.Waiting or TripStatus.Scheduled or TripStatus.ScheduledAccepted))
         {
             return BadRequest(new { message = "This booking can no longer be cancelled." });
         }
@@ -440,7 +451,7 @@ public class OperatorScheduleController(
             trip.CustomerName,
             trip.CustomerPhone,
             trip.RiderId,
-            trip.Rider?.AppUser?.FullName ?? "Broadcast",
+            trip.Rider?.AppUser?.FullName ?? "Unassigned",
             trip.Rider?.PlateNumber ?? "—",
             trip.VehicleType,
             TripAddress.Display(trip.PickupDetails, trip.Pickup),

@@ -37,6 +37,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<DeviceRegistration> DeviceRegistrations => Set<DeviceRegistration>();
     public DbSet<PlatformBrandSettings> PlatformBrandSettings => Set<PlatformBrandSettings>();
     public DbSet<RiderAppRelease> RiderAppReleases => Set<RiderAppRelease>();
+    public DbSet<PassengerAppRelease> PassengerAppReleases => Set<PassengerAppRelease>();
     public DbSet<RiderInviteLink> RiderInviteLinks => Set<RiderInviteLink>();
     public DbSet<RiderApplication> RiderApplications => Set<RiderApplication>();
     public DbSet<OperatorCashInBankAccount> OperatorCashInBankAccounts => Set<OperatorCashInBankAccount>();
@@ -67,7 +68,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<VehicleOfferingLog> VehicleOfferingLogs => Set<VehicleOfferingLog>();
     public DbSet<CustomerLoginBlock> CustomerLoginBlocks => Set<CustomerLoginBlock>();
     public DbSet<RiderNotice> RiderNotices => Set<RiderNotice>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<AppUser>(entity =>
@@ -671,6 +671,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         });
 
         modelBuilder.Entity<RiderAppRelease>(entity =>
+        {
+            entity.HasIndex(x => x.Version).IsUnique();
+            entity.HasIndex(x => x.IsLatest);
+            entity.Property(x => x.Version).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ApkPath).HasMaxLength(260).IsRequired();
+            entity.Property(x => x.ReleaseNotes).HasMaxLength(2000);
+        });
+
+        modelBuilder.Entity<PassengerAppRelease>(entity =>
         {
             entity.HasIndex(x => x.Version).IsUnique();
             entity.HasIndex(x => x.IsLatest);

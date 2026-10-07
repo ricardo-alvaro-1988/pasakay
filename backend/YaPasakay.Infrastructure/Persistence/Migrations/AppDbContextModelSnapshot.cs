@@ -1242,6 +1242,9 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .HasMaxLength(260)
                         .HasColumnType("nvarchar(260)");
 
+                    b.Property<bool>("RentalEnabled")
+                        .HasColumnType("bit");
+
                     b.Property<int>("ScheduledBookingGraceMinutes")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -2107,6 +2110,45 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.HasIndex("PabiliMatrixId");
 
                     b.ToTable("PabiliSurcharges");
+                });
+
+            modelBuilder.Entity("YaPasakay.Domain.Entities.PassengerAppRelease", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ApkPath")
+                        .IsRequired()
+                        .HasMaxLength(260)
+                        .HasColumnType("nvarchar(260)");
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsLatest")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ReleaseNotes")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTime?>("UpdatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IsLatest");
+
+                    b.HasIndex("Version")
+                        .IsUnique();
+
+                    b.ToTable("PassengerAppReleases");
                 });
 
             modelBuilder.Entity("YaPasakay.Domain.Entities.PlatformBrandSettings", b =>
@@ -3001,6 +3043,9 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .HasMaxLength(400)
                         .HasColumnType("nvarchar(400)");
 
+                    b.Property<DateTime?>("PickupAlarmSentAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<Guid?>("PickupBarangayId")
                         .HasColumnType("uniqueidentifier");
 
@@ -3039,7 +3084,7 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("RequestedAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<Guid>("RiderId")
+                    b.Property<Guid?>("RiderId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime?>("ScheduledAtUtc")
@@ -4186,8 +4231,7 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                     b.HasOne("YaPasakay.Domain.Entities.RiderProfile", "Rider")
                         .WithMany("Trips")
                         .HasForeignKey("RiderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("YaPasakay.Domain.Entities.VehicleCategory", "VehicleCategory")
                         .WithMany()

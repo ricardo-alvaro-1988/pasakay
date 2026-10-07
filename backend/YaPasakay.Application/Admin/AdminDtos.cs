@@ -86,6 +86,7 @@ public record OperatorDetailResponse(
     string? GovernmentIdPhotoUrl,
     bool IsActive,
     bool PabiliEnabled,
+    bool RentalEnabled,
     decimal MotorcycleCommissionPercent,
     decimal TricycleCommissionPercent,
     decimal PabiliFareSystemCommissionPercent,
@@ -103,7 +104,7 @@ public record OperatorDetailResponse(
     IReadOnlyList<RiderListItem> Riders,
     IReadOnlyList<VehicleCountItem>? RiderVehicleCounts = null);
 
-public record CustomerServicesResponse(bool PabiliEnabled);
+public record CustomerServicesResponse(bool PabiliEnabled, bool RentalEnabled);
 
 public record SaveBookingDispatchModeRequest(
     BookingDispatchMode BookingDispatchMode,
@@ -185,7 +186,8 @@ public record RideListItem(
     int? DiscountPercent = null,
     string? PromoCode = null,
     decimal CustomerBoostAmount = 0,
-    string? FareDiscountLabel = null);
+    string? FareDiscountLabel = null,
+    DateTime? ScheduledAtUtc = null);
 
 public record RideDetailResponse(
     Guid Id,
@@ -216,7 +218,7 @@ public record RideDetailResponse(
     Guid OperatorId,
     string OperatorName,
     string OperatorPhone,
-    Guid RiderId,
+    Guid? RiderId,
     string RiderName,
     string RiderPhone,
     string PlateNumber,
@@ -503,7 +505,9 @@ public record OperatorNavAlertsResponse(
     int PendingWalletRequests,
     int OpenSos,
     int UnreadBilling,
-    int PendingAccountDeletes);
+    int PendingAccountDeletes,
+    int UnreadScheduled = 0,
+    int UnreadInbox = 0);
 
 public record AdminAlertItem(
     Guid Id,
@@ -780,7 +784,8 @@ public record OperatorBookingBoardResponse(
     OperatorBookingColumn Pending,
     OperatorBookingColumn Waiting,
     OperatorBookingColumn Ongoing,
-    OperatorBookingColumn Completed);
+    OperatorBookingColumn Completed,
+    OperatorBookingColumn Scheduled);
 
 public record OperatorOverviewSeriesPoint(
     DateOnly Date,

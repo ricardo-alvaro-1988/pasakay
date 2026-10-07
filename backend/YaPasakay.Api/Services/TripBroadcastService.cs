@@ -67,7 +67,7 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
     public async Task BroadcastAsync(Guid tripId, CancellationToken cancellationToken)
     {
         var trip = await db.Trips.FirstOrDefaultAsync(x => x.Id == tripId, cancellationToken);
-        if (trip is null || trip.Status != TripStatus.Pending)
+        if (trip is null || trip.Status != TripStatus.Pending || trip.ScheduledAtUtc is not null)
         {
             return;
         }
@@ -176,6 +176,57 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         }
     }
 
+    public async Task OfferToAssignedRiderAsync(Guid tripId, Guid riderId, CancellationToken cancellationToken)
+    {
+        var trip = await db.Trips.FirstOrDefaultAsync(x => x.Id == tripId, cancellationToken);
+        if (trip is null || trip.Status is not (TripStatus.Scheduled or TripStatus.Pending or TripStatus.Waiting))
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        var existing = await db.TripOffers.Where(x => x.TripId == trip.Id).ToListAsync(cancellationToken);
+        foreach (var other in existing.Where(x => x.RiderId != riderId && x.Status == OfferStatus.Offered))
+        {
+            other.Status = OfferStatus.Expired;
+            other.UpdatedAtUtc = now;
+        }
+
+        var expires = trip.ScheduledAtUtc is DateTime scheduled && scheduled > now
+            ? scheduled.Add(ScheduledUnassignedGrace)
+            : now.Add(ScheduledOfferTtl);
+        if (expires <= now)
+        {
+            expires = now.Add(ScheduledOfferTtl);
+        }
+
+        var offer = existing.FirstOrDefault(x => x.RiderId == riderId);
+        if (offer is null)
+        {
+            db.TripOffers.Add(new TripOffer
+            {
+                TripId = trip.Id,
+                RiderId = riderId,
+                Status = OfferStatus.Offered,
+                IsPreferred = true,
+                OfferedAtUtc = now,
+                ExpiresAtUtc = expires
+            });
+        }
+        else
+        {
+            offer.Status = OfferStatus.Offered;
+            offer.IsPreferred = true;
+            offer.OfferedAtUtc = now;
+            offer.ExpiresAtUtc = expires;
+            offer.RespondedAtUtc = null;
+            offer.UpdatedAtUtc = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await live.RiderOfferAsync(riderId, trip.Reference, trip.ScheduledAtUtc, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<(RiderProfile Rider, double? Distance, bool Preferred)>> RankEligibleRidersAsync(
         Guid operatorId,
         VehicleType vehicleType,
@@ -205,8 +256,9 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
 
         var tripBusy = await db.Trips
             .Where(x => x.OperatorId == operatorId
+                && x.RiderId != null
                 && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing))
-            .Select(x => x.RiderId)
+            .Select(x => x.RiderId!.Value)
             .ToListAsync(cancellationToken);
         var pabiliBusy = await db.PabiliOrders
             .Where(x => x.OperatorId == operatorId
@@ -361,21 +413,35 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         }
     }
 
-    public async Task BroadcastDueScheduledAsync(CancellationToken cancellationToken)
+    public Task BroadcastDueScheduledAsync(CancellationToken cancellationToken) =>
+        Task.CompletedTask;
+
+    public async Task SendDuePickupAlarmsAsync(CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        var leadEnd = now.Add(ScheduleBroadcastLead);
-        var tripIds = await db.Trips
-            .Where(x => x.Status == TripStatus.Pending
+        var dueBefore = now.AddMinutes(10);
+        var trips = await db.Trips
+            .Where(x => x.PickupAlarmSentAtUtc == null
                 && x.ScheduledAtUtc != null
-                && x.ScheduledAtUtc <= leadEnd)
+                && x.ScheduledAtUtc <= dueBefore
+                && (x.Status == TripStatus.Scheduled || x.Status == TripStatus.ScheduledAccepted))
             .OrderBy(x => x.ScheduledAtUtc)
-            .Select(x => x.Id)
             .Take(50)
             .ToListAsync(cancellationToken);
-        foreach (var id in tripIds)
+        foreach (var trip in trips)
         {
-            await BroadcastAsync(id, cancellationToken);
+            trip.PickupAlarmSentAtUtc = now;
+            trip.UpdatedAtUtc = now;
+        }
+
+        if (trips.Count > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        foreach (var trip in trips)
+        {
+            await live.ScheduledPickupReminderAsync(trip, cancellationToken);
         }
     }
 
@@ -406,7 +472,7 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
 
         var candidates = await db.Trips
             .AsNoTracking()
-            .Where(x => x.Status == TripStatus.Pending)
+            .Where(x => x.Status == TripStatus.Pending || x.Status == TripStatus.Scheduled)
             .Select(x => new
             {
                 x.Id,
@@ -441,7 +507,7 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         }
 
         var trips = await db.Trips
-            .Where(x => expireIds.Contains(x.Id) && x.Status == TripStatus.Pending)
+            .Where(x => expireIds.Contains(x.Id) && (x.Status == TripStatus.Pending || x.Status == TripStatus.Scheduled))
             .ToListAsync(cancellationToken);
 
         if (trips.Count == 0)
@@ -611,10 +677,10 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.PaymentMethodOther,
             RiderDisplayTime.ToApi(trip.RequestedAtUtc),
             RiderDisplayTime.ToApi(trip.ScheduledAtUtc),
-            trip.Status == TripStatus.Waiting,
+            trip.Status is TripStatus.Waiting or TripStatus.ScheduledAccepted,
             trip.Status == TripStatus.Ongoing,
-            trip.Status is TripStatus.Pending or TripStatus.Waiting,
-            trip.Status is TripStatus.Waiting or TripStatus.Ongoing,
+            trip.Status is TripStatus.Pending or TripStatus.Waiting or TripStatus.Scheduled or TripStatus.ScheduledAccepted,
+            trip.Status is TripStatus.Waiting or TripStatus.Ongoing or TripStatus.ScheduledAccepted,
             TripChatService.CanView(trip),
             TripChatService.CanChat(trip),
             trip.CustomerFare > 0 ? trip.CustomerFare : trip.Fare,

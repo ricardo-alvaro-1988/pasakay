@@ -125,9 +125,9 @@ public class CustomerFavoritesController(AppDbContext db) : ControllerBase
             ? new List<Guid>()
             : await db.Trips
                 .AsNoTracking()
-                .Where(x => riderIds.Contains(x.RiderId)
+                .Where(x => x.RiderId != null && riderIds.Contains(x.RiderId.Value)
                     && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing))
-                .Select(x => x.RiderId)
+                .Select(x => x.RiderId!.Value)
                 .Distinct()
                 .ToListAsync(cancellationToken);
         var busy = busyIds.ToHashSet();

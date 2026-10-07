@@ -13,10 +13,11 @@ public static class TripChatService
     public const long MaxPhotoBytes = 6_000_000;
 
     public static bool CanView(Trip trip) =>
-        trip.Status is TripStatus.Waiting or TripStatus.Ongoing or TripStatus.Completed or TripStatus.Cancelled;
+        trip.Status is TripStatus.Waiting or TripStatus.Ongoing or TripStatus.Completed or TripStatus.Cancelled
+            or TripStatus.ScheduledAccepted;
 
     public static bool CanChat(Trip trip) =>
-        trip.Status is TripStatus.Waiting or TripStatus.Ongoing;
+        trip.Status is TripStatus.Waiting or TripStatus.Ongoing or TripStatus.ScheduledAccepted;
 
     public static async Task<IReadOnlyList<RideChatMessageItem>> ListAsync(
         AppDbContext db,

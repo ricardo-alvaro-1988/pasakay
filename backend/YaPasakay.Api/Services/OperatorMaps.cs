@@ -154,7 +154,7 @@ public static class OperatorMaps
             trip.Operator.CompanyName,
             trip.Operator.ContactPhone,
             trip.RiderId,
-            rider?.AppUser.FullName ?? "Rider unavailable",
+            rider?.AppUser.FullName ?? "Unassigned",
             rider?.AppUser.PhoneNumber ?? string.Empty,
             rider?.PlateNumber ?? string.Empty,
             null,
@@ -755,9 +755,9 @@ public static class OperatorMaps
                 x.ScheduledAtUtc,
                 x.CustomerName,
                 x.CustomerPhone,
-                RiderName = x.Rider.AppUser.FullName,
-                PlateNumber = x.Rider.PlateNumber,
-                VehicleType = x.Rider.VehicleType,
+                RiderName = x.Rider != null ? x.Rider.AppUser.FullName : "Unassigned",
+                PlateNumber = x.Rider != null ? x.Rider.PlateNumber : "—",
+                VehicleType = x.Rider != null ? x.Rider.VehicleType : x.VehicleType,
                 Pickup = x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
                 Dropoff = x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
                 x.Status,
@@ -812,6 +812,7 @@ public static class OperatorMaps
                 x.Id,
                 x.Reference,
                 x.RequestedAtUtc,
+                x.ScheduledAtUtc,
                 Pickup = x.PickupDetails != "" ? x.PickupDetails : x.Pickup,
                 Dropoff = x.DropoffDetails != "" ? x.DropoffDetails : x.Dropoff,
                 x.CustomerName,
@@ -855,7 +856,8 @@ public static class OperatorMaps
             x.DiscountPercent,
             x.IsPromoSponsored && x.DiscountPercent is int pct ? $"Save{pct}" : null,
             x.CustomerBoostAmount,
-            FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount)))
+            FareDiscountRules.LabelOrNull(x.FareDiscountKind, x.FareDiscountNote, x.FareDiscountPercent, x.FareDiscountAmount),
+            x.ScheduledAtUtc is DateTime scheduled ? DateTime.SpecifyKind(scheduled, DateTimeKind.Utc) : null))
             .ToList();
     }
 

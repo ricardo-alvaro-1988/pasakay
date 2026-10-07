@@ -13,8 +13,39 @@ namespace YaPasakay.Api.Controllers;
 [ApiController]
 [Authorize(Roles = "Customer")]
 [Route("api/customer/account")]
-public class CustomerAccountController(AppDbContext db) : ControllerBase
+public class CustomerAccountController(AppDbContext db, UploadStore uploads) : ControllerBase
 {
+    [HttpPost("photo")]
+    [RequestSizeLimit(UploadStore.MaxImageBytes + 1_000_000)]
+    public async Task<ActionResult<CustomerDeskResponse>> UploadPhoto(
+        IFormFile? photo,
+        CancellationToken cancellationToken)
+    {
+        var (customer, status, message) = await CustomerContext.RequireAsync(db, User, cancellationToken);
+        if (customer is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        try
+        {
+            var path = await uploads.SaveAsync(photo, $"customers/{customer.Id:D}", "profile", cancellationToken);
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return BadRequest(new { message = "Choose a photo to upload." });
+            }
+
+            customer.PhotoPath = path;
+            customer.UpdatedAtUtc = DateTime.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+            return Ok(await ReloadDeskAsync(customer.Id, cancellationToken));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPut("profile")]
     public async Task<ActionResult<CustomerDeskResponse>> UpdateProfile(
         [FromBody] CustomerProfileUpdateRequest request,
@@ -170,15 +201,9 @@ public class CustomerAccountController(AppDbContext db) : ControllerBase
             return StatusCode(status, new { message });
         }
 
-        if (!string.IsNullOrWhiteSpace(customer.AppUser.GoogleSubject))
-        {
-            if (!string.IsNullOrWhiteSpace(customer.PinHash)
-                && !SecretHasher.Verify(request.Pin ?? string.Empty, customer.PinHash))
-            {
-                return BadRequest(new { message = "PIN is incorrect." });
-            }
-        }
-        else if (!SecretHasher.Verify(request.Password ?? string.Empty, customer.AppUser.PasswordHash))
+        // Google customers delete with reason only (no PIN).
+        if (string.IsNullOrWhiteSpace(customer.AppUser.GoogleSubject)
+            && !SecretHasher.Verify(request.Password ?? string.Empty, customer.AppUser.PasswordHash))
         {
             return BadRequest(new { message = "Password is incorrect." });
         }

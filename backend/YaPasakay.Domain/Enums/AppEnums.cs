@@ -30,7 +30,11 @@ public enum TripStatus
     Cancelled = 2,
     Ongoing = 3,
     Pending = 4,
-    Waiting = 5
+    Waiting = 5,
+    /// <summary>Later pickup; waiting for operator assign and/or rider accept.</summary>
+    Scheduled = 6,
+    /// <summary>Assigned rider accepted a scheduled booking; pickup is still in the future.</summary>
+    ScheduledAccepted = 7
 }
 
 public enum PabiliOrderStatus
@@ -87,7 +91,11 @@ public enum NotificationKind
     Billing = 1,
     Announcement = 2,
     Sos = 3,
-    AccountDelete = 4
+    AccountDelete = 4,
+    /// <summary>Legacy — rental leads removed; kept for old inbox rows.</summary>
+    Rental = 5,
+    /// <summary>Customer booked a future pickup; operator still needs to assign a rider.</summary>
+    Scheduled = 6
 }
 
 public enum SurchargeKind

@@ -20,6 +20,8 @@ public class Operator : BaseEntity
     public bool IsActive { get; set; } = true;
     /// <summary>When false, customers in this operator area cannot use Pabili (toggle/nav hidden).</summary>
     public bool PabiliEnabled { get; set; }
+    /// <summary>When false, customers in this operator area cannot use Rental (nav hidden); operator Rentals module off.</summary>
+    public bool RentalEnabled { get; set; }
     public decimal MotorcycleCommissionPercent { get; set; } = 10;
     public decimal TricycleCommissionPercent { get; set; } = 5;
     /// <summary>Admin-set system share for Pabili fare commission (read-only for operators).</summary>

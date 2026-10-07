@@ -1,3 +1,5 @@
+import { compressImageFile } from './compress-image'
+
 const TOKEN_KEY = 'yapasakay-customer-access'
 const REFRESH_KEY = 'yapasakay-customer-refresh'
 
@@ -36,7 +38,7 @@ export type VehicleOffer = {
   vehicleType: VehicleType
 }
 export type PaymentMethod = 'Cash' | 'GCash' | 'Maya' | 'Other'
-export type TripStatus = 'Pending' | 'Waiting' | 'Ongoing' | 'Completed' | 'Cancelled'
+export type TripStatus = 'Pending' | 'Waiting' | 'Ongoing' | 'Completed' | 'Cancelled' | 'Scheduled' | 'ScheduledAccepted'
 export type Gender = 'Male' | 'Female' | 'Other'
 export type DeleteAccountStatus = 'None' | 'Pending' | 'Approved' | 'Rejected'
 
@@ -136,6 +138,7 @@ export type Desk = {
   hailedRider: HailRider | null
   pendingRating?: CustomerTrip | null
   needsMobile?: boolean
+  photoUrl?: string | null
 }
 
 export type Quote = {
@@ -344,6 +347,8 @@ export function passengerLabel(value: number | null | undefined) {
 
 export function tripHeadline(status: string) {
   if (status === 'Pending') return 'Finding a rider'
+  if (status === 'Scheduled') return 'Scheduled'
+  if (status === 'ScheduledAccepted') return 'Scheduled accepted'
   if (status === 'Waiting') return 'Rider on the way'
   if (status === 'Ongoing') return 'On your trip'
   if (status === 'Completed') return 'Trip completed'
@@ -475,6 +480,7 @@ function shouldAttemptRefresh(path: string) {
   return !path.startsWith('/api/auth/refresh')
     && !path.startsWith('/api/auth/google')
     && !path.startsWith('/api/auth/login')
+    && !path.startsWith('/api/auth/customer-pin-login')
 }
 
 async function request<T>(path: string, init?: RequestInit, retried = false): Promise<T> {
@@ -485,6 +491,7 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
   const res = await fetch(path, { ...init, headers })
   const isSignIn = path.startsWith('/api/auth/google')
     || path.startsWith('/api/auth/login')
+    || path.startsWith('/api/auth/customer-pin-login')
     || path.startsWith('/api/auth/verify-otp')
     || path.startsWith('/api/auth/request-otp')
   if (res.status === 401 && !isSignIn) {
@@ -574,6 +581,22 @@ export const api = {
         notes: string | null
       }[]
     >('/api/public/rider-app/releases'),
+  passengerAppLatest: () =>
+    request<{
+      version: string
+      downloadUrl: string
+      releasedAtUtc: string
+      notes: string | null
+    }>('/api/public/passenger-app'),
+  passengerAppReleases: () =>
+    request<
+      {
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+      }[]
+    >('/api/public/passenger-app/releases'),
   googleSignIn: (idToken: string) =>
     request<AuthResponse>('/api/auth/google', { method: 'POST', body: JSON.stringify({ idToken }) }),
   mapsConfig: () => request<{ googleMapsBrowserKey: string }>('/api/public/maps'),
@@ -584,7 +607,7 @@ export const api = {
     if (opts?.lng != null) params.set('lng', String(opts.lng))
     if (opts?.barangayId) params.set('barangayId', opts.barangayId)
     const q = params.toString()
-    return request<{ pabiliEnabled: boolean }>(`/api/customer/services${q ? `?${q}` : ''}`)
+    return request<{ pabiliEnabled: boolean; rentalEnabled: boolean }>(`/api/customer/services${q ? `?${q}` : ''}`)
   },
   quote: (body: BookBody) => request<Quote>('/api/customer/quote', { method: 'POST', body: JSON.stringify(body) }),
   availableRiders: (opts: {
@@ -813,10 +836,13 @@ export const api = {
     }),
   updateProfile: (body: { firstName: string; lastName: string; gender: Gender; email: string }) =>
     request<Desk>('/api/customer/account/profile', { method: 'PUT', body: JSON.stringify(body) }),
-  setPin: (pin: string, currentPin?: string) =>
-    request<Desk>('/api/customer/account/pin', { method: 'POST', body: JSON.stringify({ pin, currentPin }) }),
+  uploadProfilePhoto: async (file: File) => {
+    const data = new FormData()
+    data.append('photo', await compressImageFile(file))
+    return requestForm<Desk>('/api/customer/account/photo', data)
+  },
   updateMobile: (newPhone: string) =>
     request<Desk>('/api/customer/account/mobile', { method: 'PUT', body: JSON.stringify({ newPhone }) }),
-  deleteAccount: (reason: string, pin?: string) =>
-    request<Desk>('/api/customer/account/delete', { method: 'POST', body: JSON.stringify({ reason, pin }) }),
+  deleteAccount: (reason: string) =>
+    request<Desk>('/api/customer/account/delete', { method: 'POST', body: JSON.stringify({ reason }) }),
 }
