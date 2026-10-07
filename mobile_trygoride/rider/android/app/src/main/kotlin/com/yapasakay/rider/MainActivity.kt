@@ -50,7 +50,7 @@ class MainActivity : FlutterActivity() {
                     }
                     "ringOffer" -> {
                         val title = call.argument<String>("title") ?: "New job offer"
-                        val body = call.argument<String>("body") ?: "Open Ya! Pasakay to accept."
+                        val body = call.argument<String>("body") ?: "Open TryGoRide to accept."
                         result.success(OnlineService.ring(this, title, body))
                     }
                     "stopRing" -> {
@@ -107,12 +107,12 @@ class MainActivity : FlutterActivity() {
                     }
                     "pingNotice" -> {
                         val title = call.argument<String>("title") ?: "Announcement"
-                        val body = call.argument<String>("body") ?: "Open Ya! Pasakay to read it."
+                        val body = call.argument<String>("body") ?: "Open TryGoRide to read it."
                         result.success(OnlineService.pingNotice(this, title, body))
                     }
                     "pingChat" -> {
                         val title = call.argument<String>("title") ?: "New chat"
-                        val body = call.argument<String>("body") ?: "Open Ya! Pasakay to reply."
+                        val body = call.argument<String>("body") ?: "Open TryGoRide to reply."
                         result.success(OnlineService.pingChat(this, title, body))
                     }
                     "requestNotify" -> result.success(requestNotifyPermission())

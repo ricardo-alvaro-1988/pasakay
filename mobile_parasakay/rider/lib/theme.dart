@@ -70,7 +70,7 @@ ThemeData riderTheme() {
         disabledForegroundColor: Colors.white,
         minimumSize: const Size.fromHeight(48),
         elevation: 0,
-        shadowColor: const Color(0x38F7941D),
+        shadowColor: const Color(0x381E9A34),
         shape: shape14,
         textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
       ),

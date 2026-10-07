@@ -15,7 +15,7 @@ import org.json.JSONObject
 object PickupAlarm {
     private const val PREFS = "yp_passenger_pickup"
     private const val KEY = "items"
-    private const val CHANNEL = "yp_pickup_alarm"
+    private const val CHANNEL = "trygoride_pickup_alarm"
 
     data class Item(val id: String, val title: String, val body: String, val atUtcMs: Long)
 

@@ -1,4 +1,4 @@
-﻿import 'package:share_plus/share_plus.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'models.dart';
 import 'theme.dart';

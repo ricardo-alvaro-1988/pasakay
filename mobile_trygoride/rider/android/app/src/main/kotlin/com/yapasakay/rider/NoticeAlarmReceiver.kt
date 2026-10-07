@@ -7,7 +7,7 @@ import android.content.Intent
 class NoticeAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val title = intent.getStringExtra("title")?.ifBlank { null } ?: "Announcement"
-        val body = intent.getStringExtra("body")?.ifBlank { null } ?: "Open Ya! Pasakay to read it."
+        val body = intent.getStringExtra("body")?.ifBlank { null } ?: "Open TryGoRide to read it."
         OnlineService.pingNotice(context, title, body)
         val id = intent.getStringExtra("id") ?: return
         NoticeScheduler.onFired(context, id)
