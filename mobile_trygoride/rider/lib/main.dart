@@ -60,9 +60,13 @@ class _RiderAppState extends State<RiderApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && session.loggedIn) {
-      unawaited(session.refresh());
-      unawaited(session.pingLocationKeepAlive());
+      unawaited(_onResumed());
     }
+  }
+
+  Future<void> _onResumed() async {
+    await session.refresh();
+    await session.pingLocationKeepAlive();
   }
 
   @override
