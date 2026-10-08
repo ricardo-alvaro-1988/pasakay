@@ -652,7 +652,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
         int previousBookingCount = 0,
         int completedBookingCount = 0,
         int cancelledBookingCount = 0,
-        DateTime? lastCompletedAtUtc = null) =>
+        DateTime? lastCompletedAtUtc = null,
+        string? customerPhotoUrl = null) =>
         new(
             trip.Id,
             trip.Reference,
@@ -691,7 +692,8 @@ public class TripBroadcastService(AppDbContext db, LiveNotify live)
             trip.FareDiscountKind == FareDiscountKind.None
                 ? null
                 : FareDiscountRules.Label(trip.FareDiscountKind, trip.FareDiscountNote, trip.FareDiscountPercent, trip.FareDiscountAmount),
-            trip.FareDiscountAmount);
+            trip.FareDiscountAmount,
+            customerPhotoUrl);
 
     public async Task<HashSet<Guid>> LiveHailedRiderIdsAsync(CancellationToken cancellationToken)
     {

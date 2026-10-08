@@ -89,7 +89,8 @@ public record RiderActiveTrip(
     int? DiscountPercent = null,
     decimal CustomerBoostAmount = 0,
     string? FareDiscountLabel = null,
-    decimal FareDiscountAmount = 0);
+    decimal FareDiscountAmount = 0,
+    string? CustomerPhotoUrl = null);
 
 public record RiderDeskResponse(
     Guid RiderId,

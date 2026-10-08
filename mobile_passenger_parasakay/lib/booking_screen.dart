@@ -202,6 +202,7 @@ class _BookingScreenState extends State<BookingScreen> {
                   else
                     _TripCard(
                       trip: desk.activeTrip!,
+                      mediaUrl: widget.session.api.mediaUrl,
                       onCancel: desk.activeTrip!.canCancel ? () => _cancel(desk.activeTrip!) : null,
                     ),
                   const SizedBox(height: 20),
@@ -213,6 +214,7 @@ class _BookingScreenState extends State<BookingScreen> {
                     ...desk.scheduled.map(
                       (t) => _TripCard(
                         trip: t,
+                        mediaUrl: widget.session.api.mediaUrl,
                         onCancel: t.canCancel ? () => _cancel(t) : null,
                       ),
                     ),
@@ -232,6 +234,7 @@ class _BookingScreenState extends State<BookingScreen> {
                         open: open,
                         detail: detail,
                         loading: loading,
+                        mediaUrl: widget.session.api.mediaUrl,
                         isFavorite: riderId != null && _favoriteIds.contains(riderId),
                         onToggle: () => _toggleHistory(t),
                         onRate: t.canRate == true ? () => _rate(t) : null,
@@ -248,16 +251,17 @@ class _BookingScreenState extends State<BookingScreen> {
 }
 
 class _TripCard extends StatelessWidget {
-  const _TripCard({required this.trip, this.onCancel});
+  const _TripCard({required this.trip, required this.mediaUrl, this.onCancel});
 
   final CustomerTrip trip;
+  final String? Function(String?) mediaUrl;
   final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: BrandPanel(child: _TripBody(trip: trip, onCancel: onCancel)),
+      child: BrandPanel(child: _TripBody(trip: trip, mediaUrl: mediaUrl, onCancel: onCancel)),
     );
   }
 }
@@ -267,6 +271,7 @@ class _HistoryCard extends StatelessWidget {
     required this.trip,
     required this.open,
     required this.onToggle,
+    required this.mediaUrl,
     this.detail,
     this.loading = false,
     this.onRate,
@@ -277,6 +282,7 @@ class _HistoryCard extends StatelessWidget {
   final CustomerTrip trip;
   final bool open;
   final VoidCallback onToggle;
+  final String? Function(String?) mediaUrl;
   final CustomerTripDetail? detail;
   final bool loading;
   final VoidCallback? onRate;
@@ -308,9 +314,9 @@ class _HistoryCard extends StatelessWidget {
                   child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
                 )
               else if (detail != null)
-                _DetailBody(detail: detail!)
+                _DetailBody(detail: detail!, mediaUrl: mediaUrl)
               else
-                _TripBody(trip: trip),
+                _TripBody(trip: trip, mediaUrl: mediaUrl),
               if (trip.rating != null) ...[
                 const SizedBox(height: 8),
                 Text(
@@ -374,9 +380,10 @@ class _TripSummary extends StatelessWidget {
 }
 
 class _TripBody extends StatelessWidget {
-  const _TripBody({required this.trip, this.onCancel});
+  const _TripBody({required this.trip, required this.mediaUrl, this.onCancel});
 
   final CustomerTrip trip;
+  final String? Function(String?) mediaUrl;
   final VoidCallback? onCancel;
 
   @override
@@ -388,6 +395,8 @@ class _TripBody extends StatelessWidget {
       vehicleLabel(trip.vehicleType),
       paymentLabel(trip.paymentMethod, trip.paymentMethodOther),
     ].join(' · ');
+    final photo = mediaUrl(trip.riderPhotoUrl);
+    final riderName = (trip.riderName ?? '').trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -408,21 +417,38 @@ class _TripBody extends StatelessWidget {
             ].join(' · '),
             style: const TextStyle(color: brandRed, fontWeight: FontWeight.w700, fontSize: 12),
           ),
-        if ((trip.riderName ?? '').isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            [
-              trip.riderName!,
-              if ((trip.plateNumber ?? '').isNotEmpty) trip.plateNumber!,
-              if ((trip.riderPhone ?? '').isNotEmpty) trip.riderPhone!,
-            ].join(' · '),
-            style: const TextStyle(fontWeight: FontWeight.w600),
+        if (riderName.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: brandChip,
+                backgroundImage: photo == null ? null : NetworkImage(photo),
+                child: photo == null
+                    ? Text(
+                        riderName[0].toUpperCase(),
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: brandInk),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  [
+                    riderName,
+                    if ((trip.plateNumber ?? '').isNotEmpty) trip.plateNumber!,
+                  ].join(' · '),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
           ),
           if ((trip.riderPhone ?? '').isNotEmpty)
             TextButton.icon(
               onPressed: () => launchUrl(Uri(scheme: 'tel', path: trip.riderPhone)),
               icon: const Icon(Icons.call, size: 18),
-              label: Text(trip.riderPhone!),
+              label: const Text('Call rider'),
             ),
         ],
         Text(phWhen(when), style: const TextStyle(color: brandMuted, fontSize: 12)),
@@ -461,9 +487,10 @@ class _TripBody extends StatelessWidget {
 }
 
 class _DetailBody extends StatelessWidget {
-  const _DetailBody({required this.detail});
+  const _DetailBody({required this.detail, required this.mediaUrl});
 
   final CustomerTripDetail detail;
+  final String? Function(String?) mediaUrl;
 
   @override
   Widget build(BuildContext context) {
@@ -473,6 +500,8 @@ class _DetailBody extends StatelessWidget {
       vehicleLabel(detail.vehicleType),
       paymentLabel(detail.paymentMethod, detail.paymentMethodOther),
     ].join(' · ');
+    final photo = mediaUrl(detail.riderPhotoUrl);
+    final riderName = detail.riderName.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -487,21 +516,39 @@ class _DetailBody extends StatelessWidget {
         ),
         if (detail.operatorName.isNotEmpty)
           Text('Operator · ${detail.operatorName}', style: const TextStyle(color: brandMuted, fontSize: 12)),
-        if (detail.riderName.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            [
-              detail.riderName,
-              if (detail.plateNumber.isNotEmpty) detail.plateNumber,
-              if (detail.vehicleModel != null && detail.vehicleModel!.isNotEmpty) detail.vehicleModel!,
-            ].join(' · '),
-            style: const TextStyle(fontWeight: FontWeight.w600),
+        if (riderName.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: brandChip,
+                backgroundImage: photo == null ? null : NetworkImage(photo),
+                child: photo == null
+                    ? Text(
+                        riderName[0].toUpperCase(),
+                        style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: brandInk),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  [
+                    riderName,
+                    if (detail.plateNumber.isNotEmpty) detail.plateNumber,
+                    if (detail.vehicleModel != null && detail.vehicleModel!.isNotEmpty) detail.vehicleModel!,
+                  ].join(' · '),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
           ),
           if (detail.riderPhone.isNotEmpty)
             TextButton.icon(
               onPressed: () => launchUrl(Uri(scheme: 'tel', path: detail.riderPhone)),
               icon: const Icon(Icons.call, size: 18),
-              label: Text(detail.riderPhone),
+              label: const Text('Call rider'),
             ),
         ],
         if ((detail.notes ?? '').trim().isNotEmpty) ...[
