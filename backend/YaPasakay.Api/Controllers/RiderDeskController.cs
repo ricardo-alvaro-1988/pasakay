@@ -867,6 +867,7 @@ public class RiderDeskController(
         int completedBookingCount = 0;
         int cancelledBookingCount = 0;
         DateTime? lastCompletedAtUtc = null;
+        string? customerPhotoUrl = null;
         if (active?.CustomerId is Guid customerId)
         {
             var history = await db.Trips
@@ -881,6 +882,11 @@ public class RiderDeskController(
                 .OrderByDescending(x => x.CompletedAtUtc)
                 .Select(x => x.CompletedAtUtc)
                 .FirstOrDefault();
+            var photoPath = await db.CustomerProfiles.AsNoTracking()
+                .Where(x => x.Id == customerId)
+                .Select(x => x.PhotoPath)
+                .FirstOrDefaultAsync(cancellationToken);
+            customerPhotoUrl = UploadUrls.FromPath(photoPath);
         }
 
         var offers = Array.Empty<RiderOfferItem>();
@@ -969,7 +975,8 @@ public class RiderDeskController(
                 previousBookingCount,
                 completedBookingCount,
                 cancelledBookingCount,
-                lastCompletedAtUtc),
+                lastCompletedAtUtc,
+                customerPhotoUrl),
             offers,
             pendingHail,
             rider.VehicleModel,

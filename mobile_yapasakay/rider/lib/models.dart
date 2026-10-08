@@ -480,6 +480,7 @@ class RiderTrip {
     this.customerBoostAmount = 0,
     this.fareDiscountLabel,
     this.fareDiscountAmount = 0,
+    this.customerPhotoUrl,
   });
 
   final String tripId;
@@ -516,6 +517,7 @@ class RiderTrip {
   final double customerBoostAmount;
   final String? fareDiscountLabel;
   final double fareDiscountAmount;
+  final String? customerPhotoUrl;
 
   bool get isNewCustomer => previousBookingCount == 0;
 
@@ -576,6 +578,7 @@ class RiderTrip {
         customerBoostAmount: (json['customerBoostAmount'] as num?)?.toDouble() ?? 0,
         fareDiscountLabel: asTextOrNull(json['fareDiscountLabel']),
         fareDiscountAmount: (json['fareDiscountAmount'] as num?)?.toDouble() ?? 0,
+        customerPhotoUrl: asTextOrNull(json['customerPhotoUrl']),
       );
 }
 

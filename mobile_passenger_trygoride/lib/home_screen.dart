@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import 'api.dart';
 import 'chat_action_button.dart';
@@ -913,10 +914,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(height: 10),
                         _ActiveTripCard(
                           trip: active,
+                          riderPhotoUrl: widget.session.api.mediaUrl(active.riderPhotoUrl),
                           cancelling: _cancelling,
                           unreadChat: widget.session.unreadChatCount,
                           onCancel: active.canCancel && !_cancelling ? () => _cancelActive(active) : null,
                           onShare: () => shareCustomerTrip(active),
+                          onCall: (active.riderPhone ?? '').trim().isEmpty
+                              ? null
+                              : () => launchUrl(Uri(scheme: 'tel', path: active.riderPhone!.trim())),
                           onChat: () => openTripChatSheet(
                             context,
                             session: widget.session,
@@ -1432,17 +1437,21 @@ class _PassengerStepButton extends StatelessWidget {
 class _ActiveTripCard extends StatelessWidget {
   const _ActiveTripCard({
     required this.trip,
+    this.riderPhotoUrl,
     this.onCancel,
     this.cancelling = false,
     this.onShare,
+    this.onCall,
     this.onChat,
     this.unreadChat = 0,
   });
 
   final CustomerTrip trip;
+  final String? riderPhotoUrl;
   final VoidCallback? onCancel;
   final bool cancelling;
   final VoidCallback? onShare;
+  final VoidCallback? onCall;
   final VoidCallback? onChat;
   final int unreadChat;
 
@@ -1455,6 +1464,8 @@ class _ActiveTripCard extends StatelessWidget {
       paymentLabel(trip.paymentMethod, trip.paymentMethodOther),
     ].join(' · ');
     final finding = trip.status == 'Pending';
+    final riderName = (trip.riderName ?? '').trim();
+    final riderInitial = riderName.isEmpty ? '?' : riderName[0].toUpperCase();
     return BrandPanel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1478,7 +1489,64 @@ class _ActiveTripCard extends StatelessWidget {
                 ),
             ],
           ),
-          if (onChat != null) ...[
+          if (riderName.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 26,
+                  backgroundColor: brandChip,
+                  backgroundImage: riderPhotoUrl == null ? null : NetworkImage(riderPhotoUrl!),
+                  child: riderPhotoUrl == null
+                      ? Text(
+                          riderInitial,
+                          style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: brandInk),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(riderName, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                      const SizedBox(height: 2),
+                      Text(
+                        [
+                          if ((trip.plateNumber ?? '').isNotEmpty) trip.plateNumber!,
+                          if ((trip.riderPhone ?? '').isNotEmpty) trip.riderPhone!,
+                        ].join(' · '),
+                        style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (onCall != null || onChat != null) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  if (onCall != null)
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onCall,
+                        icon: const Icon(Icons.call, size: 18),
+                        label: const Text('Call'),
+                      ),
+                    ),
+                  if (onCall != null && onChat != null) const SizedBox(width: 8),
+                  if (onChat != null)
+                    Expanded(
+                      child: ChatActionButton(
+                        unread: unreadChat,
+                        onPressed: onChat!,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ] else if (onChat != null) ...[
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerLeft,
@@ -1514,17 +1582,6 @@ class _ActiveTripCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(meta, style: const TextStyle(color: brandMuted, fontSize: 12, fontWeight: FontWeight.w600)),
           Text(peso(trip.customerFare ?? trip.fare), style: const TextStyle(fontWeight: FontWeight.w800)),
-          if (trip.riderName != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              [
-                trip.riderName!,
-                if ((trip.plateNumber ?? '').isNotEmpty) trip.plateNumber!,
-                if ((trip.riderPhone ?? '').isNotEmpty) trip.riderPhone!,
-              ].join(' · '),
-              style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
-            ),
-          ],
           if (onCancel != null) ...[
             const SizedBox(height: 12),
             SizedBox(

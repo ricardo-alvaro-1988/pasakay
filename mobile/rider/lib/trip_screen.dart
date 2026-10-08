@@ -99,6 +99,10 @@ class TripScreen extends StatelessWidget {
         final canChat = !ended && trip.canChat;
         final risk = _riskBadgeFor(trip);
         final statusLabel = ended && !_endedStatus(trip.status) ? 'Ended' : trip.status;
+        final customerPhoto = session.api.mediaUrl(trip.customerPhotoUrl);
+        final customerInitial = trip.customerName.trim().isEmpty
+            ? '?'
+            : trip.customerName.trim()[0].toUpperCase();
 
         return Scaffold(
           appBar: AppBar(title: Text(trip.reference)),
@@ -124,9 +128,32 @@ class TripScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(trip.customerName, style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 4),
-                    Text(trip.customerPhone, style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600)),
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: brandChip,
+                          backgroundImage: customerPhoto == null ? null : NetworkImage(customerPhoto),
+                          child: customerPhoto == null
+                              ? Text(
+                                  customerInitial,
+                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 22, color: brandInk),
+                                )
+                              : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(trip.customerName, style: Theme.of(context).textTheme.titleLarge),
+                              const SizedBox(height: 4),
+                              Text(trip.customerPhone, style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       'Persons: ${passengerLabel(trip.passengerCount)}',
