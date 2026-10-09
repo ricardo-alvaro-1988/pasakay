@@ -35,7 +35,8 @@ public class AdminPassengerAppController(AppDbContext db, UploadStore uploads) :
     {
         var rows = await db.PassengerAppReleases
             .AsNoTracking()
-            .OrderByDescending(x => x.CreatedAtUtc)
+            .OrderByDescending(x => x.UpdatedAtUtc)
+            .ThenByDescending(x => x.CreatedAtUtc)
             .Take(30)
             .ToListAsync(cancellationToken);
         var latest = rows.FirstOrDefault(x => x.IsLatest) ?? rows.FirstOrDefault();
@@ -64,35 +65,17 @@ public class AdminPassengerAppController(AppDbContext db, UploadStore uploads) :
             return BadRequest(new { message = "Choose an Android APK file." });
         }
 
-        var exists = await db.PassengerAppReleases.AnyAsync(x => x.Version == cleanedVersion, cancellationToken);
-        if (exists)
-        {
-            return BadRequest(new { message = $"Version {cleanedVersion} is already published." });
-        }
-
         var releaseNotes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
         if (releaseNotes is { Length: > 2000 })
         {
             return BadRequest(new { message = "Release notes must be at most 2000 characters." });
         }
 
-        var row = new PassengerAppRelease
-        {
-            Version = cleanedVersion,
-            ReleaseNotes = releaseNotes,
-            IsLatest = true,
-            ApkPath = string.Empty,
-        };
+        var existing = await db.PassengerAppReleases
+            .FirstOrDefaultAsync(x => x.Version == cleanedVersion, cancellationToken);
 
         try
         {
-            var path = await uploads.SaveApkAsync(file, $"passenger-apk/{row.Id}", "app", cancellationToken);
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return BadRequest(new { message = "Could not save the APK." });
-            }
-
-            row.ApkPath = path;
             await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
             var previous = await db.PassengerAppReleases.Where(x => x.IsLatest).ToListAsync(cancellationToken);
             foreach (var prior in previous)
@@ -101,7 +84,38 @@ public class AdminPassengerAppController(AppDbContext db, UploadStore uploads) :
                 prior.UpdatedAtUtc = DateTime.UtcNow;
             }
 
-            db.PassengerAppReleases.Add(row);
+            if (existing is not null)
+            {
+                var path = await uploads.SaveApkAsync(file, $"passenger-apk/{existing.Id}", "app", cancellationToken);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return BadRequest(new { message = "Could not save the APK." });
+                }
+
+                existing.ApkPath = path;
+                existing.ReleaseNotes = releaseNotes;
+                existing.IsLatest = true;
+                existing.UpdatedAtUtc = DateTime.UtcNow;
+            }
+            else
+            {
+                var row = new PassengerAppRelease
+                {
+                    Version = cleanedVersion,
+                    ReleaseNotes = releaseNotes,
+                    IsLatest = true,
+                    ApkPath = string.Empty,
+                };
+                var path = await uploads.SaveApkAsync(file, $"passenger-apk/{row.Id}", "app", cancellationToken);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return BadRequest(new { message = "Could not save the APK." });
+                }
+
+                row.ApkPath = path;
+                db.PassengerAppReleases.Add(row);
+            }
+
             await db.SaveChangesAsync(cancellationToken);
             await tx.CommitAsync(cancellationToken);
         }
@@ -118,7 +132,7 @@ public class AdminPassengerAppController(AppDbContext db, UploadStore uploads) :
             row.Id,
             row.Version,
             UploadUrls.FromPath(row.ApkPath)!,
-            row.CreatedAtUtc,
+            row.UpdatedAtUtc ?? row.CreatedAtUtc,
             string.IsNullOrWhiteSpace(row.ReleaseNotes) ? null : row.ReleaseNotes,
             row.IsLatest);
 }

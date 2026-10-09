@@ -140,7 +140,7 @@ export function RiderAppSettingsPage() {
 
       <form className="card" onSubmit={publish}>
         <h2 style={{ marginTop: 0 }}>Publish new build</h2>
-        <p className="muted">Upload a new APK and set its version. This becomes the download on /rider/download.</p>
+        <p className="muted">Upload an APK and set its version. Re-uploading the same version replaces the existing file. This becomes the download on /rider/download.</p>
         <label className="field">
           <span>Version</span>
           <input

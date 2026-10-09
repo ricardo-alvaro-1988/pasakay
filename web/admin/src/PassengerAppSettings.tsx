@@ -140,7 +140,7 @@ export function PassengerAppSettingsPage() {
 
       <form className="card" onSubmit={(e) => void publish(e)}>
         <h2 style={{ marginTop: 0 }}>Publish new build</h2>
-        <p className="muted">Upload a new APK and set its version. This becomes the download on /Downloads.</p>
+        <p className="muted">Upload an APK and set its version. Re-uploading the same version replaces the existing file. This becomes the download on /Downloads.</p>
         <label className="field">
           <span>Version</span>
           <input
