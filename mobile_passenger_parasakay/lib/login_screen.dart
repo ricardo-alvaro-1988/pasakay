@@ -201,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [brandRed, Color(0xFF7A030C)],
+                  colors: [brandRed, brandNavy],
                 ),
               ),
               child: Column(
