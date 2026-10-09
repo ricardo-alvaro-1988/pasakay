@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-const brandRed = Color(0xFFE30613);
-const brandNavy = Color(0xFF0B1F5C);
+/// Primary brand blue (kept as brandRed for SoT field-name compatibility).
+const brandRed = Color(0xFF0B1F5C);
+const brandNavy = Color(0xFF003080);
 const brandInk = Color(0xFF16181D);
 const brandMuted = Color(0xFF667085);
 const brandCanvas = Color(0xFFEEF1F5);
@@ -10,7 +11,7 @@ const brandSurface = Color(0xFFFFFFFF);
 const brandSoft = Color(0xFFF5F7FA);
 const brandLine = Color(0xFFDCE2EA);
 const brandChip = Color(0xFFE8EDF3);
-const brandAccentSoft = Color(0x29E30613);
+const brandAccentSoft = Color(0x290B1F5C);
 const brandSuccess = Color(0xFF1EA36A);
 const brandSos = Color(0xFFFF0000);
 const brandWarnBg = Color(0xFFFFF4CC);
@@ -68,9 +69,11 @@ ThemeData passengerTheme() {
         foregroundColor: Colors.white,
         disabledBackgroundColor: brandRed.withValues(alpha: 0.45),
         disabledForegroundColor: Colors.white,
+        // Do NOT use Size.fromHeight(48) — that sets min width to infinity and
+        // crushes sibling TextFields in Rows (chat composer looked “missing”).
         minimumSize: const Size(64, 48),
         elevation: 0,
-        shadowColor: const Color(0x38E30613),
+        shadowColor: const Color(0x380B1F5C),
         shape: shape14,
         textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
       ),

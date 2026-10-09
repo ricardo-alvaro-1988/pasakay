@@ -68,6 +68,8 @@ ThemeData passengerTheme() {
         foregroundColor: Colors.white,
         disabledBackgroundColor: brandRed.withValues(alpha: 0.45),
         disabledForegroundColor: Colors.white,
+        // Do NOT use Size.fromHeight(48) — that sets min width to infinity and
+        // crushes sibling TextFields in Rows (chat composer looked “missing”).
         minimumSize: const Size(64, 48),
         elevation: 0,
         shadowColor: const Color(0x381E9A34),

@@ -3,7 +3,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import 'theme.dart';
 
-String customerQrPayload(String customerId) => 'pasakyaman:customer:$customerId';
+String customerQrPayload(String customerId) => 'yapasakay:customer:$customerId';
 
 class ShowQrButton extends StatelessWidget {
   const ShowQrButton({super.key, required this.onPressed});
