@@ -18,8 +18,8 @@ class ApiException implements Exception {
 class CustomerApi {
   CustomerApi();
 
-  static const _tokenKey = 'yapasakay-customer-access';
-  static const _refreshKey = 'yapasakay-customer-refresh';
+  static const _tokenKey = 'parasakay-customer-access';
+  static const _refreshKey = 'parasakay-customer-refresh';
   static const _baseKey = 'apiBase';
   static const _timeout = Duration(seconds: 12);
 
