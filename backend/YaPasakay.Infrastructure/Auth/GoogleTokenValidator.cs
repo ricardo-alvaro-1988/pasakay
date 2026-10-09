@@ -1,10 +1,14 @@
+using System.IdentityModel.Tokens.Jwt;
 using Google.Apis.Auth;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using YaPasakay.Application.Auth;
 
 namespace YaPasakay.Infrastructure.Auth;
 
-public class GoogleTokenValidator(IOptions<GoogleAuthOptions> options)
+public class GoogleTokenValidator(
+    IOptions<GoogleAuthOptions> options,
+    ILogger<GoogleTokenValidator> logger)
 {
     public async Task<(bool Ok, string? Error, GoogleProfile? Profile)> ValidateAsync(string? idToken)
     {
@@ -19,11 +23,26 @@ public class GoogleTokenValidator(IOptions<GoogleAuthOptions> options)
             return (false, "Google sign-in was cancelled.", null);
         }
 
+        var audiences = new List<string> { clientId };
+        foreach (var extra in options.Value.AdditionalClientIds ?? [])
+        {
+            var value = extra?.Trim();
+            if (!string.IsNullOrWhiteSpace(value) && !audiences.Contains(value, StringComparer.Ordinal))
+            {
+                audiences.Add(value);
+            }
+        }
+
         try
         {
             var payload = await GoogleJsonWebSignature.ValidateAsync(
                 idToken,
-                new GoogleJsonWebSignature.ValidationSettings { Audience = [clientId] });
+                new GoogleJsonWebSignature.ValidationSettings
+                {
+                    Audience = audiences,
+                    IssuedAtClockTolerance = TimeSpan.FromMinutes(5),
+                    ExpirationTimeClockTolerance = TimeSpan.FromMinutes(5),
+                });
 
             if (payload.EmailVerified != true)
             {
@@ -43,13 +62,38 @@ public class GoogleTokenValidator(IOptions<GoogleAuthOptions> options)
                 payload.FamilyName,
                 payload.Name));
         }
-        catch (InvalidJwtException)
+        catch (InvalidJwtException ex)
         {
+            var aud = TryReadAudience(idToken);
+            logger.LogWarning(
+                ex,
+                "Google ID token rejected. configuredAudience={Configured} tokenAud={TokenAud}",
+                string.Join(',', audiences),
+                aud ?? "(unknown)");
             return (false, "Google sign-in could not be verified. Refresh and try again.", null);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Google ID token validation failed unexpectedly.");
+            return (false, "Google sign-in could not be verified. Refresh and try again.", null);
+        }
+    }
+
+    private static string? TryReadAudience(string idToken)
+    {
+        try
+        {
+            var jwt = new JwtSecurityTokenHandler().ReadJwtToken(idToken);
+            if (jwt.Audiences.Any())
+            {
+                return string.Join(',', jwt.Audiences);
+            }
+
+            return jwt.Payload.TryGetValue("aud", out var aud) ? aud?.ToString() : null;
         }
         catch
         {
-            return (false, "Google sign-in could not be verified. Refresh and try again.", null);
+            return null;
         }
     }
 }

@@ -43,7 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   GoogleSignIn _googleClient(String clientId) {
     return _google ??= GoogleSignIn(
-      scopes: const ['email', 'profile'],
+      scopes: const ['openid', 'email', 'profile'],
       serverClientId: clientId,
     );
   }
@@ -64,6 +64,14 @@ class _LoginScreenState extends State<LoginScreen> {
     if (message.contains('q1: 10')) return true;
     if (message.contains('sign_in_failed') && message.contains('10')) return true;
     return false;
+  }
+
+  /// Backend rejected the native ID token (usually audience mismatch) → browser GIS once.
+  bool _isVerifyFailure(Object ex) {
+    final message = ex.toString().toLowerCase();
+    return message.contains('could not be verified') ||
+        message.contains('did not return an email') ||
+        message.contains('verify your google email');
   }
 
   Future<void> _finishWithIdToken(String idToken) async {
@@ -152,11 +160,12 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       } catch (ex) {
         if (_isCancel(ex)) return;
-        if (ex is ApiException) rethrow;
-        if (!_needsBrowserFallback(ex)) {
+        // Native token rejected by API, or Android OAuth/SHA-1 missing → browser GIS once.
+        final canBrowser = _needsBrowserFallback(ex) || _isVerifyFailure(ex);
+        if (ex is ApiException && !canBrowser) rethrow;
+        if (ex is! ApiException && !canBrowser) {
           throw Exception('Google sign-in failed. Try again.');
         }
-        // SHA-1 / Android OAuth client missing → browser once.
       }
 
       await _browserSignIn();

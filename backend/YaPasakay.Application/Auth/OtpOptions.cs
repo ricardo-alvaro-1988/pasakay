@@ -20,6 +20,12 @@ public class GoogleAuthOptions
 
     /// <summary>Used only for server-side OAuth. GIS ID-token sign-in does not need this.</summary>
     public string? ClientSecret { get; set; }
+
+    /// <summary>
+    /// Extra OAuth client IDs allowed as ID-token audience (e.g. Android clients).
+    /// Native Google Sign-In sometimes mints aud=Android client even when serverClientId is set.
+    /// </summary>
+    public string[]? AdditionalClientIds { get; set; }
 }
 
 public class FcmOptions
