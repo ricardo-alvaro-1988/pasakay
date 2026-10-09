@@ -1,6 +1,8 @@
 package com.yapasakay.rider
 
 import android.Manifest
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -51,6 +53,15 @@ class OnlineService : Service() {
         @Volatile
         private var lastPushKey = ""
 
+
+        private fun largeIcon(context: Context): Bitmap? {
+            return try {
+                BitmapFactory.decodeResource(context.resources, R.drawable.ic_notify_logo)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+
         fun start(context: Context): Boolean {
             return startCommand(context, Intent(context, OnlineService::class.java).setAction(ACTION_START))
         }
@@ -97,6 +108,7 @@ class OnlineService : Service() {
                 val open = PendingIntent.getActivity(app, 4, launch, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
                 val notification = NotificationCompat.Builder(app, NOTICE_CHANNEL)
                     .setSmallIcon(R.drawable.ic_stat_notify)
+                    .setLargeIcon(largeIcon(app))
                     .setContentTitle(title)
                     .setContentText(body)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -124,6 +136,7 @@ class OnlineService : Service() {
                 val open = PendingIntent.getActivity(app, 3, launch, flags)
                 val notification = NotificationCompat.Builder(app, CHAT_CHANNEL)
                     .setSmallIcon(R.drawable.ic_stat_notify)
+                    .setLargeIcon(largeIcon(app))
                     .setContentTitle(title)
                     .setContentText(body)
                     .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -294,6 +307,7 @@ class OnlineService : Service() {
     private fun onlineNotification(): Notification {
         return NotificationCompat.Builder(this, ONLINE_CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_notify)
+            .setLargeIcon(largeIcon(this))
             .setContentTitle("Pasakya Man")
             .setContentText("You are online. Waiting for jobs.")
             .setOngoing(true)
@@ -311,6 +325,7 @@ class OnlineService : Service() {
             val open = openAppIntent()
             val notification = NotificationCompat.Builder(this, OFFER_CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_notify)
+            .setLargeIcon(largeIcon(this))
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
@@ -332,6 +347,7 @@ class OnlineService : Service() {
         try {
             val notification = NotificationCompat.Builder(this, CHAT_CHANNEL)
                 .setSmallIcon(R.drawable.ic_stat_notify)
+            .setLargeIcon(largeIcon(this))
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))

@@ -222,12 +222,14 @@ class RiderSession extends ChangeNotifier {
 
   Future<void> setOnline(bool online) async {
     try {
+      final previous = desk;
       desk = await api.setOnline(online);
       _deskSignature = _signature(desk);
       error = null;
       if (online) {
         await RiderAlerts.prepare(true);
         _keepAlive = await RiderAlerts.startOnline();
+        await _syncOfferAlarm(previous);
         await _pingGps(force: true);
         _scheduleGps();
       } else {
@@ -760,12 +762,14 @@ class RiderSession extends ChangeNotifier {
         }
       }
 
+      final previous = desk;
       final previousSig = _deskSignature;
       desk = await api.pingLocation(position.latitude, position.longitude);
       _deskSignature = _signature(desk);
       _lastGpsAt = DateTime.now();
       _lastGpsLat = position.latitude;
       _lastGpsLng = position.longitude;
+      await _syncOfferAlarm(previous);
       if (_deskSignature != previousSig) {
         notifyListeners();
       }
