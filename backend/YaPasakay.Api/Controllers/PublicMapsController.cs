@@ -32,7 +32,7 @@ public class PublicMapsController(IConfiguration config, AppDbContext db) : Cont
     [HttpGet("auth")]
     public ActionResult Auth()
     {
-        var clientId = (config["GoogleAuth:ClientId"] ?? string.Empty).Trim();
+        var clientId = (config["GoogleAuth:ClientId"] ?? string.Empty).Trim().Trim('\'').Trim('"').Trim();
         return Ok(new
         {
             googleClientId = clientId,
