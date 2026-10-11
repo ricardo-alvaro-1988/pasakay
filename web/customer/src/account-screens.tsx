@@ -25,7 +25,7 @@ import {
 import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
 import { BookingHistoryRating, RateRidePanel } from './rate-ride'
 import { ServiceReceipt } from './service-receipt'
-import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
+import { NoOperatorNotice, useNoOperatorNotice, VehicleAvailabilityScan } from './no-operator-notice'
 const PAYMENT_METHODS: PaymentMethod[] = ['Cash', 'GCash', 'Maya', 'Other']
 
 export function PaymentBar({
@@ -549,6 +549,10 @@ export function ScheduleScreen({
       {pickup && (
         <>
       <p className="section-title">Vehicle</p>
+      {!noOperator.vehiclesReady ? (
+        <VehicleAvailabilityScan rows={3} />
+      ) : (
+        <>
       <div className="vehicles">
         {(noOperator.useOffers
           ? noOperator.availableVehicles
@@ -597,11 +601,10 @@ export function ScheduleScreen({
           )
         })}
       </div>
-      {!noOperator.vehiclesReady && (
-        <p className="muted">Checking available vehicles…</p>
-      )}
-      {noOperator.vehiclesReady && noOperator.availableTypes.length === 0 && (
+      {noOperator.availableTypes.length === 0 && (
         <p className="muted">No vehicle types are offered for bookings in this municipality yet.</p>
+      )}
+        </>
       )}
         </>
       )}
