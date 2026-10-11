@@ -1193,6 +1193,8 @@ export type RiderReportItem = {
   plateNumber: string
   vehicleFranchiseNumber: string
   mobile: string
+  municipality: string
+  barangay: string
   joinedAtUtc: string
   isActive: boolean
   totalRides: number

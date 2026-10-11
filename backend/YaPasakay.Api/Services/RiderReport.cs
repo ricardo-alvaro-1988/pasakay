@@ -65,6 +65,8 @@ public static class RiderReport
         var ridersQuery = db.RiderProfiles
             .AsNoTracking()
             .Include(x => x.AppUser)
+            .Include(x => x.AddressBarangay)
+                .ThenInclude(x => x!.Municipality)
             .Where(x => x.OperatorId == operatorId);
 
         if (!string.IsNullOrWhiteSpace(q))
@@ -144,6 +146,8 @@ public static class RiderReport
                 rider.PlateNumber,
                 rider.VehicleFranchiseNumber,
                 rider.AppUser.PhoneNumber,
+                rider.AddressBarangay?.Municipality.Name ?? string.Empty,
+                rider.AddressBarangay?.Name ?? string.Empty,
                 DateTime.SpecifyKind(rider.CreatedAtUtc, DateTimeKind.Utc),
                 rider.IsActive,
                 riderTrips.Count,

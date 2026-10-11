@@ -8511,6 +8511,8 @@ function OperatorRiderReportPage() {
                 <th>Plate</th>
                 <th>Registration</th>
                 <th>Mobile</th>
+                <th>Municipality</th>
+                <th>Barangay</th>
                 <th>Joined</th>
                 <th>No# rides</th>
                 <th>No# cancel</th>
@@ -8520,13 +8522,15 @@ function OperatorRiderReportPage() {
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={9}>No riders for this filter.</td></tr>
+                <tr><td colSpan={11}>No riders for this filter.</td></tr>
               ) : rows.map((row: RiderReportItem) => (
                 <tr key={row.riderId}>
                   <td><strong>{row.riderName}</strong>{row.isActive ? null : <span className="muted"> · Off</span>}</td>
                   <td>{row.plateNumber || '—'}</td>
                   <td>{row.vehicleFranchiseNumber || '—'}</td>
                   <td>{row.mobile || '—'}</td>
+                  <td>{row.municipality || '—'}</td>
+                  <td>{row.barangay || '—'}</td>
                   <td>{phDateTime(row.joinedAtUtc)}</td>
                   <td>{row.totalRides}</td>
                   <td>{row.totalCancel}</td>
