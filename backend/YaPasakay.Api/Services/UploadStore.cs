@@ -67,6 +67,42 @@ public class UploadStore(IWebHostEnvironment environment, IConfiguration configu
         return await WriteAsync(file, folder, fileName, ext, cancellationToken);
     }
 
+    public void TryDelete(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return;
+        }
+
+        try
+        {
+            var full = SafeFullPath(relativePath);
+            if (File.Exists(full))
+            {
+                File.Delete(full);
+            }
+
+            var dir = Path.GetDirectoryName(full);
+            if (dir is not null &&
+                Directory.Exists(dir) &&
+                !Directory.EnumerateFileSystemEntries(dir).Any())
+            {
+                Directory.Delete(dir);
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Invalid path — ignore; caller already owns the DB row cleanup.
+        }
+        catch (IOException)
+        {
+            // Best-effort disk cleanup; do not fail the release delete.
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
     private async Task<string> WriteAsync(
         IFormFile file,
         string folder,
