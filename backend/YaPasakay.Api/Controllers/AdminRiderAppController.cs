@@ -30,6 +30,8 @@ public class AdminRiderAppController(AppDbContext db, UploadStore uploads) : Con
         RiderAppReleaseDto? Latest,
         IReadOnlyList<RiderAppReleaseDto> Releases);
 
+    public record DeleteRiderAppReleasesRequest(IReadOnlyList<Guid> Ids);
+
     [HttpGet]
     public async Task<ActionResult<RiderAppAdminDto>> Get(CancellationToken cancellationToken)
     {
@@ -122,6 +124,63 @@ public class AdminRiderAppController(AppDbContext db, UploadStore uploads) : Con
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+
+        return await Get(cancellationToken);
+    }
+
+    [HttpPost("delete")]
+    public async Task<ActionResult<RiderAppAdminDto>> Delete(
+        [FromBody] DeleteRiderAppReleasesRequest body,
+        CancellationToken cancellationToken)
+    {
+        var ids = (body?.Ids ?? [])
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+        {
+            return BadRequest(new { message = "Select at least one release to delete." });
+        }
+
+        var rows = await db.RiderAppReleases
+            .Where(x => ids.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return await Get(cancellationToken);
+        }
+
+        var removedLatest = rows.Any(x => x.IsLatest);
+        var paths = rows
+            .Select(x => x.ApkPath)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        db.RiderAppReleases.RemoveRange(rows);
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (removedLatest)
+        {
+            var next = await db.RiderAppReleases
+                .OrderByDescending(x => x.UpdatedAtUtc)
+                .ThenByDescending(x => x.CreatedAtUtc)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (next is not null)
+            {
+                next.IsLatest = true;
+                next.UpdatedAtUtc = DateTime.UtcNow;
+                await db.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        await tx.CommitAsync(cancellationToken);
+
+        foreach (var path in paths)
+        {
+            uploads.TryDelete(path);
         }
 
         return await Get(cancellationToken);

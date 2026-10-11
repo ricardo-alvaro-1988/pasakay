@@ -2075,6 +2075,28 @@ export const api = {
       xhr.send(data)
     })
   },
+  deleteRiderAppReleases: (ids: string[]) =>
+    request<{
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }>('/api/admin/rider-app/delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
   getPassengerApp: () =>
     request<{
       latest: {
@@ -2149,6 +2171,28 @@ export const api = {
       xhr.send(data)
     })
   },
+  deletePassengerAppReleases: (ids: string[]) =>
+    request<{
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }>('/api/admin/passenger-app/delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
   operatorFleet: () => request<OperatorFleet>('/api/operator/fleet'),
   operatorCompany: () => request<OperatorDetail>('/api/operator/company'),
   saveOperatorDispatchMode: (
