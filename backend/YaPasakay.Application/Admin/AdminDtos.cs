@@ -707,6 +707,8 @@ public record RiderReportItem(
     string PlateNumber,
     string VehicleFranchiseNumber,
     string Mobile,
+    string Municipality,
+    string Barangay,
     DateTime JoinedAtUtc,
     bool IsActive,
     int TotalRides,

@@ -310,6 +310,15 @@ public class CustomerBookingsController(
 
         var customerFare = prepared.CustomerFare;
         var hasPromos = await promos.HasOfferablePromosAsync(prepared.Operator!.Id, customer.Id, cancellationToken);
+        // Quote does not assign a rider; only Broadcast needs a cheap availability probe for the UI flag.
+        var riderAvailable = prepared.Rider is not null
+            || prepared.Operator.BookingDispatchMode != BookingDispatchMode.Broadcast
+            || await HasAssignableRiderAsync(
+                prepared.Operator.Id,
+                prepared.VehicleType,
+                prepared.VehicleCategoryId,
+                body.PaymentMethod,
+                cancellationToken);
         return Ok(new CustomerQuoteResponse(
             customerFare,
             prepared.DistanceKm,
@@ -317,7 +326,7 @@ public class CustomerBookingsController(
             prepared.Operator!.CompanyName,
             prepared.VehicleType,
             body.PaymentMethod,
-            prepared.Rider is not null || prepared.Operator.BookingDispatchMode != BookingDispatchMode.Broadcast,
+            riderAvailable,
             prepared.Operator.BookingDispatchMode,
             prepared.MatrixFare,
             customerFare,
@@ -356,8 +365,11 @@ public class CustomerBookingsController(
             municipalityName = municipality?.Name;
         }
 
-        // Prefer GPS reverse-geocode when coordinates exist (Plus Codes / sparse labels hide the city).
-        if (request.PickupLat is double plat
+        // Prefer GPS reverse-geocode only when barangay is unknown (Plus Codes / sparse labels).
+        // Skip the Google round-trip when the map already resolved a barangay id.
+        if (municipalityId is null
+            && request.PickupBarangayId is null
+            && request.PickupLat is double plat
             && request.PickupLng is double plng
             && plat != 0
             && plng != 0)
@@ -365,7 +377,7 @@ public class CustomerBookingsController(
             var looksSparse = pickupDetails.Contains('+')
                 || pickupDetails.Count(c => c == ',') < 1
                 || pickupDetails.Equals("Current location", StringComparison.OrdinalIgnoreCase);
-            if (municipalityId is null || looksSparse)
+            if (looksSparse || municipalityId is null)
             {
                 var geoAddress = await driving.ReverseGeocodeAsync(plat, plng, cancellationToken);
                 if (!string.IsNullOrWhiteSpace(geoAddress))
@@ -444,17 +456,18 @@ public class CustomerBookingsController(
             .ToHashSet();
 
         // When pickup is inside a derive zone, seat caps come from that zone's passenger tiers.
+        // Load zone polygons first (light), then only matrices for the matched zone.
         var deriveTierByType = new Dictionary<VehicleType, int>();
         if (request.PickupLat is double dLat && request.PickupLng is double dLng && dLat != 0 && dLng != 0)
         {
             var zones = await db.DeriveFareZones
                 .AsNoTracking()
-                .Include(x => x.Matrices)
-                .ThenInclude(x => x.PassengerTiers)
                 .Where(x => opIds.Contains(x.OperatorId) && x.IsActive)
                 .OrderByDescending(x => x.Priority)
                 .ThenByDescending(x => x.CreatedAtUtc)
+                .Select(x => new { x.Id, x.PolygonJson })
                 .ToListAsync(cancellationToken);
+            Guid? matchedZoneId = null;
             foreach (var zone in zones)
             {
                 var ring = GeoPolygon.Parse(zone.PolygonJson);
@@ -463,23 +476,35 @@ public class CustomerBookingsController(
                     continue;
                 }
 
-                foreach (var matrix in zone.Matrices.Where(m => m.IsActive))
+                matchedZoneId = zone.Id;
+                break; // highest-priority matching zone only
+            }
+
+            if (matchedZoneId is Guid zoneId)
+            {
+                var tierRows = await db.DeriveFareMatrices
+                    .AsNoTracking()
+                    .Where(x => x.DeriveFareZoneId == zoneId && x.IsActive)
+                    .Select(x => new
+                    {
+                        x.VehicleType,
+                        MaxTier = x.PassengerTiers
+                            .Select(t => (int?)t.PassengerCount)
+                            .Max(),
+                    })
+                    .ToListAsync(cancellationToken);
+                foreach (var row in tierRows)
                 {
-                    var tierMax = matrix.PassengerTiers.Count > 0
-                        ? matrix.PassengerTiers.Max(t => t.PassengerCount)
-                        : 0;
-                    if (tierMax <= 0)
+                    if (row.MaxTier is not > 0)
                     {
                         continue;
                     }
 
-                    if (!deriveTierByType.TryGetValue(matrix.VehicleType, out var existing) || tierMax < existing)
+                    if (!deriveTierByType.TryGetValue(row.VehicleType, out var existing) || row.MaxTier.Value < existing)
                     {
-                        deriveTierByType[matrix.VehicleType] = tierMax;
+                        deriveTierByType[row.VehicleType] = row.MaxTier.Value;
                     }
                 }
-
-                break; // highest-priority matching zone only
             }
         }
 
@@ -516,10 +541,9 @@ public class CustomerBookingsController(
                 VehicleCatalog.ApiName(preset.LegacyEnum)));
         }
 
-        // Custom operator categories (enabled only).
+        // Custom operator categories (enabled only) — one projected query, no Include graph.
         var customOffers = await db.OperatorVehicleOffers
             .AsNoTracking()
-            .Include(x => x.VehicleCategory)
             .Where(x => opIds.Contains(x.OperatorId)
                 && x.IsEnabled
                 && x.VehicleCategory != null
@@ -527,32 +551,42 @@ public class CustomerBookingsController(
                 && x.VehicleCategory.OperatorId != null)
             .OrderBy(x => x.VehicleCategory!.SortOrder)
             .ThenBy(x => x.VehicleCategory!.Name)
+            .Select(x => new
+            {
+                CategoryId = x.VehicleCategory!.Id,
+                x.VehicleCategory.Code,
+                x.VehicleCategory.Name,
+                x.VehicleCategory.IconKey,
+                x.VehicleCategory.MaxPassengers,
+                x.VehicleCategory.IsCargo,
+                x.DisplayName,
+                OfferMaxPassengers = x.MaxPassengers,
+            })
             .ToListAsync(cancellationToken);
         foreach (var o in customOffers)
         {
-            var cat = o.VehicleCategory!;
-            if (vehicles.Any(v => v.Id == cat.Id))
+            if (vehicles.Any(v => v.Id == o.CategoryId))
             {
                 continue;
             }
 
             var customFareCaps = offeredRows
-                .Where(x => x.VehicleCategoryId == cat.Id)
+                .Where(x => x.VehicleCategoryId == o.CategoryId)
                 .Select(x => x.MaxTier)
                 .Where(x => x is > 0)
                 .Select(x => x!.Value)
                 .ToList();
             vehicles.Add(new CustomerVehicleOfferDto(
-                cat.Id,
-                cat.Code,
-                o.DisplayName ?? cat.Name,
-                cat.IconKey,
+                o.CategoryId,
+                o.Code,
+                o.DisplayName ?? o.Name,
+                o.IconKey,
                 EffectiveSeatCapacity(
-                    cat.MaxPassengers,
                     o.MaxPassengers,
+                    o.OfferMaxPassengers,
                     customFareCaps.Count > 0 ? customFareCaps.Min() : null),
-                cat.IsCargo,
-                offeredCategoryIds.Contains(cat.Id),
+                o.IsCargo,
+                offeredCategoryIds.Contains(o.CategoryId),
                 VehicleCatalog.ApiName(VehicleType.Custom)));
         }
 
@@ -1087,18 +1121,23 @@ public class CustomerBookingsController(
             customerFare = CommissionCut.Round(customerFare + boost);
         }
 
-        var rider = hail.Rider ?? await PickRiderAsync(
-            op.Id,
-            vehicle,
-            vehicleCategoryId,
-            request.PaymentMethod,
-            pickupLat,
-            pickupLng,
-            excludeHailed: request.ScheduledAtUtc is null,
-            cancellationToken);
-        if (requireRider && rider is null)
+        // Quotes only need fare/ETA — skip heavy PickRider (full fleet + wallet + payments) unless booking.
+        RiderProfile? rider = hail.Rider;
+        if (requireRider)
         {
-            return new PreparedBooking { Error = "No rider is available for that vehicle and payment method." };
+            rider ??= await PickRiderAsync(
+                op.Id,
+                vehicle,
+                vehicleCategoryId,
+                request.PaymentMethod,
+                pickupLat,
+                pickupLng,
+                excludeHailed: request.ScheduledAtUtc is null,
+                cancellationToken);
+            if (rider is null)
+            {
+                return new PreparedBooking { Error = "No rider is available for that vehicle and payment method." };
+            }
         }
 
         if (hail.Rider is not null && requireHailReady)
@@ -1167,6 +1206,62 @@ public class CustomerBookingsController(
         }
 
         return Math.Max(1, seats);
+    }
+
+    /// <summary>
+    /// Cheap existence check for quote RiderAvailable (Broadcast). Avoids loading the full fleet graph.
+    /// </summary>
+    private async Task<bool> HasAssignableRiderAsync(
+        Guid operatorId,
+        VehicleType vehicleType,
+        Guid? vehicleCategoryId,
+        PaymentMethod payment,
+        CancellationToken cancellationToken)
+    {
+        var busy = await db.Trips
+            .AsNoTracking()
+            .Where(x => x.OperatorId == operatorId
+                && x.RiderId != null
+                && (x.Status == TripStatus.Waiting || x.Status == TripStatus.Ongoing))
+            .Select(x => x.RiderId!.Value)
+            .ToListAsync(cancellationToken);
+
+        IQueryable<RiderProfile> query = db.RiderProfiles
+            .AsNoTracking()
+            .Where(x => x.OperatorId == operatorId
+                && x.IsActive
+                && x.IsOnline
+                && x.AcceptsPasakay
+                && x.AppUser.IsActive
+                && x.PaymentMethods.Any(m => m.Method == payment)
+                && (x.Wallet == null || x.Wallet.Balance > TripBroadcastService.MinWalletToReceive)
+                && !busy.Contains(x.Id));
+
+        if (vehicleType == VehicleType.Custom)
+        {
+            if (vehicleCategoryId is not Guid categoryId)
+            {
+                return false;
+            }
+
+            query = query.Where(x => x.VehicleType == VehicleType.Custom && x.VehicleCategoryId == categoryId);
+        }
+        else if (vehicleCategoryId is Guid preferredCategoryId)
+        {
+            // Prefer category match when any exist; otherwise same vehicle type.
+            var anyPreferred = await query.AnyAsync(
+                x => x.VehicleType == vehicleType && x.VehicleCategoryId == preferredCategoryId,
+                cancellationToken);
+            query = anyPreferred
+                ? query.Where(x => x.VehicleType == vehicleType && x.VehicleCategoryId == preferredCategoryId)
+                : query.Where(x => x.VehicleType == vehicleType);
+        }
+        else
+        {
+            query = query.Where(x => x.VehicleType == vehicleType);
+        }
+
+        return await query.AnyAsync(cancellationToken);
     }
 
     private async Task<RiderProfile?> PickRiderAsync(
@@ -1263,6 +1358,7 @@ public class CustomerBookingsController(
         CancellationToken cancellationToken)
     {
         var candidates = await db.Operators
+            .AsNoTracking()
             .Where(x => x.IsActive && (
                 x.Areas.Any(a => a.BarangayId == pickup.Id)
                 || x.Areas.Any(a => a.Barangay.MunicipalityId == pickup.MunicipalityId)))
@@ -1273,27 +1369,42 @@ public class CustomerBookingsController(
             return null;
         }
 
+        var candidateIds = candidates.Select(x => x.Id).ToList();
+        HashSet<Guid>? enabledForCategory = null;
+        if (vehicleCategoryId is Guid categoryId)
+        {
+            var enabledIds = await db.OperatorVehicleOffers
+                .AsNoTracking()
+                .Where(x => candidateIds.Contains(x.OperatorId)
+                    && x.VehicleCategoryId == categoryId
+                    && x.IsEnabled)
+                .Select(x => x.OperatorId)
+                .ToListAsync(cancellationToken);
+            enabledForCategory = enabledIds.ToHashSet();
+        }
+
+        // One fare snapshot for all candidates instead of N LoadFareMatrixAsync round-trips.
+        var fareOpIds = await db.FareMatrices
+            .AsNoTracking()
+            .Where(x => candidateIds.Contains(x.OperatorId)
+                && x.MunicipalityId == pickup.MunicipalityId
+                && x.IsActive
+                && (
+                    (vehicleCategoryId != null && x.VehicleCategoryId == vehicleCategoryId)
+                    || x.VehicleType == vehicle))
+            .Select(x => x.OperatorId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var fareSet = fareOpIds.ToHashSet();
+
         foreach (var candidate in candidates)
         {
-            if (vehicleCategoryId is Guid categoryId)
+            if (enabledForCategory is not null && !enabledForCategory.Contains(candidate.Id))
             {
-                var enabled = await db.OperatorVehicleOffers.AsNoTracking().AnyAsync(
-                    x => x.OperatorId == candidate.Id && x.VehicleCategoryId == categoryId && x.IsEnabled,
-                    cancellationToken);
-                if (!enabled)
-                {
-                    continue;
-                }
+                continue;
             }
 
-            var fare = await OperatorMaps.LoadFareMatrixAsync(
-                db,
-                candidate.Id,
-                vehicle,
-                pickup.MunicipalityId,
-                vehicleCategoryId,
-                cancellationToken);
-            if (fare is not null)
+            if (fareSet.Contains(candidate.Id))
             {
                 return candidate;
             }

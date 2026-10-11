@@ -265,7 +265,7 @@ class _RentalScreenState extends State<RentalScreen> {
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [brandRed, Color(0xFF7A030C)],
+                colors: [brandNavy, Color(0xFF061236)],
               ),
             ),
             child: const Row(

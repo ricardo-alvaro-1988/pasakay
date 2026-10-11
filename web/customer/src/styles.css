@@ -1410,6 +1410,175 @@ button.brand-pill:active { transform: scale(.98); }
   object-fit: cover;
   flex: 0 0 auto;
 }
+
+/* Live “checking available vehicles” scan */
+.vehicle-scan {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.vehicle-scan-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 2px 0;
+}
+.vehicle-scan-radar {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+}
+.vehicle-scan-radar-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  animation: vehicle-scan-ping 1.6s ease-out infinite;
+}
+.vehicle-scan-radar-ring.delay {
+  animation-delay: 0.55s;
+}
+.vehicle-scan-dot {
+  position: absolute;
+  inset: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+  animation: vehicle-scan-dot 1.2s ease-in-out infinite;
+}
+.vehicle-scan-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.vehicle-scan-line {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  animation: vehicle-scan-fade 1.4s ease both;
+}
+.vehicle-scan-skeletons {
+  pointer-events: none;
+}
+.vehicle-scan-row {
+  animation: vehicle-scan-rise 0.45s ease both;
+  background: var(--surface, #fff);
+}
+.vehicle-scan-art {
+  width: 72px;
+  height: 52px;
+  flex: 0 0 72px;
+  border-radius: 12px;
+  background: linear-gradient(
+    100deg,
+    var(--chip, #e8edf3) 20%,
+    color-mix(in srgb, var(--accent) 14%, #fff) 40%,
+    var(--chip, #e8edf3) 60%
+  );
+  background-size: 200% 100%;
+  animation: vehicle-scan-shimmer 1.25s linear infinite;
+}
+.vehicle-scan-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.vehicle-scan-bar {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(
+    100deg,
+    var(--chip, #e8edf3) 20%,
+    color-mix(in srgb, var(--line) 35%, #fff) 45%,
+    var(--chip, #e8edf3) 70%
+  );
+  background-size: 200% 100%;
+  animation: vehicle-scan-shimmer 1.25s linear infinite;
+}
+.vehicle-scan-bar.wide { width: 58%; }
+.vehicle-scan-bar.narrow { width: 34%; height: 8px; opacity: 0.85; }
+.vehicle-scan-chevron {
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--line);
+  border-bottom: 2px solid var(--line);
+  transform: rotate(-45deg);
+  opacity: 0.55;
+  flex: 0 0 auto;
+  margin-right: 4px;
+}
+.vehicle-scan-track {
+  position: relative;
+  height: 3px;
+  margin: 2px 4px 0;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: visible;
+}
+.vehicle-scan-bike {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 22px;
+  height: 12px;
+  margin-top: -7px;
+  border-radius: 3px 10px 3px 3px;
+  background: var(--accent);
+  box-shadow: -6px 2px 0 -2px color-mix(in srgb, var(--accent) 70%, #000);
+  animation: vehicle-scan-ride 2.2s ease-in-out infinite;
+}
+.vehicle-scan-bike::before,
+.vehicle-scan-bike::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 55%, #222);
+  background: #fff;
+}
+.vehicle-scan-bike::before { left: 1px; }
+.vehicle-scan-bike::after { right: 0; }
+@keyframes vehicle-scan-ping {
+  0% { transform: scale(0.55); opacity: 0.85; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+@keyframes vehicle-scan-dot {
+  50% { transform: scale(0.86); }
+}
+@keyframes vehicle-scan-fade {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes vehicle-scan-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes vehicle-scan-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+@keyframes vehicle-scan-ride {
+  0% { left: 0; transform: translateX(0); }
+  50% { left: calc(100% - 22px); transform: translateX(0) translateY(-1px); }
+  100% { left: 0; transform: translateX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vehicle-scan-radar-ring,
+  .vehicle-scan-dot,
+  .vehicle-scan-line,
+  .vehicle-scan-row,
+  .vehicle-scan-art,
+  .vehicle-scan-bar,
+  .vehicle-scan-bike {
+    animation: none !important;
+  }
+}
 .vehicle-chevron {
   color: var(--muted);
   font-weight: 800;

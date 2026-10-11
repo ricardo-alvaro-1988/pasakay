@@ -66,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return false;
   }
 
-  /// Backend rejected the native ID token (usually audience mismatch) → browser GIS once.
+  /// Backend rejected the native ID token (usually audience mismatch) → browser GIS.
   bool _isVerifyFailure(Object ex) {
     final message = ex.toString().toLowerCase();
     return message.contains('could not be verified') ||
@@ -201,7 +201,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [brandRed, Color(0xFF7A030C)],
+                  colors: [brandNavy, Color(0xFF061236)],
                 ),
               ),
               child: Column(

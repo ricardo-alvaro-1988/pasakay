@@ -8,6 +8,7 @@ namespace YaPasakay.Api.Services;
 public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingDistance> logger)
 {
     private static readonly ConcurrentDictionary<string, (decimal Km, int EtaMinutes, DateTime AtUtc)> Cache = new();
+    private static readonly ConcurrentDictionary<string, Task<(decimal Km, int EtaMinutes)>> Inflight = new();
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(8);
 
     public async Task<(decimal Km, int EtaMinutes)> MeasureAsync(
@@ -22,6 +23,51 @@ public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingD
         var fallbackEta = Math.Max(4, (int)Math.Round((double)fallbackKm / 0.35));
 
         var key = string.Create(CultureInfo.InvariantCulture, $"{pickupLat:F5},{pickupLng:F5}|{dropoffLat:F5},{dropoffLng:F5}");
+        if (Cache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.AtUtc < CacheTtl)
+        {
+            return (cached.Km, cached.EtaMinutes);
+        }
+
+        // Collapse parallel quote fan-out onto one Directions call per route key.
+        while (true)
+        {
+            if (Cache.TryGetValue(key, out cached) && DateTime.UtcNow - cached.AtUtc < CacheTtl)
+            {
+                return (cached.Km, cached.EtaMinutes);
+            }
+
+            if (Inflight.TryGetValue(key, out var existing))
+            {
+                return await existing.WaitAsync(cancellationToken);
+            }
+
+            var run = MeasureUncachedAsync(key, pickupLat, pickupLng, dropoffLat, dropoffLng, fallbackKm, fallbackEta, cancellationToken);
+            if (!Inflight.TryAdd(key, run))
+            {
+                continue;
+            }
+
+            try
+            {
+                return await run;
+            }
+            finally
+            {
+                Inflight.TryRemove(key, out _);
+            }
+        }
+    }
+
+    private async Task<(decimal Km, int EtaMinutes)> MeasureUncachedAsync(
+        string key,
+        double pickupLat,
+        double pickupLng,
+        double dropoffLat,
+        double dropoffLng,
+        decimal fallbackKm,
+        int fallbackEta,
+        CancellationToken cancellationToken)
+    {
         if (Cache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.AtUtc < CacheTtl)
         {
             return (cached.Km, cached.EtaMinutes);

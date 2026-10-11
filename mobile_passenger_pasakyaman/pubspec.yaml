@@ -1,7 +1,7 @@
 name: passenger
 description: "Pasakya Man passenger app."
 publish_to: 'none'
-version: 1.0.3+3
+version: 1.0.4+4
 
 environment:
   sdk: ^3.12.2
@@ -34,7 +34,7 @@ flutter_launcher_icons:
   android: true
   ios: true
   image_path: assets/app-icon.png
-  adaptive_icon_background: "#E30613"
+  adaptive_icon_background: "#0B1F5C"
   adaptive_icon_foreground: assets/app-icon.png
   remove_alpha_ios: true
 

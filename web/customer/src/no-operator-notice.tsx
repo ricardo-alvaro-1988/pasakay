@@ -1,6 +1,56 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api, NO_OPERATOR_EMAIL, NO_OPERATOR_FACEBOOK_URL, NO_OPERATOR_NOTICE_DELAY_MS, Stop, VehicleOffer, VehicleType } from './api'
 
+const SCAN_LINES = [
+  'Scanning nearby operators…',
+  'Checking motorcycle & tricycle…',
+  'Matching fares for this area…',
+  'Finding what you can book…',
+]
+
+/** Lively placeholder while service-check resolves available vehicles. */
+export function VehicleAvailabilityScan({ rows = 4 }: { rows?: number }) {
+  const [line, setLine] = useState(0)
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setLine((n) => (n + 1) % SCAN_LINES.length)
+    }, 1400)
+    return () => window.clearInterval(id)
+  }, [])
+
+  return (
+    <div className="vehicle-scan" aria-live="polite" aria-busy="true">
+      <div className="vehicle-scan-status">
+        <span className="vehicle-scan-radar" aria-hidden>
+          <span className="vehicle-scan-radar-ring" />
+          <span className="vehicle-scan-radar-ring delay" />
+          <span className="vehicle-scan-dot" />
+        </span>
+        <div className="vehicle-scan-copy">
+          <b key={line} className="vehicle-scan-line">{SCAN_LINES[line]}</b>
+          <small className="muted">Hang tight — this usually takes a moment.</small>
+        </div>
+      </div>
+      <div className="vehicles vehicles-list vehicles-pick vehicle-scan-skeletons">
+        {Array.from({ length: rows }, (_, i) => (
+          <div key={i} className="vehicle vehicle-scan-row" style={{ animationDelay: `${i * 90}ms` }}>
+            <span className="vehicle-scan-art" aria-hidden />
+            <span className="vehicle-scan-text">
+              <span className="vehicle-scan-bar wide" />
+              <span className="vehicle-scan-bar narrow" />
+            </span>
+            <span className="vehicle-scan-chevron" aria-hidden />
+          </div>
+        ))}
+      </div>
+      <div className="vehicle-scan-track" aria-hidden>
+        <span className="vehicle-scan-bike" />
+      </div>
+    </div>
+  )
+}
+
 export function useNoOperatorNotice(
   pickup: Stop | null,
   dropoff: Stop | null,
@@ -13,7 +63,9 @@ export function useNoOperatorNotice(
   const [tricycleAvailable, setTricycleAvailable] = useState(false)
   const [vehicles, setVehicles] = useState<VehicleOffer[]>([])
   const [vehiclesReady, setVehiclesReady] = useState(false)
+  const [municipalityHasOperator, setMunicipalityHasOperator] = useState<boolean | null>(null)
 
+  // Availability is pickup-only — do not re-hit service-check when drop-off changes.
   useEffect(() => {
     setSearching(false)
     setUncovered(false)
@@ -21,28 +73,18 @@ export function useNoOperatorNotice(
     setTricycleAvailable(false)
     setVehicles([])
     setVehiclesReady(false)
-    // Load offered vehicles from pickup municipality (do not wait for drop-off).
+    setMunicipalityHasOperator(null)
     if (!enabled || !pickup) return
 
     let cancelled = false
-    let timer: number | undefined
-
-    function startWait() {
-      setSearching(true)
-      timer = window.setTimeout(() => {
-        if (cancelled) return
-        setSearching(false)
-        setUncovered(true)
-      }, NO_OPERATOR_NOTICE_DELAY_MS)
-    }
 
     void api.serviceCheck({
       pickupBarangayId: pickup.barangayId,
       pickupDetails: pickup.details,
       pickupLat: pickup.lat,
       pickupLng: pickup.lng,
-      dropoffBarangayId: dropoff?.barangayId,
-      dropoffDetails: dropoff?.details ?? '',
+      dropoffBarangayId: undefined,
+      dropoffDetails: '',
     }).then((result) => {
       if (cancelled) return
       setMotorcycleAvailable(!!result.motorcycleAvailable)
@@ -50,13 +92,41 @@ export function useNoOperatorNotice(
       const list = Array.isArray(result.vehicles) ? result.vehicles : []
       setVehicles(list)
       setVehiclesReady(true)
-      // Only warn about uncovered area once both stops are chosen.
-      if (dropoff && !result.municipalityHasOperator) startWait()
+      setMunicipalityHasOperator(!!result.municipalityHasOperator)
     }).catch(() => {
       if (cancelled) return
       setVehiclesReady(true)
-      if (dropoff && coverageHint) startWait()
+      setMunicipalityHasOperator(null)
     })
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    enabled,
+    pickup?.barangayId,
+    pickup?.details,
+    pickup?.lat,
+    pickup?.lng,
+  ])
+
+  // Uncovered-area notice waits until drop-off is chosen (uses last pickup service-check).
+  useEffect(() => {
+    setSearching(false)
+    setUncovered(false)
+    if (!enabled || !pickup || !dropoff) return
+
+    let cancelled = false
+    let timer: number | undefined
+
+    if (municipalityHasOperator === false || (municipalityHasOperator === null && coverageHint)) {
+      setSearching(true)
+      timer = window.setTimeout(() => {
+        if (cancelled) return
+        setSearching(false)
+        setUncovered(true)
+      }, NO_OPERATOR_NOTICE_DELAY_MS)
+    }
 
     return () => {
       cancelled = true
@@ -66,13 +136,9 @@ export function useNoOperatorNotice(
     enabled,
     coverageHint,
     pickup?.barangayId,
-    pickup?.details,
-    pickup?.lat,
-    pickup?.lng,
     dropoff?.barangayId,
     dropoff?.details,
-    dropoff?.lat,
-    dropoff?.lng,
+    municipalityHasOperator,
   ])
 
   // Memoize so quote effects that depend on these do not re-run every render
