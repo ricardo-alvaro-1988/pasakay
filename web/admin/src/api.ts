@@ -2438,6 +2438,44 @@ export const api = {
     params.set('pageSize', String(opts.pageSize ?? 20))
     return request<Paged<WalletHistoryItem>>(`/api/operator/wallet/history?${params}`)
   },
+  exportOperatorWalletCashIn: async (opts: {
+    q?: string
+    from?: string
+    to?: string
+    status?: string
+  }) => {
+    const params = new URLSearchParams()
+    if (opts.q?.trim()) params.set('q', opts.q.trim())
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    if (opts.status) params.set('status', opts.status)
+    const headers = new Headers()
+    const token = getToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    const res = await fetch(`/api/operator/wallet/cash-in/export?${params}`, { headers })
+    if (!res.ok) {
+      let message = 'Could not export cash-in report.'
+      try {
+        const body = (await res.json()) as { message?: string }
+        if (body.message) message = body.message
+      } catch {
+        /* ignore */
+      }
+      throw new Error(message)
+    }
+    const blob = await res.blob()
+    const disposition = res.headers.get('Content-Disposition') ?? ''
+    const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
+    const filename = match?.[1]?.replace(/['"]/g, '') || `cash-in.xlsx`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  },
   operatorWalletRequests: () => request<WalletRequest[]>('/api/operator/wallet/requests'),
   operatorCashInDestinations: () =>
     request<OperatorCashInDestinations>('/api/operator/wallet/cash-in-destinations'),
