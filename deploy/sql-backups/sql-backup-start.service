@@ -1,0 +1,10 @@
+[Unit]
+Description=Activate SQL backup schedule at the requested first midnight
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl enable --now sql-backup-cycle.timer
+ExecStart=/usr/bin/systemctl start sql-backup-cycle.service
+TimeoutStartSec=2h

@@ -1,0 +1,11 @@
+[Unit]
+Description=Start the replacement SQL backup schedule on October 10 at midnight Philippine time
+
+[Timer]
+OnCalendar=2026-10-10 00:00:00 Asia/Manila
+Persistent=true
+AccuracySec=1s
+Unit=sql-backup-start.service
+
+[Install]
+WantedBy=timers.target

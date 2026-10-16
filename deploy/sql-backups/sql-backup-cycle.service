@@ -1,0 +1,25 @@
+[Unit]
+Description=Full, differential and transaction-log backups for all SQL user databases
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/lib/sql-backup-manager/backup_manager.py
+User=root
+Group=root
+UMask=0027
+TimeoutStartSec=2h
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+ProtectHome=true
+ProtectSystem=full
+# Separate ReadWritePaths mounts prevent atomic rename between staging and FTP.
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
