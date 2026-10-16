@@ -9,8 +9,13 @@ Contact defaults to `support@<hostname>` with `www.` removed. Provision and
 monitor these mailboxes. Override with `VITE_PRIVACY_CONTACT_EMAIL` at build
 time for subdomain deployments or other mailboxes.
 
-The deletion link opens `/?account=delete`, selecting the existing account
-request screen after Google sign-in. Opening a link does not submit a request.
+Both legal pages are standalone, without app navigation or cross-links. The
+deletion page provides email request instructions using the brand support
+mailbox; provision and monitor it and verify identity before acting. Existing
+in-app requests remain available. The `/?account=delete` deep link still selects
+the request screen after Google sign-in. Opening a link does not submit a request.
+YaPasakay uses its bundled logo when no upload is configured. Other brands use
+their uploaded logo, or a text brand mark when a logo is missing or cannot load.
 
 ## Audit and remaining release work (2026-10-16)
 
