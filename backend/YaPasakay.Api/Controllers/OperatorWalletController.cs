@@ -142,6 +142,29 @@ public class OperatorWalletController(AppDbContext db, RiderWalletService wallet
             total));
     }
 
+    [HttpGet("cash-in/export")]
+    public async Task<IActionResult> ExportCashIn(
+        [FromQuery] string? q,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] WalletTransactionStatus? status,
+        CancellationToken cancellationToken = default)
+    {
+        var (op, statusCode, message) = await OperatorContext.RequireAsync(db, User, cancellationToken);
+        if (op is null)
+        {
+            return StatusCode(statusCode, new { message });
+        }
+
+        var rows = await CashInExport.BuildRowsAsync(db, op.Id, q, from, to, status, cancellationToken);
+        var bytes = CashInReportExcel.Build(rows);
+        var stamp = DateTime.UtcNow.AddHours(8).ToString("yyyyMMdd");
+        return File(
+            bytes,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"cash-in-{stamp}.xlsx");
+    }
+
     [HttpGet("riders/{riderId:guid}")]
     public async Task<ActionResult<RiderWalletDetailResponse>> RiderWallet(
         Guid riderId,

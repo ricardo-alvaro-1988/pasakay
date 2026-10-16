@@ -29,12 +29,14 @@ function formatBytes(bytes: number) {
 export function PassengerAppSettingsPage() {
   const [latest, setLatest] = useState<Release | null>(null)
   const [releases, setReleases] = useState<Release[]>([])
+  const [selected, setSelected] = useState<Set<string>>(() => new Set())
   const [version, setVersion] = useState('')
   const [notes, setNotes] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [loading, setLoading] = useState(true)
   const [uploadLabel, setUploadLabel] = useState('')
   const [uploadPercent, setUploadPercent] = useState<number | null>(null)
@@ -44,6 +46,7 @@ export function PassengerAppSettingsPage() {
     const data = await api.getPassengerApp()
     setLatest(data.latest)
     setReleases(data.releases)
+    setSelected(new Set())
   }
 
   useEffect(() => {
@@ -59,6 +62,19 @@ export function PassengerAppSettingsPage() {
       cancelled = true
     }
   }, [])
+
+  function toggleOne(id: string, checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  function toggleAll(checked: boolean) {
+    setSelected(checked ? new Set(releases.map((r) => r.id)) : new Set())
+  }
 
   async function publish(e: FormEvent) {
     e.preventDefault()
@@ -86,6 +102,7 @@ export function PassengerAppSettingsPage() {
       )
       setLatest(data.latest)
       setReleases(data.releases)
+      setSelected(new Set())
       setVersion('')
       setNotes('')
       setFile(null)
@@ -100,6 +117,31 @@ export function PassengerAppSettingsPage() {
     }
   }
 
+  async function deleteSelected() {
+    const ids = [...selected]
+    if (ids.length === 0) {
+      setError('Select at least one release to delete.')
+      return
+    }
+    const label = ids.length === 1 ? 'this release and its APK file' : `${ids.length} releases and their APK files`
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return
+
+    setDeleting(true)
+    setError('')
+    setNotice('')
+    try {
+      const data = await api.deletePassengerAppReleases(ids)
+      setLatest(data.latest)
+      setReleases(data.releases)
+      setSelected(new Set())
+      setNotice(ids.length === 1 ? 'Deleted 1 release.' : `Deleted ${ids.length} releases.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete the selected releases.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="card">
@@ -107,6 +149,9 @@ export function PassengerAppSettingsPage() {
       </div>
     )
   }
+
+  const allSelected = releases.length > 0 && selected.size === releases.length
+  const someSelected = selected.size > 0
 
   return (
     <div className="form-sections">
@@ -149,7 +194,7 @@ export function PassengerAppSettingsPage() {
             placeholder="1.0.0"
             required
             maxLength={40}
-            disabled={busy}
+            disabled={busy || deleting}
           />
         </label>
         <label className="field">
@@ -159,7 +204,7 @@ export function PassengerAppSettingsPage() {
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
             maxLength={2000}
-            disabled={busy}
+            disabled={busy || deleting}
             placeholder="What’s new for passengers"
           />
         </label>
@@ -170,7 +215,7 @@ export function PassengerAppSettingsPage() {
             type="file"
             accept=".apk,application/vnd.android.package-archive"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            disabled={busy}
+            disabled={busy || deleting}
             required
           />
         </label>
@@ -183,20 +228,43 @@ export function PassengerAppSettingsPage() {
         ) : null}
         {error ? <p className="error">{error}</p> : null}
         {notice ? <p className="ok">{notice}</p> : null}
-        <button className="btn" type="submit" disabled={busy} style={{ marginTop: 12, maxWidth: 220 }}>
+        <button className="btn" type="submit" disabled={busy || deleting} style={{ marginTop: 12, maxWidth: 220 }}>
           {busy ? 'Publishing…' : 'Publish APK'}
         </button>
       </form>
 
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Recent releases</h2>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <h2 style={{ marginTop: 0, marginBottom: 0 }}>Recent releases</h2>
+          {releases.length > 0 ? (
+            <button
+              className="btn tiny danger"
+              type="button"
+              disabled={!someSelected || busy || deleting}
+              onClick={() => void deleteSelected()}
+            >
+              {deleting ? 'Deleting…' : someSelected ? `Delete selected (${selected.size})` : 'Delete selected'}
+            </button>
+          ) : null}
+        </div>
+        {!busy && error ? <p className="error">{error}</p> : null}
+        {!busy && notice ? <p className="ok">{notice}</p> : null}
         {releases.length === 0 ? (
           <p className="muted">No releases yet.</p>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap" style={{ marginTop: 12 }}>
             <table>
               <thead>
                 <tr>
+                  <th style={{ width: 36 }}>
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={(e) => toggleAll(e.target.checked)}
+                      disabled={busy || deleting}
+                      aria-label="Select all releases"
+                    />
+                  </th>
                   <th>Version</th>
                   <th>Published</th>
                   <th>Notes</th>
@@ -206,6 +274,15 @@ export function PassengerAppSettingsPage() {
               <tbody>
                 {releases.map((row) => (
                   <tr key={row.id}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(row.id)}
+                        onChange={(e) => toggleOne(row.id, e.target.checked)}
+                        disabled={busy || deleting}
+                        aria-label={`Select version ${row.version}`}
+                      />
+                    </td>
                     <td>
                       {row.version}
                       {row.isLatest ? ' · latest' : ''}

@@ -1814,13 +1814,22 @@ function WalletHistorySection({
   riderId?: string
   onOpenRider?: (riderId: string) => void
 }) {
+  const today = isoDate(new Date())
   const [q, setQ] = useState('')
   const [kind, setKind] = useState<WalletTransactionKind | ''>('')
   const [page, setPage] = useState(1)
   const [rows, setRows] = useState<WalletHistoryItem[]>([])
   const [total, setTotal] = useState(0)
   const [error, setError] = useState('')
+  const [dateMode, setDateMode] = useState<'date' | 'range'>('date')
+  const [from, setFrom] = useState(today)
+  const [to, setTo] = useState(today)
+  const [exportBusy, setExportBusy] = useState(false)
   const pageSize = 20
+  const start = from > to ? to : from
+  const end = from > to ? from : to
+  const fromParam = dateMode === 'date' ? end : start
+  const toParam = end
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -1830,6 +1839,22 @@ function WalletHistorySection({
     }, 200)
     return () => window.clearTimeout(handle)
   }, [q, kind, riderId, page])
+
+  async function exportCashInExcel() {
+    setExportBusy(true)
+    setError('')
+    try {
+      await api.exportOperatorWalletCashIn({
+        q: q.trim() || undefined,
+        from: fromParam,
+        to: toParam,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not export cash-in report.')
+    } finally {
+      setExportBusy(false)
+    }
+  }
 
   return (
     <div className="card" style={{ marginTop: 16 }}>
@@ -1859,6 +1884,44 @@ function WalletHistorySection({
             </button>
           ))}
         </div>
+      </div>
+      <div className="ride-filters" style={{ marginBottom: 12 }}>
+        <div className="chips">
+          <button
+            type="button"
+            className={dateMode === 'date' ? 'on' : ''}
+            onClick={() => { setDateMode('date'); setFrom(today); setTo(today) }}
+          >
+            By date
+          </button>
+          <button
+            type="button"
+            className={dateMode === 'range' ? 'on' : ''}
+            onClick={() => { setDateMode('range'); setFrom(isoDate(addDays(new Date(), -6))); setTo(today) }}
+          >
+            By range
+          </button>
+        </div>
+        {dateMode === 'date' ? (
+          <label className="field" style={{ margin: 0, minWidth: 160 }}>
+            <span>Date</span>
+            <input type="date" value={to} onChange={(e) => { setFrom(e.target.value); setTo(e.target.value) }} />
+          </label>
+        ) : (
+          <>
+            <label className="field" style={{ margin: 0, minWidth: 150 }}>
+              <span>From</span>
+              <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            </label>
+            <label className="field" style={{ margin: 0, minWidth: 150 }}>
+              <span>To</span>
+              <input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            </label>
+          </>
+        )}
+        <button className="btn tiny" type="button" disabled={exportBusy} onClick={() => void exportCashInExcel()}>
+          {exportBusy ? 'Exporting…' : 'Export cash-in Excel'}
+        </button>
       </div>
       {error ? <p className="error">{error}</p> : null}
       <WalletTransactionsTable rows={rows} showRider={!riderId} onOpenRider={onOpenRider} />
@@ -8448,6 +8511,8 @@ function OperatorRiderReportPage() {
                 <th>Plate</th>
                 <th>Registration</th>
                 <th>Mobile</th>
+                <th>Municipality</th>
+                <th>Barangay</th>
                 <th>Joined</th>
                 <th>No# rides</th>
                 <th>No# cancel</th>
@@ -8457,13 +8522,15 @@ function OperatorRiderReportPage() {
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={9}>No riders for this filter.</td></tr>
+                <tr><td colSpan={11}>No riders for this filter.</td></tr>
               ) : rows.map((row: RiderReportItem) => (
                 <tr key={row.riderId}>
                   <td><strong>{row.riderName}</strong>{row.isActive ? null : <span className="muted"> · Off</span>}</td>
                   <td>{row.plateNumber || '—'}</td>
                   <td>{row.vehicleFranchiseNumber || '—'}</td>
                   <td>{row.mobile || '—'}</td>
+                  <td>{row.municipality || '—'}</td>
+                  <td>{row.barangay || '—'}</td>
                   <td>{phDateTime(row.joinedAtUtc)}</td>
                   <td>{row.totalRides}</td>
                   <td>{row.totalCancel}</td>

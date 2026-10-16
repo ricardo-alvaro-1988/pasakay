@@ -45,7 +45,7 @@ import { AuthScreen, CompleteMobile } from './auth-screens'
 import { LoginBrandPanel } from './login-brand-panel'
 import { AccountHub, AccountPage, BookingScreen, FavoritesScreen, PaymentBar } from './account-screens'
 import { PabiliStorefront } from './PabiliStorefront'
-import { NoOperatorNotice, useNoOperatorNotice } from './no-operator-notice'
+import { NoOperatorNotice, useNoOperatorNotice, VehicleAvailabilityScan } from './no-operator-notice'
 import { vehicleArt, vehicleIsCargo, vehicleLabel, vehicleMaxPassengers } from './vehicle-art'
 import { ShowQrButton, ShowQrOverlay } from './scan-qr'
 import { RentalScreen } from './RentalScreen'
@@ -1277,36 +1277,37 @@ function Home({
                 </div>
               </div>
             )}
-            <div className="vehicles vehicles-list vehicles-pick">
-              {rideOptions.map((item) => {
-                const type = item.vehicleType as VehicleType
-                const categoryId = 'id' in item && item.id !== type ? String(item.id) : null
-                const itemKey = quoteKey(type, categoryId)
-                const canSelect = !('available' in item) || item.available !== false
-                const selected = type === preferredType
-                const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
-                return (
-                  <button
-                    key={itemKey}
-                    type="button"
-                    disabled={!canSelect}
-                    className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
-                    onClick={() => { if (canSelect) selectPreferredType(type, categoryId) }}
-                  >
-                    <span className="icon art-row">
-                      <img src={vehicleArt(type, iconKey)} alt="" />
-                    </span>
-                    <span className="copy">
-                      <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
-                      {!canSelect ? <small className="muted">Not offered</small> : null}
-                    </span>
-                    <span className="vehicle-chevron" aria-hidden>{selected ? '✓' : '›'}</span>
-                  </button>
-                )
-              })}
-            </div>
-            {!lockedRider && !noOperator.vehiclesReady && (
-              <p className="muted" style={{ margin: '8px 0 0' }}>Checking available vehicles…</p>
+            {!lockedRider && !noOperator.vehiclesReady ? (
+              <VehicleAvailabilityScan rows={4} />
+            ) : (
+              <div className="vehicles vehicles-list vehicles-pick">
+                {rideOptions.map((item) => {
+                  const type = item.vehicleType as VehicleType
+                  const categoryId = 'id' in item && item.id !== type ? String(item.id) : null
+                  const itemKey = quoteKey(type, categoryId)
+                  const canSelect = !('available' in item) || item.available !== false
+                  const selected = type === preferredType
+                  const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
+                  return (
+                    <button
+                      key={itemKey}
+                      type="button"
+                      disabled={!canSelect}
+                      className={`vehicle ${selected ? 'on' : ''}${!canSelect ? ' dim' : ''}`}
+                      onClick={() => { if (canSelect) selectPreferredType(type, categoryId) }}
+                    >
+                      <span className="icon art-row">
+                        <img src={vehicleArt(type, iconKey)} alt="" />
+                      </span>
+                      <span className="copy">
+                        <b>{'name' in item ? item.name : vehicleLabel(type)}</b>
+                        {!canSelect ? <small className="muted">Not offered</small> : null}
+                      </span>
+                      <span className="vehicle-chevron" aria-hidden>{selected ? '✓' : '›'}</span>
+                    </button>
+                  )
+                })}
+              </div>
             )}
           </section>
         )}

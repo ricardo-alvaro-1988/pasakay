@@ -30,6 +30,8 @@ public class AdminPassengerAppController(AppDbContext db, UploadStore uploads) :
         PassengerAppReleaseDto? Latest,
         IReadOnlyList<PassengerAppReleaseDto> Releases);
 
+    public record DeletePassengerAppReleasesRequest(IReadOnlyList<Guid> Ids);
+
     [HttpGet]
     public async Task<ActionResult<PassengerAppAdminDto>> Get(CancellationToken cancellationToken)
     {
@@ -122,6 +124,63 @@ public class AdminPassengerAppController(AppDbContext db, UploadStore uploads) :
         catch (InvalidOperationException ex)
         {
             return BadRequest(new { message = ex.Message });
+        }
+
+        return await Get(cancellationToken);
+    }
+
+    [HttpPost("delete")]
+    public async Task<ActionResult<PassengerAppAdminDto>> Delete(
+        [FromBody] DeletePassengerAppReleasesRequest body,
+        CancellationToken cancellationToken)
+    {
+        var ids = (body?.Ids ?? [])
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToList();
+        if (ids.Count == 0)
+        {
+            return BadRequest(new { message = "Select at least one release to delete." });
+        }
+
+        var rows = await db.PassengerAppReleases
+            .Where(x => ids.Contains(x.Id))
+            .ToListAsync(cancellationToken);
+        if (rows.Count == 0)
+        {
+            return await Get(cancellationToken);
+        }
+
+        var removedLatest = rows.Any(x => x.IsLatest);
+        var paths = rows
+            .Select(x => x.ApkPath)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        await using var tx = await db.Database.BeginTransactionAsync(cancellationToken);
+        db.PassengerAppReleases.RemoveRange(rows);
+        await db.SaveChangesAsync(cancellationToken);
+
+        if (removedLatest)
+        {
+            var next = await db.PassengerAppReleases
+                .OrderByDescending(x => x.UpdatedAtUtc)
+                .ThenByDescending(x => x.CreatedAtUtc)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (next is not null)
+            {
+                next.IsLatest = true;
+                next.UpdatedAtUtc = DateTime.UtcNow;
+                await db.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        await tx.CommitAsync(cancellationToken);
+
+        foreach (var path in paths)
+        {
+            uploads.TryDelete(path);
         }
 
         return await Get(cancellationToken);

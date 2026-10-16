@@ -1193,6 +1193,8 @@ export type RiderReportItem = {
   plateNumber: string
   vehicleFranchiseNumber: string
   mobile: string
+  municipality: string
+  barangay: string
   joinedAtUtc: string
   isActive: boolean
   totalRides: number
@@ -2073,6 +2075,28 @@ export const api = {
       xhr.send(data)
     })
   },
+  deleteRiderAppReleases: (ids: string[]) =>
+    request<{
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }>('/api/admin/rider-app/delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
   getPassengerApp: () =>
     request<{
       latest: {
@@ -2147,6 +2171,28 @@ export const api = {
       xhr.send(data)
     })
   },
+  deletePassengerAppReleases: (ids: string[]) =>
+    request<{
+      latest: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      } | null
+      releases: {
+        id: string
+        version: string
+        downloadUrl: string
+        releasedAtUtc: string
+        notes: string | null
+        isLatest: boolean
+      }[]
+    }>('/api/admin/passenger-app/delete', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
   operatorFleet: () => request<OperatorFleet>('/api/operator/fleet'),
   operatorCompany: () => request<OperatorDetail>('/api/operator/company'),
   saveOperatorDispatchMode: (
@@ -2437,6 +2483,44 @@ export const api = {
     params.set('page', String(opts.page ?? 1))
     params.set('pageSize', String(opts.pageSize ?? 20))
     return request<Paged<WalletHistoryItem>>(`/api/operator/wallet/history?${params}`)
+  },
+  exportOperatorWalletCashIn: async (opts: {
+    q?: string
+    from?: string
+    to?: string
+    status?: string
+  }) => {
+    const params = new URLSearchParams()
+    if (opts.q?.trim()) params.set('q', opts.q.trim())
+    if (opts.from) params.set('from', opts.from)
+    if (opts.to) params.set('to', opts.to)
+    if (opts.status) params.set('status', opts.status)
+    const headers = new Headers()
+    const token = getToken()
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    const res = await fetch(`/api/operator/wallet/cash-in/export?${params}`, { headers })
+    if (!res.ok) {
+      let message = 'Could not export cash-in report.'
+      try {
+        const body = (await res.json()) as { message?: string }
+        if (body.message) message = body.message
+      } catch {
+        /* ignore */
+      }
+      throw new Error(message)
+    }
+    const blob = await res.blob()
+    const disposition = res.headers.get('Content-Disposition') ?? ''
+    const match = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition)
+    const filename = match?.[1]?.replace(/['"]/g, '') || `cash-in.xlsx`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
   },
   operatorWalletRequests: () => request<WalletRequest[]>('/api/operator/wallet/requests'),
   operatorCashInDestinations: () =>
