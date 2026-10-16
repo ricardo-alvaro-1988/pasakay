@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from 'react'
 import logo from './logo-circle.png'
 import { LoginBrandPanel, LoginTrustBar, LoginVehicleCards } from './login-brand-panel'
 import { api, Desk, saveAuth } from './api'
+import { LegalLinks } from './LegalPage'
 
 function loadGoogleScript() {
   return new Promise<void>((resolve, reject) => {
@@ -143,6 +144,7 @@ export function AuthScreen({
         {error && <p className="error">{error}</p>}
         <LoginVehicleCards />
         <p className="login-safe">Your account stays on this device until you sign out.</p>
+        <LegalLinks />
       </div>
       <LoginTrustBar />
     </div>

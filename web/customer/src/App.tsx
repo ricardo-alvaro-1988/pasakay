@@ -60,6 +60,7 @@ import { applyBrand, DEFAULT_BRAND_NAME, type BrandingConfig } from './brand-the
 import { isRiderDownloadPath, RiderDownloadPage } from './RiderDownloadPage'
 import { isPassengerDownloadPath, PassengerDownloadPage } from './PassengerDownloadPage'
 import { isMobileAuthPath, MobileAuthPage } from './MobileAuthPage'
+import { LegalPage, legalPagePath } from './LegalPage'
 
 type Tab = 'home' | 'booking' | 'favorites' | 'account' | 'rental'
 
@@ -127,7 +128,7 @@ function playPickupAlarm(body?: string, tripId?: string) {
 export default function App() {
   const [desk, setDesk] = useState<Desk | null>(null)
   const [boot, setBoot] = useState(true)
-  const [tab, setTab] = useState<Tab>('home')
+  const [tab, setTab] = useState<Tab>(() => new URLSearchParams(window.location.search).get('account') === 'delete' ? 'account' : 'home')
   const [serviceMode, setServiceMode] = useState<ServiceMode>(() => {
     try {
       return sessionStorage.getItem('yapasakay-service-mode') === 'pabili' ? 'pabili' : 'pasakay'
@@ -135,12 +136,13 @@ export default function App() {
       return 'pasakay'
     }
   })
-  const [accountPage, setAccountPage] = useState<AccountPage>('menu')
+  const [accountPage, setAccountPage] = useState<AccountPage>(() => new URLSearchParams(window.location.search).get('account') === 'delete' ? 'delete' : 'menu')
   const [branding, setBranding] = useState<BrandingConfig | null>(null)
   const riderDownload = isRiderDownloadPath()
   const passengerDownload = isPassengerDownloadPath()
   const mobileAuth = isMobileAuthPath()
-  const publicDownload = riderDownload || passengerDownload || mobileAuth
+  const legalPage = legalPagePath()
+  const publicDownload = riderDownload || passengerDownload || mobileAuth || !!legalPage
 
   useEffect(() => {
     if (publicDownload) return
@@ -227,6 +229,7 @@ export default function App() {
   if (riderDownload) return <RiderDownloadPage />
   if (passengerDownload) return <PassengerDownloadPage />
   if (mobileAuth) return <MobileAuthPage />
+  if (legalPage) return <LegalPage page={legalPage} />
 
   if (boot) {
     return (
