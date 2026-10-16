@@ -39,12 +39,16 @@ export function LegalPage({ page }: { page: 'privacy' | 'delete' }) {
     ? <><p role="alert">We could not load this service’s details.</p><button onClick={() => window.location.reload()}>Try again</button></>
     : <p role="status">Loading service details…</p>}</main>
 
-  return <main className="public-legal">
+  return <main className="public-legal"><div className="public-legal-shell">
+    <div className="public-legal-masthead"><strong>{brand.brandName}</strong><span>Privacy & account information</span></div>
+    <div className="public-legal-hero">
     <header className="public-legal-brand">
       {!logoFailed && (brand.logoUrl || brand.brandName === DEFAULT_BRAND_NAME) ? <img src={brand.logoUrl ? mediaUrl(brand.logoUrl) : defaultLogo} alt={`${brand.brandName} logo`} width="88" height="88" onError={() => setLogoFailed(true)} /> : <span className="public-legal-monogram" aria-label={brand.brandName}>{brand.shortName || brand.brandName}</span>}
       <div><p className="public-legal-name">{brand.brandName}</p><h1>{title}</h1></div>
     </header>
-    <p className="public-legal-date">Last updated: 16 October 2026</p>
+    <p className="public-legal-subtitle">{page === 'privacy' ? 'Your information. Clearly explained.' : 'Your account. Your next steps.'}</p>
+    <p className="public-legal-date">Last updated: 16 October 2026</p></div>
+    <div className="public-legal-layout"><article className="public-legal-document" aria-label={title}>
     {page === 'privacy' ? <>
       <p>This Privacy Policy explains how {brand.brandName} collects, uses, and shares personal information when you use our passenger app and customer website. It also explains your choices and how to contact us about your information.</p>
       <section><h2>Information we collect and use</h2>
@@ -68,10 +72,15 @@ export function LegalPage({ page }: { page: 'privacy' | 'delete' }) {
       </section>
       <section><h2>What happens after a request?</h2><p>An administrator reviews your request. You can continue using your account while it is pending. Approval currently disables account access; it does not automatically erase your profile, trip history, messages, or other service records. No automatic erasure schedule or guaranteed processing time is currently specified.</p></section>
     </>}
+    </article><aside className="public-legal-support">
+    <div className="public-legal-support-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 7 8 6 8-6" /></svg></div>
+    <p className="public-legal-eyebrow">HERE TO HELP</p>
     <section><h2>Privacy questions{page === 'delete' ? ' and sign-in help' : ''}</h2>
       {contact ? <p>Contact {brand.brandName} at <a href={`mailto:${contact}`}>{contact}</a>. For an account request, include the email associated with your account. Never send your password or sign-in codes.</p>
         : <p>Contact {brand.brandName} using the developer contact details on its Google Play listing for privacy questions or help accessing your account.</p>}
     </section>
-    <footer>{brand.brandName}</footer>
+    <div className="public-legal-note"><strong>Keep your account details safe</strong><p>Never include your password or sign-in codes in an email.</p></div>
+    </aside></div>
+    <footer><strong>{brand.brandName}</strong><span>{title} · {domain}</span></footer></div>
   </main>
 }
