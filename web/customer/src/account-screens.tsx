@@ -884,7 +884,7 @@ export function AccountHub({
         <h3>Legal</h3>
         <div className="account-list">
           <button className="menu-row" type="button" onClick={() => onPage('terms')}>Terms and conditions</button>
-          <button className="menu-row" type="button" onClick={() => onPage('privacy')}>Privacy policy</button>
+          <a className="menu-row" href="/privacy">Privacy policy</a>
         </div>
       </section>
 
