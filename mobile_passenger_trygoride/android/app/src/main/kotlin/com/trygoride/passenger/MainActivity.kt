@@ -15,7 +15,7 @@ import io.flutter.plugin.common.MethodChannel
 import org.json.JSONArray
 
 class MainActivity : FlutterActivity() {
-    private val channelName = "yapasakay.passenger/alerts"
+    private val channelName = "trygoride.passenger/alerts"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

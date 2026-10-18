@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -17,6 +19,22 @@ fun readLocalProperty(name: String): String? {
         }
         .firstOrNull { it.first == name }
         ?.second
+}
+
+val releaseKeys = Properties()
+val releaseKeysFile = rootProject.file("key.properties")
+if (releaseKeysFile.exists()) {
+    releaseKeysFile.inputStream().use { releaseKeys.load(it) }
+}
+val releaseRequested = gradle.startParameter.taskNames.any { it.contains("release", ignoreCase = true) }
+if (releaseRequested) {
+    require(listOf("storeFile", "storePassword", "keyAlias", "keyPassword").all {
+        !releaseKeys.getProperty(it).isNullOrBlank()
+    }) { "Release signing requires android/key.properties. See releases/1.0.0/README.md." }
+    require(!((project.findProperty("MAPS_API_KEY") as String?)
+        ?: System.getenv("MAPS_API_KEY") ?: readLocalProperty("MAPS_API_KEY")).isNullOrBlank()) {
+        "Set the TryGoRide passenger Android MAPS_API_KEY before building a release."
+    }
 }
 
 android {
@@ -42,9 +60,20 @@ android {
         manifestPlaceholders["MAPS_API_KEY"] = mapsKey
     }
 
+    signingConfigs {
+        create("release") {
+            if (releaseKeysFile.exists()) {
+                storeFile = rootProject.file(releaseKeys.getProperty("storeFile"))
+                storePassword = releaseKeys.getProperty("storePassword")
+                keyAlias = releaseKeys.getProperty("keyAlias")
+                keyPassword = releaseKeys.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

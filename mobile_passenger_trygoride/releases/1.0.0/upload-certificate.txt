@@ -1,0 +1,25 @@
+Alias name: trygoride-passenger-upload
+Creation date: 18 Oct 2026
+Entry type: PrivateKeyEntry
+Certificate chain length: 1
+Certificate[1]:
+Owner: CN=TryGoRide Passenger Upload, OU=Mobile, O=TryGoRide, C=PH
+Issuer: CN=TryGoRide Passenger Upload, OU=Mobile, O=TryGoRide, C=PH
+Serial number: 8849882fb6d212a2
+Valid from: Sun Oct 18 20:41:26 PST 2026 until: Thu Mar 05 20:41:26 PST 2054
+Certificate fingerprints:
+	 SHA1: 4A:CA:71:71:87:6F:F5:2F:44:01:54:98:64:E9:B1:88:64:46:19:EF
+	 SHA256: 96:BF:75:A1:78:B9:91:A7:6D:59:E9:44:ED:80:12:CB:72:E8:07:DB:19:F6:4B:78:7E:48:D2:09:03:43:55:B2
+Signature algorithm name: SHA256withRSA
+Subject Public Key Algorithm: 3072-bit RSA key
+Version: 3
+
+Extensions:
+
+#1: ObjectId: 2.5.29.14 Criticality=false
+SubjectKeyIdentifier [
+KeyIdentifier [
+0000: AA 2C 38 0F 2B D5 7F 64   ED F1 92 4A 13 4C 2C B9  .,8.+..d...J.L,.
+0010: DB CA 60 FF                                        ..`.
+]
+]

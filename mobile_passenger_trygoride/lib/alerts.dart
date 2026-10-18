@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 
 class PassengerAlerts {
-  static const _channel = MethodChannel('yapasakay.passenger/alerts');
+  static const _channel = MethodChannel('trygoride.passenger/alerts');
 
   static Future<bool> syncPickupAlarms(List<Map<String, dynamic>> items) async {
     try {
