@@ -30,12 +30,13 @@ public class PublicMapsController(IConfiguration config, AppDbContext db) : Cont
     }
 
     [HttpGet("auth")]
-    public ActionResult Auth()
+    public async Task<ActionResult> Auth(CancellationToken cancellationToken)
     {
         var clientId = (config["GoogleAuth:ClientId"] ?? string.Empty).Trim().Trim('\'').Trim('"').Trim();
         return Ok(new
         {
             googleClientId = clientId,
+            phoneSignInEnabled = await PhoneSignInEnabledAsync(cancellationToken),
             publicOrigin = PublicOrigins.Primary(config)
         });
     }
@@ -66,5 +67,14 @@ public class PublicMapsController(IConfiguration config, AppDbContext db) : Cont
             accent = theme.Accent,
             good = theme.Good,
         });
+    }
+
+    private async Task<bool> PhoneSignInEnabledAsync(CancellationToken cancellationToken)
+    {
+        return await db.PlatformBrandSettings
+            .AsNoTracking()
+            .OrderBy(x => x.CreatedAtUtc)
+            .Select(x => x.PhoneSignInEnabled)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

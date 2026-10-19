@@ -1954,8 +1954,14 @@ export const api = {
       themeId: string
       accent: string
       good: string
+      phoneSignInEnabled: boolean
       themes: { id: string; label: string; accent: string; good: string }[]
     }>('/api/admin/branding'),
+  setPhoneSignIn: (enabled: boolean) =>
+    request<{ phoneSignInEnabled: boolean }>('/api/admin/branding/phone-sign-in', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
   updateBranding: (body: {
     brandName: string
     shortName?: string

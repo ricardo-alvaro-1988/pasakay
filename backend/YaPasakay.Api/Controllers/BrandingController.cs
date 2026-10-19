@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using YaPasakay.Api.Services;
 using YaPasakay.Application.Admin;
+using YaPasakay.Application.Auth;
 using YaPasakay.Domain.Entities;
 using YaPasakay.Infrastructure.Persistence;
 
@@ -21,6 +22,7 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
         string ThemeId,
         string Accent,
         string Good,
+        bool PhoneSignInEnabled,
         IReadOnlyList<BrandThemePreset> Themes);
 
     public record UpdateBrandingRequest(
@@ -76,6 +78,24 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
 
         await db.SaveChangesAsync(cancellationToken);
         brandShell.Invalidate();
+        return Ok(ToDto(settings));
+    }
+
+    [HttpPut("phone-sign-in")]
+    public async Task<ActionResult<BrandingDto>> SetPhoneSignIn(
+        [FromBody] SetPhoneSignInRequest request,
+        CancellationToken cancellationToken)
+    {
+        var (user, _) = await AdminAccess.ResolveAsync(db, User, cancellationToken);
+        if (user is null || !user.IsMainAdmin)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only Super Admin can change phone sign-in." });
+        }
+
+        var settings = await EnsureAsync(cancellationToken);
+        settings.PhoneSignInEnabled = request.Enabled;
+        settings.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
         return Ok(ToDto(settings));
     }
 
@@ -169,6 +189,7 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
             theme.Id,
             theme.Accent,
             theme.Good,
+            settings.PhoneSignInEnabled,
             BrandThemeCatalog.All);
     }
 }

@@ -304,3 +304,52 @@ export function PassengerAppSettingsPage() {
     </div>
   )
 }
+
+export function PhoneSignInSettings() {
+  const [enabled, setEnabled] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    api.getBranding()
+      .then((data) => {
+        if (!cancelled) setEnabled(!!data.phoneSignInEnabled)
+      })
+      .catch(() => {
+        if (!cancelled) setEnabled(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function toggle(next: boolean) {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const data = await api.setPhoneSignIn(next)
+      setEnabled(!!data.phoneSignInEnabled)
+      setNotice(next ? 'Phone sign-in is on.' : 'Phone sign-in is off.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update phone sign-in.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>Website phone sign-in</h2>
+      <p className="muted">When this is on, the customer website can sign in with a mobile number and a text code. Google sign-in stays available.</p>
+      <label className="check" style={{ marginTop: 12 }}>
+        <input type="checkbox" checked={enabled} disabled={busy} onChange={(e) => void toggle(e.target.checked)} />
+        <span>{enabled ? 'Phone sign-in is on' : 'Phone sign-in is off'}</span>
+      </label>
+      {notice ? <p className="ok">{notice}</p> : null}
+      {error ? <p className="error">{error}</p> : null}
+    </div>
+  )
+}

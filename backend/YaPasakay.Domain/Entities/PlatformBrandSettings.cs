@@ -9,4 +9,5 @@ public class PlatformBrandSettings : BaseEntity
     public string? LogoPath { get; set; }
     public string? FaviconPath { get; set; }
     public string ThemeId { get; set; } = "pasakay-red";
+    public bool PhoneSignInEnabled { get; set; }
 }

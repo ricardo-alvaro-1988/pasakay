@@ -2173,6 +2173,9 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .HasMaxLength(260)
                         .HasColumnType("nvarchar(260)");
 
+                    b.Property<bool>("PhoneSignInEnabled")
+                        .HasColumnType("bit");
+
                     b.Property<string>("ShortName")
                         .IsRequired()
                         .HasMaxLength(40)

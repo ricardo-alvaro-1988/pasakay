@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,8 @@ public class AuthController(
     AppDbContext db,
     IOtpStore otpStore,
     IOtpSender otpSender,
+    ICustomerOtpStore customerOtps,
+    IPhilSmsSender sms,
     GoogleTokenValidator google,
     ITokenService tokens) : ControllerBase
 {
@@ -212,6 +215,186 @@ public class AuthController(
         return Ok(await IssueAsync(user, me, cancellationToken));
     }
 
+    [HttpPost("customer-request-otp")]
+    public async Task<IActionResult> CustomerRequestOtp([FromBody] RequestOtpRequest request, CancellationToken cancellationToken)
+    {
+        if (!await PhoneSignInEnabledAsync(cancellationToken))
+        {
+            return BadRequest(new { message = "Phone sign-in is turned off." });
+        }
+
+        if (!PhoneNormalizer.TryNormalizePhMobile(request.Phone, out var phone, out var phoneError))
+        {
+            return BadRequest(new { message = phoneError });
+        }
+
+        var blockedRole = await StaffPhoneMessageAsync(phone, cancellationToken);
+        if (blockedRole is not null)
+        {
+            return BadRequest(new { message = blockedRole });
+        }
+
+        if (await LoginBlocks.IsBlockedAsync(db, null, phone, cancellationToken))
+        {
+            return Unauthorized(new { message = LoginBlocks.Message });
+        }
+
+        if (customerOtps.IsCoolingDown(phone, TimeSpan.FromMinutes(1)))
+        {
+            return BadRequest(new { message = "Wait a minute before requesting another code." });
+        }
+
+        var code = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+        try
+        {
+            await sms.SendAsync(phone, code, cancellationToken);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+
+        customerOtps.Save(phone, code, TimeSpan.FromMinutes(5));
+        customerOtps.MarkSent(phone);
+        return Ok(new { message = "OTP sent." });
+    }
+
+    [HttpPost("customer-verify-otp")]
+    public async Task<IActionResult> CustomerVerifyOtp([FromBody] VerifyOtpRequest request, CancellationToken cancellationToken)
+    {
+        if (!await PhoneSignInEnabledAsync(cancellationToken))
+        {
+            return BadRequest(new { message = "Phone sign-in is turned off." });
+        }
+
+        if (!PhoneNormalizer.TryNormalizePhMobile(request.Phone, out var phone, out var phoneError))
+        {
+            return BadRequest(new { message = phoneError });
+        }
+
+        var code = (request.Code ?? string.Empty).Trim();
+        if (!customerOtps.TryValidate(phone, code))
+        {
+            return Unauthorized(new { message = "Invalid or expired code." });
+        }
+
+        var user = await db.Users.FirstOrDefaultAsync(x => x.PhoneNumber == phone, cancellationToken);
+        if (user?.IsLoginBlocked == true || await LoginBlocks.IsBlockedAsync(db, user?.Email, phone, cancellationToken))
+        {
+            return Unauthorized(new { message = LoginBlocks.Message });
+        }
+
+        if (user is not null && user.Role != UserRole.Customer)
+        {
+            return Unauthorized(new { message = "Use the rider or operator sign-in for this number." });
+        }
+
+        if (user is not null && !user.IsActive)
+        {
+            return Unauthorized(new { message = "Account not found or inactive." });
+        }
+
+        if (user is null)
+        {
+            return Ok(new
+            {
+                needsProfile = true,
+                registrationToken = customerOtps.IssueRegistration(phone, TimeSpan.FromMinutes(15))
+            });
+        }
+
+        var blocked = await GateAsync(user, cancellationToken);
+        if (blocked is not null)
+        {
+            return blocked;
+        }
+
+        var me = await AdminAccess.ToMeAsync(db, user, cancellationToken);
+        return Ok(await IssueAsync(user, me, cancellationToken));
+    }
+
+    [HttpPost("customer-complete-profile")]
+    public async Task<ActionResult<AuthResponse>> CustomerCompleteProfile(
+        [FromBody] CustomerCompleteProfileRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await PhoneSignInEnabledAsync(cancellationToken))
+        {
+            return BadRequest(new { message = "Phone sign-in is turned off." });
+        }
+
+        if (!customerOtps.TryReadRegistration(request.RegistrationToken ?? string.Empty, out var phone))
+        {
+            return BadRequest(new { message = "This sign-up step expired. Request a new code." });
+        }
+
+        var first = (request.FirstName ?? string.Empty).Trim();
+        var last = (request.LastName ?? string.Empty).Trim();
+        if (first.Length is < 1 or > 60 || last.Length is < 1 or > 60)
+        {
+            return BadRequest(new { message = "Enter your first and last name." });
+        }
+
+        if (!Enum.IsDefined(request.Gender))
+        {
+            return BadRequest(new { message = "Choose a gender." });
+        }
+
+        var email = (request.Email ?? string.Empty).Trim();
+        string? storedEmail = null;
+        if (email.Length > 0)
+        {
+            if (email.Length > 160 || !email.Contains('@') || email.StartsWith('@') || email.EndsWith('@'))
+            {
+                return BadRequest(new { message = "Enter a valid email address." });
+            }
+
+            var emailLower = email.ToLowerInvariant();
+            if (await db.Users.AnyAsync(x => x.Email != null && x.Email.ToLower() == emailLower, cancellationToken))
+            {
+                return BadRequest(new { message = "That email already has an account." });
+            }
+
+            if (await LoginBlocks.IsBlockedAsync(db, email, phone, cancellationToken))
+            {
+                return Unauthorized(new { message = LoginBlocks.Message });
+            }
+
+            storedEmail = email;
+        }
+        else if (await LoginBlocks.IsBlockedAsync(db, null, phone, cancellationToken))
+        {
+            return Unauthorized(new { message = LoginBlocks.Message });
+        }
+
+        if (await db.Users.AnyAsync(x => x.PhoneNumber == phone, cancellationToken))
+        {
+            return BadRequest(new { message = "That phone number already has an account." });
+        }
+
+        var user = new AppUser
+        {
+            PhoneNumber = phone,
+            FullName = $"{first} {last}",
+            Email = storedEmail,
+            Role = UserRole.Customer,
+            IsActive = true
+        };
+        db.Users.Add(user);
+        db.CustomerProfiles.Add(new CustomerProfile
+        {
+            AppUser = user,
+            FirstName = first,
+            LastName = last,
+            Gender = request.Gender
+        });
+        await db.SaveChangesAsync(cancellationToken);
+        customerOtps.ConsumeRegistration(request.RegistrationToken ?? string.Empty);
+
+        var me = await AdminAccess.ToMeAsync(db, user, cancellationToken);
+        return Ok(await IssueAsync(user, me, cancellationToken));
+    }
+
     [HttpPost("google")]
     public async Task<ActionResult<AuthResponse>> Google([FromBody] GoogleSignInRequest request, CancellationToken cancellationToken)
     {
@@ -376,6 +559,27 @@ public class AuthController(
         }
 
         return Ok(await AdminAccess.ToMeAsync(db, user, cancellationToken));
+    }
+
+    private async Task<bool> PhoneSignInEnabledAsync(CancellationToken cancellationToken)
+    {
+        var settings = await db.PlatformBrandSettings
+            .AsNoTracking()
+            .OrderBy(x => x.CreatedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        return settings?.PhoneSignInEnabled == true;
+    }
+
+    private async Task<string?> StaffPhoneMessageAsync(string phone, CancellationToken cancellationToken)
+    {
+        var existing = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.PhoneNumber == phone, cancellationToken);
+        return existing?.Role switch
+        {
+            UserRole.Admin => "Admins sign in with phone and password.",
+            UserRole.Rider => "Riders sign in with phone and password.",
+            UserRole.Operator => "Operators sign in with phone and password.",
+            _ => null
+        };
     }
 
     private async Task<ActionResult?> GateAsync(AppUser user, CancellationToken cancellationToken)
