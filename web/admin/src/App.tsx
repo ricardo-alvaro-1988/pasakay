@@ -6650,6 +6650,7 @@ function toPhInput(value: string | null | undefined) {
 function SettingsPage({
   theme,
   onTheme,
+  me,
   section,
   onSection,
   onBranding,
