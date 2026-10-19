@@ -15,6 +15,8 @@ public record CustomerCompleteProfileRequest(
     Gender Gender,
     string? Email);
 public record SetPhoneSignInRequest(bool Enabled);
+public record SetSmsTokenRequest(string? ApiToken);
+public record SmsTokenResponse(string ApiToken);
 public record MobileAuthTicketRedeemRequest(string? Ticket);
 
 public record AuthResponse(

@@ -1,18 +1,25 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using YaPasakay.Application.Auth;
+using YaPasakay.Infrastructure.Persistence;
 
 namespace YaPasakay.Infrastructure.Auth;
 
-public class PhilSmsSender(HttpClient http, IOptions<PhilSmsOptions> options, ILogger<PhilSmsSender> logger) : IPhilSmsSender
+public class PhilSmsSender(HttpClient http, AppDbContext db, IOptions<PhilSmsOptions> options, ILogger<PhilSmsSender> logger) : IPhilSmsSender
 {
     public async Task SendAsync(string phone, string code, CancellationToken cancellationToken = default)
     {
         var settings = options.Value;
-        var token = (settings.ApiToken ?? string.Empty).Trim();
+        var stored = await db.PlatformBrandSettings
+            .AsNoTracking()
+            .OrderBy(x => x.CreatedAtUtc)
+            .Select(x => x.PhilSmsApiToken)
+            .FirstOrDefaultAsync(cancellationToken);
+        var token = FirstToken(stored, settings.ApiToken);
         var senderId = (settings.SenderId ?? string.Empty).Trim();
         if (token.Length == 0)
         {
@@ -92,5 +99,16 @@ public class PhilSmsSender(HttpClient http, IOptions<PhilSmsOptions> options, IL
         }
 
         return string.Empty;
+    }
+
+    private static string FirstToken(string? stored, string? configured)
+    {
+        var fromAdmin = (stored ?? string.Empty).Trim();
+        if (fromAdmin.Length > 0)
+        {
+            return fromAdmin;
+        }
+
+        return (configured ?? string.Empty).Trim();
     }
 }

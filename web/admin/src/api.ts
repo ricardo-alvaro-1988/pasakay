@@ -1962,6 +1962,12 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
     }),
+  getSmsToken: () => request<{ apiToken: string }>('/api/admin/branding/sms-token'),
+  setSmsToken: (apiToken: string) =>
+    request<{ apiToken: string }>('/api/admin/branding/sms-token', {
+      method: 'PUT',
+      body: JSON.stringify({ apiToken }),
+    }),
   updateBranding: (body: {
     brandName: string
     shortName?: string

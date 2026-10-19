@@ -99,6 +99,41 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
         return Ok(ToDto(settings));
     }
 
+    [HttpGet("sms-token")]
+    public async Task<ActionResult<SmsTokenResponse>> GetSmsToken(CancellationToken cancellationToken)
+    {
+        if (!await IsMainAdminAsync(cancellationToken))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only Super Admin can manage the SMS token." });
+        }
+
+        var settings = await EnsureAsync(cancellationToken);
+        return Ok(new SmsTokenResponse(settings.PhilSmsApiToken ?? string.Empty));
+    }
+
+    [HttpPut("sms-token")]
+    public async Task<ActionResult<SmsTokenResponse>> SetSmsToken(
+        [FromBody] SetSmsTokenRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsMainAdminAsync(cancellationToken))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only Super Admin can manage the SMS token." });
+        }
+
+        var token = (request.ApiToken ?? string.Empty).Trim();
+        if (token.Length is < 8 or > 200 || token.Any(char.IsWhiteSpace))
+        {
+            return BadRequest(new { message = "Enter the PhilSMS token." });
+        }
+
+        var settings = await EnsureAsync(cancellationToken);
+        settings.PhilSmsApiToken = token;
+        settings.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new SmsTokenResponse(token));
+    }
+
     [HttpPost("logo")]
     [RequestSizeLimit(5_000_000)]
     public async Task<ActionResult<BrandingDto>> UploadLogo(IFormFile? file, CancellationToken cancellationToken)
@@ -157,6 +192,12 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    private async Task<bool> IsMainAdminAsync(CancellationToken cancellationToken)
+    {
+        var (user, _) = await AdminAccess.ResolveAsync(db, User, cancellationToken);
+        return user is not null && user.IsMainAdmin;
     }
 
     private async Task<PlatformBrandSettings> EnsureAsync(CancellationToken cancellationToken)

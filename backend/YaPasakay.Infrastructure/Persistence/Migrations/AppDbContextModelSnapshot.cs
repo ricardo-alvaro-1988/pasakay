@@ -2173,6 +2173,10 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .HasMaxLength(260)
                         .HasColumnType("nvarchar(260)");
 
+                    b.Property<string>("PhilSmsApiToken")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<bool>("PhoneSignInEnabled")
                         .HasColumnType("bit");
 

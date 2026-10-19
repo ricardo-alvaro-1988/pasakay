@@ -307,15 +307,18 @@ export function PassengerAppSettingsPage() {
 
 export function PhoneSignInSettings() {
   const [enabled, setEnabled] = useState(false)
+  const [token, setToken] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
     let cancelled = false
-    api.getBranding()
-      .then((data) => {
-        if (!cancelled) setEnabled(!!data.phoneSignInEnabled)
+    Promise.all([api.getBranding(), api.getSmsToken()])
+      .then(([branding, sms]) => {
+        if (cancelled) return
+        setEnabled(!!branding.phoneSignInEnabled)
+        setToken(sms.apiToken ?? '')
       })
       .catch(() => {
         if (!cancelled) setEnabled(false)
@@ -340,6 +343,22 @@ export function PhoneSignInSettings() {
     }
   }
 
+  async function saveToken(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const data = await api.setSmsToken(token.trim())
+      setToken(data.apiToken)
+      setNotice('SMS token saved.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the SMS token.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="card">
       <h2>Website phone sign-in</h2>
@@ -348,6 +367,22 @@ export function PhoneSignInSettings() {
         <input type="checkbox" checked={enabled} disabled={busy} onChange={(e) => void toggle(e.target.checked)} />
         <span>{enabled ? 'Phone sign-in is on' : 'Phone sign-in is off'}</span>
       </label>
+      <form onSubmit={saveToken} style={{ marginTop: 16 }}>
+        <label className="field">
+          <span>PhilSMS token</span>
+          <input
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            maxLength={200}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Paste the PhilSMS API token"
+          />
+        </label>
+        <button className="btn" type="submit" disabled={busy} style={{ maxWidth: 220, marginTop: 12 }}>
+          Save token
+        </button>
+      </form>
       {notice ? <p className="ok">{notice}</p> : null}
       {error ? <p className="error">{error}</p> : null}
     </div>
