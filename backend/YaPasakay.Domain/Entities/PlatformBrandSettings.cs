@@ -11,4 +11,5 @@ public class PlatformBrandSettings : BaseEntity
     public string ThemeId { get; set; } = "pasakay-red";
     public bool PhoneSignInEnabled { get; set; }
     public string? PhilSmsApiToken { get; set; }
+    public string? PhilSmsSenderId { get; set; }
 }

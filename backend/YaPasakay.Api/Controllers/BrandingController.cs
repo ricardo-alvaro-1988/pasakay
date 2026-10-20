@@ -108,7 +108,7 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
         }
 
         var settings = await EnsureAsync(cancellationToken);
-        return Ok(new SmsTokenResponse(settings.PhilSmsApiToken ?? string.Empty));
+        return Ok(new SmsTokenResponse(settings.PhilSmsApiToken ?? string.Empty, SenderOrDefault(settings.PhilSmsSenderId)));
     }
 
     [HttpPut("sms-token")]
@@ -127,11 +127,23 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
             return BadRequest(new { message = "Enter the PhilSMS token." });
         }
 
+        var senderId = (request.SenderId ?? string.Empty).Trim();
+        if (senderId.Length == 0)
+        {
+            senderId = "PhilSMS";
+        }
+
+        if (senderId.Length > 11)
+        {
+            return BadRequest(new { message = "Sender name must be at most 11 characters." });
+        }
+
         var settings = await EnsureAsync(cancellationToken);
         settings.PhilSmsApiToken = token;
+        settings.PhilSmsSenderId = senderId;
         settings.UpdatedAtUtc = DateTime.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(new SmsTokenResponse(token));
+        return Ok(new SmsTokenResponse(token, senderId));
     }
 
     [HttpPost("logo")]
@@ -192,6 +204,12 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    private static string SenderOrDefault(string? senderId)
+    {
+        var value = (senderId ?? string.Empty).Trim();
+        return value.Length is >= 1 and <= 11 ? value : "PhilSMS";
     }
 
     private async Task<bool> IsMainAdminAsync(CancellationToken cancellationToken)

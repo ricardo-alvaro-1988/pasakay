@@ -2177,6 +2177,10 @@ namespace YaPasakay.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("PhilSmsSenderId")
+                        .HasMaxLength(11)
+                        .HasColumnType("nvarchar(11)");
+
                     b.Property<bool>("PhoneSignInEnabled")
                         .HasColumnType("bit");
 

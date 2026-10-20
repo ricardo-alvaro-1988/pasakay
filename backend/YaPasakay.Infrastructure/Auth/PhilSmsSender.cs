@@ -17,18 +17,13 @@ public class PhilSmsSender(HttpClient http, AppDbContext db, IOptions<PhilSmsOpt
         var stored = await db.PlatformBrandSettings
             .AsNoTracking()
             .OrderBy(x => x.CreatedAtUtc)
-            .Select(x => x.PhilSmsApiToken)
+            .Select(x => new { x.PhilSmsApiToken, x.PhilSmsSenderId })
             .FirstOrDefaultAsync(cancellationToken);
-        var token = FirstToken(stored, settings.ApiToken);
-        var senderId = (settings.SenderId ?? string.Empty).Trim();
+        var token = FirstToken(stored?.PhilSmsApiToken, settings.ApiToken);
+        var senderId = ResolveSenderId(stored?.PhilSmsSenderId, settings.SenderId);
         if (token.Length == 0)
         {
             throw new InvalidOperationException("SMS is not configured.");
-        }
-
-        if (senderId.Length is < 1 or > 11)
-        {
-            throw new InvalidOperationException("SMS sender is not configured.");
         }
 
         if (phone.Length != 11 || !phone.StartsWith("09", StringComparison.Ordinal))
@@ -110,5 +105,22 @@ public class PhilSmsSender(HttpClient http, AppDbContext db, IOptions<PhilSmsOpt
         }
 
         return (configured ?? string.Empty).Trim();
+    }
+
+    private static string ResolveSenderId(string? stored, string? configured)
+    {
+        var fromAdmin = (stored ?? string.Empty).Trim();
+        if (fromAdmin.Length is >= 1 and <= 11)
+        {
+            return fromAdmin;
+        }
+
+        var fromConfig = (configured ?? string.Empty).Trim();
+        if (fromConfig.Length is >= 1 and <= 11)
+        {
+            return fromConfig;
+        }
+
+        return "PhilSMS";
     }
 }

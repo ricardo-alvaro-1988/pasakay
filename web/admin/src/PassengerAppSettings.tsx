@@ -308,6 +308,7 @@ export function PassengerAppSettingsPage() {
 export function PhoneSignInSettings() {
   const [enabled, setEnabled] = useState(false)
   const [token, setToken] = useState('')
+  const [senderId, setSenderId] = useState('PhilSMS')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
@@ -319,6 +320,7 @@ export function PhoneSignInSettings() {
         if (cancelled) return
         setEnabled(!!branding.phoneSignInEnabled)
         setToken(sms.apiToken ?? '')
+        setSenderId(sms.senderId || 'PhilSMS')
       })
       .catch(() => {
         if (!cancelled) setEnabled(false)
@@ -349,9 +351,10 @@ export function PhoneSignInSettings() {
     setError('')
     setNotice('')
     try {
-      const data = await api.setSmsToken(token.trim())
+      const data = await api.setSmsToken(token.trim(), senderId.trim())
       setToken(data.apiToken)
-      setNotice('SMS token saved.')
+      setSenderId(data.senderId || 'PhilSMS')
+      setNotice('SMS settings saved.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the SMS token.')
     } finally {
@@ -369,6 +372,17 @@ export function PhoneSignInSettings() {
       </label>
       <form onSubmit={saveToken} style={{ marginTop: 16 }}>
         <label className="field">
+          <span>Sender name</span>
+          <input
+            value={senderId}
+            onChange={(e) => setSenderId(e.target.value)}
+            maxLength={11}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="PhilSMS"
+          />
+        </label>
+        <label className="field">
           <span>PhilSMS token</span>
           <input
             value={token}
@@ -380,7 +394,7 @@ export function PhoneSignInSettings() {
           />
         </label>
         <button className="btn" type="submit" disabled={busy} style={{ maxWidth: 220, marginTop: 12 }}>
-          Save token
+          Save SMS settings
         </button>
       </form>
       {notice ? <p className="ok">{notice}</p> : null}
