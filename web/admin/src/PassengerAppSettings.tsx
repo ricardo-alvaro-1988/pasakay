@@ -304,3 +304,101 @@ export function PassengerAppSettingsPage() {
     </div>
   )
 }
+
+export function PhoneSignInSettings() {
+  const [enabled, setEnabled] = useState(false)
+  const [token, setToken] = useState('')
+  const [senderId, setSenderId] = useState('PhilSMS')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    Promise.all([api.getBranding(), api.getSmsToken()])
+      .then(([branding, sms]) => {
+        if (cancelled) return
+        setEnabled(!!branding.phoneSignInEnabled)
+        setToken(sms.apiToken ?? '')
+        setSenderId(sms.senderId || 'PhilSMS')
+      })
+      .catch(() => {
+        if (!cancelled) setEnabled(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function toggle(next: boolean) {
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const data = await api.setPhoneSignIn(next)
+      setEnabled(!!data.phoneSignInEnabled)
+      setNotice(next ? 'Phone sign-in is on.' : 'Phone sign-in is off.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update phone sign-in.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveToken(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    setNotice('')
+    try {
+      const data = await api.setSmsToken(token.trim(), senderId.trim())
+      setToken(data.apiToken)
+      setSenderId(data.senderId || 'PhilSMS')
+      setNotice('SMS settings saved.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the SMS token.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>Website phone sign-in</h2>
+      <p className="muted">When this is on, the customer website can sign in with a mobile number and a text code. Google sign-in stays available.</p>
+      <label className="check" style={{ marginTop: 12 }}>
+        <input type="checkbox" checked={enabled} disabled={busy} onChange={(e) => void toggle(e.target.checked)} />
+        <span>{enabled ? 'Phone sign-in is on' : 'Phone sign-in is off'}</span>
+      </label>
+      <form onSubmit={saveToken} style={{ marginTop: 16 }}>
+        <label className="field">
+          <span>Sender name</span>
+          <input
+            value={senderId}
+            onChange={(e) => setSenderId(e.target.value)}
+            maxLength={11}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="PhilSMS"
+          />
+        </label>
+        <label className="field">
+          <span>PhilSMS token</span>
+          <input
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            maxLength={200}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Paste the PhilSMS API token"
+          />
+        </label>
+        <button className="btn" type="submit" disabled={busy} style={{ maxWidth: 220, marginTop: 12 }}>
+          Save SMS settings
+        </button>
+      </form>
+      {notice ? <p className="ok">{notice}</p> : null}
+      {error ? <p className="error">{error}</p> : null}
+    </div>
+  )
+}

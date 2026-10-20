@@ -15,11 +15,14 @@ public static class DependencyInjection
             options.UseSqlServer(configuration.GetConnectionString("Default")));
 
         services.Configure<OtpOptions>(configuration.GetSection(OtpOptions.SectionName));
+        services.Configure<PhilSmsOptions>(configuration.GetSection(PhilSmsOptions.SectionName));
         services.Configure<GoogleAuthOptions>(configuration.GetSection(GoogleAuthOptions.SectionName));
         services.Configure<FcmOptions>(configuration.GetSection(FcmOptions.SectionName));
 
         services.AddSingleton<IOtpStore, MemoryOtpStore>();
+        services.AddSingleton<ICustomerOtpStore, MemoryCustomerOtpStore>();
         services.AddSingleton<IOtpSender, FixedOtpSender>();
+        services.AddHttpClient<IPhilSmsSender, PhilSmsSender>();
         services.AddSingleton<GoogleTokenValidator>();
         services.AddScoped<IPushNotifier, FcmPushNotifier>();
         services.AddSingleton<ITokenService, TokenService>();

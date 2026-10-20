@@ -668,6 +668,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             entity.Property(x => x.LogoPath).HasMaxLength(260);
             entity.Property(x => x.FaviconPath).HasMaxLength(260);
             entity.Property(x => x.ThemeId).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.PhilSmsApiToken).HasMaxLength(200);
+            entity.Property(x => x.PhilSmsSenderId).HasMaxLength(11);
         });
 
         modelBuilder.Entity<RiderAppRelease>(entity =>

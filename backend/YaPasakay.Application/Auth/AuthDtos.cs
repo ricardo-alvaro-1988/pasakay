@@ -8,6 +8,15 @@ public record PasswordLoginRequest(string Phone, string Password);
 public record CustomerPinLoginRequest(string Phone, string Pin);
 public record RefreshRequest(string RefreshToken);
 public record GoogleSignInRequest(string IdToken);
+public record CustomerCompleteProfileRequest(
+    string? RegistrationToken,
+    string? FirstName,
+    string? LastName,
+    Gender Gender,
+    string? Email);
+public record SetPhoneSignInRequest(bool Enabled);
+public record SetSmsTokenRequest(string? ApiToken, string? SenderId);
+public record SmsTokenResponse(string ApiToken, string SenderId);
 public record MobileAuthTicketRedeemRequest(string? Ticket);
 
 public record AuthResponse(

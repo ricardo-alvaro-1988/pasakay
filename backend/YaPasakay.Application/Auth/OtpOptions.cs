@@ -28,6 +28,17 @@ public class GoogleAuthOptions
     public string[]? AdditionalClientIds { get; set; }
 }
 
+public class PhilSmsOptions
+{
+    public const string SectionName = "PhilSms";
+
+    /// <summary>PhilSMS dashboard API token. Keep this in server configuration, not in the app.</summary>
+    public string? ApiToken { get; set; }
+
+    /// <summary>Approved sender name, at most 11 characters.</summary>
+    public string? SenderId { get; set; }
+}
+
 public class FcmOptions
 {
     public const string SectionName = "Fcm";

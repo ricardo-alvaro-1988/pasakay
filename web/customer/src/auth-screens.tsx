@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import logo from './logo-circle.png'
 import { LoginBrandPanel, LoginTrustBar, LoginVehicleCards } from './login-brand-panel'
-import { api, Desk, saveAuth } from './api'
+import { api, AuthResponse, Desk, Gender, saveAuth } from './api'
 import { LegalLinks } from './LegalPage'
 
 function loadGoogleScript() {
@@ -53,6 +53,15 @@ export function AuthScreen({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [missingClient, setMissingClient] = useState(false)
+  const [phoneEnabled, setPhoneEnabled] = useState(false)
+  const [step, setStep] = useState<'phone' | 'code' | 'profile'>('phone')
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [gender, setGender] = useState<Gender>('Male')
+  const [email, setEmail] = useState('')
+  const [registrationToken, setRegistrationToken] = useState('')
 
   onReadyRef.current = onReady
 
@@ -65,7 +74,9 @@ export function AuthScreen({
       if (!host || !wrap) return
 
       try {
-        const { googleClientId } = await api.authConfig()
+        const auth = await api.authConfig()
+        if (!cancelled) setPhoneEnabled(auth.phoneSignInEnabled === true)
+        const googleClientId = auth.googleClientId
         if (!googleClientId) {
           if (!cancelled) setMissingClient(true)
           return
@@ -114,6 +125,66 @@ export function AuthScreen({
     }
   }, [])
 
+  async function finish(auth: AuthResponse) {
+    if (auth.user.role !== 'Customer') throw new Error('Use a customer account.')
+    saveAuth(auth)
+    onReadyRef.current(await api.desk())
+  }
+
+  async function sendCode(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      await api.requestCustomerOtp(phone)
+      setStep('code')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send the code.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function verifyCode(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const result = await api.verifyCustomerOtp(phone, code)
+      if (result.needsProfile) {
+        if (!result.registrationToken) throw new Error('Could not continue sign-up.')
+        setRegistrationToken(result.registrationToken)
+        setStep('profile')
+        return
+      }
+      await finish(result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not sign in.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function completeProfile(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const auth = await api.completeCustomerProfile({
+        registrationToken,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        gender,
+        email: email.trim() || undefined,
+      })
+      await finish(auth)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create the account.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="login">
       <LoginBrandPanel
@@ -128,8 +199,70 @@ export function AuthScreen({
       <div className="login-form">
         <img className="login-form-mark" src={brandLogo} alt="" />
         <h2>Welcome back</h2>
-        <p className="lede login-lede-full">Sign in with Google to book a ride, or create your {brandName} profile in one tap.</p>
-        <p className="lede login-lede-short">Sign in with Google to book rides and track your driver live.</p>
+        <p className="lede login-lede-full">
+          {phoneEnabled
+            ? `Sign in with your mobile number, or with Google, to book a ride on ${brandName}.`
+            : `Sign in with Google to book a ride, or create your ${brandName} profile in one tap.`}
+        </p>
+        <p className="lede login-lede-short">
+          {phoneEnabled
+            ? 'Sign in with your mobile number or Google.'
+            : 'Sign in with Google to book rides and track your driver live.'}
+        </p>
+        {phoneEnabled && step === 'phone' && (
+          <form onSubmit={sendCode}>
+            <label className="field">
+              <span>MOBILE NUMBER</span>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} autoComplete="tel" inputMode="tel" placeholder="09XX XXX XXXX" disabled={busy} />
+            </label>
+            <button className="primary" disabled={busy || phone.trim().length < 10}>
+              {busy ? 'Sending code…' : 'Send code'}
+            </button>
+          </form>
+        )}
+        {phoneEnabled && step === 'code' && (
+          <form onSubmit={verifyCode}>
+            <label className="field">
+              <span>CODE FROM SMS</span>
+              <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6-digit code" disabled={busy} />
+            </label>
+            <button className="primary" disabled={busy || code.trim().length !== 6}>
+              {busy ? 'Checking…' : 'Continue'}
+            </button>
+            <button className="ghost" type="button" disabled={busy} onClick={() => { setStep('phone'); setCode(''); setError('') }}>
+              Use a different number
+            </button>
+          </form>
+        )}
+        {phoneEnabled && step === 'profile' && (
+          <form onSubmit={completeProfile}>
+            <p className="lede">This number is new. Add your name to create the account.</p>
+            <label className="field">
+              <span>FIRST NAME</span>
+              <input value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" disabled={busy} required />
+            </label>
+            <label className="field">
+              <span>LAST NAME</span>
+              <input value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" disabled={busy} required />
+            </label>
+            <label className="field">
+              <span>GENDER</span>
+              <select value={gender} onChange={(e) => setGender(e.target.value as Gender)} disabled={busy}>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Other">Other</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>EMAIL (OPTIONAL)</span>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" disabled={busy} />
+            </label>
+            <button className="primary" disabled={busy}>
+              {busy ? 'Creating account…' : 'Create account'}
+            </button>
+          </form>
+        )}
+        {phoneEnabled && <p className="muted" style={{ textAlign: 'center', margin: '14px 0 0' }}>or</p>}
         {missingClient && (
           <p className="error">Google sign-in is not configured. Add GoogleAuth:ClientId in the API appsettings.</p>
         )}

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using YaPasakay.Api.Services;
 using YaPasakay.Application.Admin;
+using YaPasakay.Application.Auth;
 using YaPasakay.Domain.Entities;
 using YaPasakay.Infrastructure.Persistence;
 
@@ -21,6 +22,7 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
         string ThemeId,
         string Accent,
         string Good,
+        bool PhoneSignInEnabled,
         IReadOnlyList<BrandThemePreset> Themes);
 
     public record UpdateBrandingRequest(
@@ -77,6 +79,71 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
         await db.SaveChangesAsync(cancellationToken);
         brandShell.Invalidate();
         return Ok(ToDto(settings));
+    }
+
+    [HttpPut("phone-sign-in")]
+    public async Task<ActionResult<BrandingDto>> SetPhoneSignIn(
+        [FromBody] SetPhoneSignInRequest request,
+        CancellationToken cancellationToken)
+    {
+        var (user, _) = await AdminAccess.ResolveAsync(db, User, cancellationToken);
+        if (user is null || !user.IsMainAdmin)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only Super Admin can change phone sign-in." });
+        }
+
+        var settings = await EnsureAsync(cancellationToken);
+        settings.PhoneSignInEnabled = request.Enabled;
+        settings.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(ToDto(settings));
+    }
+
+    [HttpGet("sms-token")]
+    public async Task<ActionResult<SmsTokenResponse>> GetSmsToken(CancellationToken cancellationToken)
+    {
+        if (!await IsMainAdminAsync(cancellationToken))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only Super Admin can manage the SMS token." });
+        }
+
+        var settings = await EnsureAsync(cancellationToken);
+        return Ok(new SmsTokenResponse(settings.PhilSmsApiToken ?? string.Empty, SenderOrDefault(settings.PhilSmsSenderId)));
+    }
+
+    [HttpPut("sms-token")]
+    public async Task<ActionResult<SmsTokenResponse>> SetSmsToken(
+        [FromBody] SetSmsTokenRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsMainAdminAsync(cancellationToken))
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Only Super Admin can manage the SMS token." });
+        }
+
+        var token = (request.ApiToken ?? string.Empty).Trim();
+        if (token.Length is < 8 or > 200 || token.Any(char.IsWhiteSpace))
+        {
+            return BadRequest(new { message = "Enter the PhilSMS token." });
+        }
+
+        var senderId = (request.SenderId ?? string.Empty).Trim();
+        if (senderId.Length == 0)
+        {
+            senderId = "PhilSMS";
+        }
+
+        if (senderId.Length > 11)
+        {
+            return BadRequest(new { message = "Sender name must be at most 11 characters." });
+        }
+
+        var settings = await EnsureAsync(cancellationToken);
+        settings.PhilSmsApiToken = token;
+        settings.PhilSmsSenderId = senderId;
+        settings.UpdatedAtUtc = DateTime.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return Ok(new SmsTokenResponse(token, senderId));
     }
 
     [HttpPost("logo")]
@@ -139,6 +206,18 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
         }
     }
 
+    private static string SenderOrDefault(string? senderId)
+    {
+        var value = (senderId ?? string.Empty).Trim();
+        return value.Length is >= 1 and <= 11 ? value : "PhilSMS";
+    }
+
+    private async Task<bool> IsMainAdminAsync(CancellationToken cancellationToken)
+    {
+        var (user, _) = await AdminAccess.ResolveAsync(db, User, cancellationToken);
+        return user is not null && user.IsMainAdmin;
+    }
+
     private async Task<PlatformBrandSettings> EnsureAsync(CancellationToken cancellationToken)
     {
         var settings = await db.PlatformBrandSettings.OrderBy(x => x.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
@@ -169,6 +248,7 @@ public class BrandingController(AppDbContext db, UploadStore uploads, BrandShell
             theme.Id,
             theme.Accent,
             theme.Good,
+            settings.PhoneSignInEnabled,
             BrandThemeCatalog.All);
     }
 }

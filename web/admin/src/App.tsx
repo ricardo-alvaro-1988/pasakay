@@ -153,7 +153,7 @@ import {
 } from './side-nav'
 import { BrandingSettingsPage } from './BrandingSettings'
 import { RiderAppSettingsPage } from './RiderAppSettings'
-import { PassengerAppSettingsPage } from './PassengerAppSettings'
+import { PassengerAppSettingsPage, PhoneSignInSettings } from './PassengerAppSettings'
 import {
   applyBrand,
   DEFAULT_BRAND_NAME,
@@ -6650,6 +6650,7 @@ function toPhInput(value: string | null | undefined) {
 function SettingsPage({
   theme,
   onTheme,
+  me,
   section,
   onSection,
   onBranding,
@@ -6686,6 +6687,7 @@ function SettingsPage({
         <PassengerAppSettingsPage />
       ) : (
       <div className="grid-2">
+        {me.isMainAdmin ? <PhoneSignInSettings /> : null}
         <div className="card">
           <h2>Vehicle types</h2>
           <p>Locked for this product. Operators will assign one of these when they create a rider.</p>

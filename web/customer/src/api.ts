@@ -494,6 +494,9 @@ async function request<T>(path: string, init?: RequestInit, retried = false): Pr
     || path.startsWith('/api/auth/customer-pin-login')
     || path.startsWith('/api/auth/verify-otp')
     || path.startsWith('/api/auth/request-otp')
+    || path.startsWith('/api/auth/customer-request-otp')
+    || path.startsWith('/api/auth/customer-verify-otp')
+    || path.startsWith('/api/auth/customer-complete-profile')
   if (res.status === 401 && !isSignIn) {
     if (!retried && shouldAttemptRefresh(path) && (await refreshSession())) {
       return request<T>(path, init, true)
@@ -554,7 +557,28 @@ async function requestForm<T>(path: string, body: FormData, retried = false): Pr
 }
 
 export const api = {
-  authConfig: () => request<{ googleClientId: string }>('/api/public/auth'),
+  authConfig: () => request<{ googleClientId: string; phoneSignInEnabled?: boolean }>('/api/public/auth'),
+  requestCustomerOtp: (phone: string) =>
+    request<{ message: string }>('/api/auth/customer-request-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    }),
+  verifyCustomerOtp: (phone: string, code: string) =>
+    request<AuthResponse & { needsProfile?: boolean; registrationToken?: string }>('/api/auth/customer-verify-otp', {
+      method: 'POST',
+      body: JSON.stringify({ phone, code }),
+    }),
+  completeCustomerProfile: (body: {
+    registrationToken: string
+    firstName: string
+    lastName: string
+    gender: Gender
+    email?: string
+  }) =>
+    request<AuthResponse>('/api/auth/customer-complete-profile', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   branding: () =>
     request<{
       brandName: string
