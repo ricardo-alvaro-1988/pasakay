@@ -1,11 +1,12 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using YaPasakay.Application.Common;
 
 namespace YaPasakay.Api.Services;
 
-public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingDistance> logger)
+public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory httpClientFactory, ILogger<GoogleDrivingDistance> logger)
 {
     private static readonly ConcurrentDictionary<string, (decimal Km, int EtaMinutes, DateTime AtUtc)> Cache = new();
     private static readonly ConcurrentDictionary<string, Task<(decimal Km, int EtaMinutes)>> Inflight = new();
@@ -28,7 +29,6 @@ public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingD
             return (cached.Km, cached.EtaMinutes);
         }
 
-        // Collapse parallel quote fan-out onto one Directions call per route key.
         while (true)
         {
             if (Cache.TryGetValue(key, out cached) && DateTime.UtcNow - cached.AtUtc < CacheTtl)
@@ -80,56 +80,41 @@ public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingD
             return (fallbackKm, fallbackEta);
         }
 
-        var origin = string.Create(CultureInfo.InvariantCulture, $"{pickupLat},{pickupLng}");
-        var destination = string.Create(CultureInfo.InvariantCulture, $"{dropoffLat},{dropoffLng}");
-        var url =
-            "https://maps.googleapis.com/maps/api/directions/json"
-            + $"?origin={Uri.EscapeDataString(origin)}"
-            + $"&destination={Uri.EscapeDataString(destination)}"
-            + "&mode=driving&units=metric"
-            + $"&key={Uri.EscapeDataString(apiKey)}";
+        var payload = JsonSerializer.Serialize(new
+        {
+            origin = new { location = new { latLng = new { latitude = pickupLat, longitude = pickupLng } } },
+            destination = new { location = new { latLng = new { latitude = dropoffLat, longitude = dropoffLng } } },
+            travelMode = "DRIVE",
+            routingPreference = "TRAFFIC_UNAWARE",
+        });
 
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-            using var response = await client.GetAsync(url, cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://routes.googleapis.com/directions/v2:computeRoutes");
+            request.Headers.TryAddWithoutValidation("X-Goog-Api-Key", apiKey.Trim());
+            request.Headers.TryAddWithoutValidation("X-Goog-FieldMask", "routes.duration,routes.distanceMeters");
+            AddMapsReferer(request);
+            request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+
+            var client = httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(8);
+            using var response = await client.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("Directions HTTP {Status}; using straight-line {Km} km", (int)response.StatusCode, fallbackKm);
+                logger.LogWarning("Routes API HTTP {Status}: {Body}; using straight-line {Km} km", (int)response.StatusCode, Truncate(body), fallbackKm);
                 return (fallbackKm, fallbackEta);
             }
 
-            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            var root = doc.RootElement;
-            var status = root.TryGetProperty("status", out var statusEl) ? statusEl.GetString() : null;
-            if (!string.Equals(status, "OK", StringComparison.OrdinalIgnoreCase))
+            using var doc = JsonDocument.Parse(body);
+            if (!doc.RootElement.TryGetProperty("routes", out var routes) || routes.GetArrayLength() == 0)
             {
-                logger.LogWarning("Directions status {Status}; using straight-line {Km} km", status, fallbackKm);
                 return (fallbackKm, fallbackEta);
             }
 
-            var meters = 0;
-            var seconds = 0;
-            if (root.TryGetProperty("routes", out var routes) && routes.GetArrayLength() > 0)
-            {
-                var route = routes[0];
-                if (route.TryGetProperty("legs", out var legs) && legs.GetArrayLength() > 0)
-                {
-                    foreach (var leg in legs.EnumerateArray())
-                    {
-                        if (leg.TryGetProperty("distance", out var distance) && distance.TryGetProperty("value", out var metersEl))
-                        {
-                            meters += metersEl.GetInt32();
-                        }
-
-                        if (leg.TryGetProperty("duration", out var duration) && duration.TryGetProperty("value", out var secondsEl))
-                        {
-                            seconds += secondsEl.GetInt32();
-                        }
-                    }
-                }
-            }
+            var route = routes[0];
+            var meters = route.TryGetProperty("distanceMeters", out var metersEl) ? metersEl.GetInt32() : 0;
+            var seconds = ParseDurationSeconds(route);
 
             if (meters <= 0)
             {
@@ -151,13 +136,14 @@ public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingD
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Directions failed; using straight-line {Km} km", fallbackKm);
+            logger.LogWarning(ex, "Routes API failed; using straight-line {Km} km", fallbackKm);
             return (fallbackKm, fallbackEta);
         }
     }
 
     /// <summary>
     /// Best-effort reverse geocode for Plus Code / pin pickups so municipality matching can run.
+    /// Uses Places API (New) nearby search because Geocoding REST rejects HTTP-referrer keys.
     /// </summary>
     public async Task<string?> ReverseGeocodeAsync(double lat, double lng, CancellationToken cancellationToken = default)
     {
@@ -167,16 +153,30 @@ public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingD
             return null;
         }
 
-        var latlng = string.Create(CultureInfo.InvariantCulture, $"{lat},{lng}");
-        var url =
-            "https://maps.googleapis.com/maps/api/geocode/json"
-            + $"?latlng={Uri.EscapeDataString(latlng)}"
-            + $"&key={Uri.EscapeDataString(apiKey)}";
+        var payload = JsonSerializer.Serialize(new
+        {
+            maxResultCount = 5,
+            locationRestriction = new
+            {
+                circle = new
+                {
+                    center = new { latitude = lat, longitude = lng },
+                    radius = 80.0,
+                },
+            },
+        });
 
         try
         {
-            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
-            using var response = await client.GetAsync(url, cancellationToken);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "https://places.googleapis.com/v1/places:searchNearby");
+            request.Headers.TryAddWithoutValidation("X-Goog-Api-Key", apiKey.Trim());
+            request.Headers.TryAddWithoutValidation("X-Goog-FieldMask", "places.formattedAddress,places.displayName,places.types");
+            AddMapsReferer(request);
+            request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
+
+            var client = httpClientFactory.CreateClient();
+            client.Timeout = TimeSpan.FromSeconds(6);
+            using var response = await client.SendAsync(request, cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 return null;
@@ -184,20 +184,25 @@ public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingD
 
             await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-            var root = doc.RootElement;
-            var status = root.TryGetProperty("status", out var statusEl) ? statusEl.GetString() : null;
-            if (!string.Equals(status, "OK", StringComparison.OrdinalIgnoreCase)
-                || !root.TryGetProperty("results", out var results)
-                || results.GetArrayLength() == 0)
+            if (!doc.RootElement.TryGetProperty("places", out var places) || places.GetArrayLength() == 0)
             {
                 return null;
             }
 
             string? best = null;
             var bestScore = -1;
-            foreach (var item in results.EnumerateArray())
+            foreach (var item in places.EnumerateArray())
             {
-                var addr = item.TryGetProperty("formatted_address", out var addrEl) ? addrEl.GetString() : null;
+                var addr = item.TryGetProperty("formattedAddress", out var addrEl)
+                    ? addrEl.GetString()
+                    : null;
+                if (string.IsNullOrWhiteSpace(addr)
+                    && item.TryGetProperty("displayName", out var nameEl)
+                    && nameEl.TryGetProperty("text", out var textEl))
+                {
+                    addr = textEl.GetString();
+                }
+
                 if (string.IsNullOrWhiteSpace(addr))
                 {
                     continue;
@@ -227,8 +232,52 @@ public class GoogleDrivingDistance(IConfiguration config, ILogger<GoogleDrivingD
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Reverse geocode failed for {Lat},{Lng}", lat, lng);
+            logger.LogWarning(ex, "Places reverse lookup failed for {Lat},{Lng}", lat, lng);
             return null;
         }
     }
+
+    private void AddMapsReferer(HttpRequestMessage request)
+    {
+        var referer = (config["Maps:Referer"] ?? config["PublicOrigin"] ?? string.Empty).Trim().TrimEnd('/');
+        if (referer.Length == 0)
+        {
+            return;
+        }
+
+        if (!referer.EndsWith('/'))
+        {
+            referer += "/";
+        }
+
+        request.Headers.Referrer = new Uri(referer);
+    }
+
+    private static int ParseDurationSeconds(JsonElement route)
+    {
+        if (!route.TryGetProperty("duration", out var durationEl))
+        {
+            return 0;
+        }
+
+        if (durationEl.ValueKind == JsonValueKind.String)
+        {
+            var text = durationEl.GetString() ?? "";
+            if (text.EndsWith("s", StringComparison.Ordinal) &&
+                double.TryParse(text[..^1], NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds))
+            {
+                return (int)Math.Round(seconds);
+            }
+        }
+
+        if (durationEl.ValueKind == JsonValueKind.Number)
+        {
+            return durationEl.GetInt32();
+        }
+
+        return 0;
+    }
+
+    private static string Truncate(string body)
+        => body.Length <= 240 ? body : body[..240];
 }

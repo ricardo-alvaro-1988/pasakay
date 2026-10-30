@@ -6,30 +6,47 @@ import 'package:http/http.dart' as http;
 
 import 'models.dart';
 
-/// Driving route via Google Directions API (same idea as web `drawDrivingRoute`).
+/// Driving route via Google Routes API (replaces legacy Directions).
 Future<List<LatLng>> fetchDrivingRoute({
   required LatLng origin,
   required LatLng destination,
   required String apiKey,
+  String? referer,
 }) async {
   if (apiKey.isEmpty) return _straight(origin, destination);
-  final uri = Uri.https('maps.googleapis.com', '/maps/api/directions/json', {
-    'origin': '${origin.latitude},${origin.longitude}',
-    'destination': '${destination.latitude},${destination.longitude}',
-    'mode': 'driving',
-    'key': apiKey,
+  final uri = Uri.https('routes.googleapis.com', '/directions/v2:computeRoutes');
+  final headers = <String, String>{
+    'Content-Type': 'application/json',
+    'X-Goog-Api-Key': apiKey,
+    'X-Goog-FieldMask': 'routes.polyline.encodedPolyline',
+  };
+  final originReferer = (referer ?? '').trim();
+  if (originReferer.isNotEmpty) {
+    headers['Referer'] = originReferer.endsWith('/') ? originReferer : '$originReferer/';
+  }
+  final body = jsonEncode({
+    'origin': {
+      'location': {
+        'latLng': {'latitude': origin.latitude, 'longitude': origin.longitude},
+      },
+    },
+    'destination': {
+      'location': {
+        'latLng': {'latitude': destination.latitude, 'longitude': destination.longitude},
+      },
+    },
+    'travelMode': 'DRIVE',
   });
   try {
-    final response = await http.get(uri).timeout(const Duration(seconds: 12));
+    final response = await http.post(uri, headers: headers, body: body).timeout(const Duration(seconds: 12));
     if (response.statusCode != 200) return _straight(origin, destination);
     final decoded = jsonDecode(response.body);
     if (decoded is! Map) return _straight(origin, destination);
-    if (asText(decoded['status']) != 'OK') return _straight(origin, destination);
     final routes = decoded['routes'];
     if (routes is! List || routes.isEmpty) return _straight(origin, destination);
     final route = asJsonMap(routes.first);
-    final overview = asJsonMap(route?['overview_polyline']);
-    final encoded = asText(overview?['points']);
+    final polyline = asJsonMap(route?['polyline']);
+    final encoded = asText(polyline?['encodedPolyline']);
     if (encoded.isEmpty) return _straight(origin, destination);
     final points = decodePolyline(encoded);
     return points.length >= 2 ? points : _straight(origin, destination);
