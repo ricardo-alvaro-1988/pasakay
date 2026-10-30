@@ -97,8 +97,9 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
             request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
             var client = httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(8);
-            using var response = await client.SendAsync(request, cancellationToken);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(8));
+            using var response = await client.SendAsync(request, timeout.Token);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
@@ -175,8 +176,9 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
             request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
             var client = httpClientFactory.CreateClient();
-            client.Timeout = TimeSpan.FromSeconds(6);
-            using var response = await client.SendAsync(request, cancellationToken);
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(6));
+            using var response = await client.SendAsync(request, timeout.Token);
             if (!response.IsSuccessStatusCode)
             {
                 return null;

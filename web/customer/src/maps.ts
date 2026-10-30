@@ -100,17 +100,30 @@ declare global {
 
 let loader: Promise<MapsApi> | null = null
 
+async function ensureMapsApi(): Promise<MapsApi | null> {
+  const maps = window.google?.maps
+  if (!maps) return null
+  if (typeof maps.importLibrary === 'function') {
+    try {
+      await maps.importLibrary('maps')
+      await maps.importLibrary('geocoding').catch(() => undefined)
+    } catch {
+      return null
+    }
+  }
+  if (typeof maps.Map !== 'function' || typeof maps.LatLng !== 'function') return null
+  return maps
+}
+
 export function loadGoogleMaps(key: string) {
   mapsApiKey = key.trim()
-  const ready = window.google?.maps
-  if (ready) return Promise.resolve(ready)
   if (loader) return loader
   loader = new Promise((resolve, reject) => {
     let settled = false
-    const finishOk = (): boolean => {
+    const finishOk = async () => {
       if (settled) return true
-      const maps = window.google?.maps
-      if (!maps) return false
+      const maps = await ensureMapsApi()
+      if (!maps || settled) return !!maps
       settled = true
       resolve(maps)
       return true
@@ -124,20 +137,16 @@ export function loadGoogleMaps(key: string) {
 
     const existing = document.querySelector<HTMLScriptElement>('script[data-yp-maps]')
     if (existing) {
-      if (finishOk()) return
-      // Script tag may already have finished — `load` will never fire again.
-      existing.addEventListener('load', () => {
-        if (!finishOk()) finishErr('Google Maps did not initialize.')
-      })
+      void finishOk()
+      existing.addEventListener('load', () => { void finishOk() })
       existing.addEventListener('error', () => finishErr('Google Maps failed to load.'))
       let ticks = 0
       const poll = window.setInterval(() => {
         ticks += 1
-        if (finishOk()) {
-          window.clearInterval(poll)
-          return
-        }
-        if (ticks >= 100) {
+        void finishOk().then((ok) => {
+          if (ok || settled) window.clearInterval(poll)
+        })
+        if (ticks >= 100 && !settled) {
           window.clearInterval(poll)
           finishErr('Google Maps timed out.')
         }
@@ -146,15 +155,19 @@ export function loadGoogleMaps(key: string) {
     }
 
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&loading=async`
+    // Classic bootstrap avoids a half-loaded async stub that never exposes Map().
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly`
     script.async = true
     script.defer = true
     script.dataset.ypMaps = '1'
-    script.onload = () => {
-      if (!finishOk()) finishErr('Google Maps did not initialize.')
-    }
+    script.onload = () => { void finishOk() }
     script.onerror = () => finishErr('Google Maps failed to load.')
     document.head.appendChild(script)
+
+    // Safety if onload never fires.
+    window.setTimeout(() => {
+      if (!settled) finishErr('Google Maps timed out.')
+    }, 20000)
   })
   return loader
 }
@@ -192,18 +205,25 @@ function around(maps: MapsApi, near: { lat: number; lng: number }, delta = 0.12)
 export function reverseGeocode(maps: MapsApi, lat: number, lng: number) {
   return new Promise<string>((resolve) => {
     const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+    let done = false
+    const finish = (value: string) => {
+      if (done) return
+      done = true
+      resolve(value)
+    }
+    window.setTimeout(() => finish(fallback), 8000)
     try {
       const geocoder = new maps.Geocoder()
       geocoder.geocode({ location: { lat, lng } }, (results, status) => {
         const hit = status === 'OK' ? pickGeocodeAddress(results) : null
         if (hit) {
-          resolve(hit.formatted_address)
+          finish(hit.formatted_address)
           return
         }
-        void reverseGeocodePlaces(lat, lng).then((address) => resolve(address || fallback))
+        void reverseGeocodePlaces(lat, lng).then((address) => finish(address || fallback))
       })
     } catch {
-      void reverseGeocodePlaces(lat, lng).then((address) => resolve(address || fallback))
+      void reverseGeocodePlaces(lat, lng).then((address) => finish(address || fallback))
     }
   })
 }
@@ -227,6 +247,7 @@ async function reverseGeocodePlaces(lat: number, lng: number) {
           },
         },
       }),
+      signal: AbortSignal.timeout(7000),
     })
     if (!response.ok) return null
     const data = (await response.json()) as {
@@ -262,6 +283,7 @@ export async function searchPlaces(_maps: MapsApi, query: string, near?: { lat: 
         'X-Goog-Api-Key': mapsApiKey,
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
     })
     if (!response.ok) return []
     const data = (await response.json()) as {
@@ -300,6 +322,7 @@ export async function placeDetails(_maps: MapsApi, placeId: string, _map?: MapHa
       'X-Goog-Api-Key': mapsApiKey,
       'X-Goog-FieldMask': 'id,displayName,formattedAddress,location',
     },
+    signal: AbortSignal.timeout(8000),
   })
   if (!response.ok) throw new Error('Could not load that place.')
   const place = (await response.json()) as {

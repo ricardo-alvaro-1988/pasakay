@@ -166,13 +166,26 @@ export default function App() {
       setBoot(false)
       return
     }
+    let cancelled = false
+    const safety = window.setTimeout(() => {
+      if (!cancelled) setBoot(false)
+    }, 15000)
     api.desk()
-      .then(setDesk)
+      .then((next) => {
+        if (!cancelled) setDesk(next)
+      })
       .catch(() => {
         // Keep Google session unless access+refresh were cleared (true auth failure).
-        if (!getToken()) setDesk(null)
+        if (!cancelled && !getToken()) setDesk(null)
       })
-      .finally(() => setBoot(false))
+      .finally(() => {
+        window.clearTimeout(safety)
+        if (!cancelled) setBoot(false)
+      })
+    return () => {
+      cancelled = true
+      window.clearTimeout(safety)
+    }
   }, [publicDownload])
 
   useEffect(() => {
