@@ -30,8 +30,10 @@ export type OverlayHandle = {
 
 export type DirectionsRendererHandle = {
   setMap: (m: unknown) => void
-  setDirections: (result: unknown) => void
+  setDirections?: (result: unknown) => void
 }
+
+type PolylineHandle = { setMap: (m: unknown) => void }
 
 type MapsApi = {
   Map: new (el: HTMLElement, opts: Record<string, unknown>) => MapHandle
@@ -40,11 +42,7 @@ type MapsApi = {
   Size: new (w: number, h: number) => unknown
   Point: new (x: number, y: number) => unknown
   Marker: new (opts: Record<string, unknown>) => MarkerHandle
-  DirectionsService: new () => {
-    route: (req: unknown, cb: (result: unknown, status: string) => void) => void
-  }
-  DirectionsRenderer: new (opts: Record<string, unknown>) => DirectionsRendererHandle
-  TravelMode: { DRIVING: string }
+  Polyline?: new (opts: Record<string, unknown>) => PolylineHandle
   Geocoder: new () => {
     geocode: (
       req: unknown,
@@ -59,30 +57,15 @@ type MapsApi = {
     ) => void
   }
   OverlayView: new () => OverlayHandle
-  places: {
-    AutocompleteService: new () => {
-      getPlacePredictions: (
-        req: unknown,
-        cb: (predictions: Prediction[] | null, status: string) => void,
-      ) => void
-    }
-    PlacesService: new (mapOrEl: unknown) => {
-      getDetails: (req: unknown, cb: (place: PlaceResult | null, status: string) => void) => void
-    }
-    PlacesServiceStatus: { OK: string }
-  }
+  importLibrary?: (name: string) => Promise<Record<string, unknown>>
 }
+
+let mapsApiKey = ''
 
 export type Prediction = {
   place_id: string
   description: string
   structured_formatting?: { main_text: string; secondary_text: string }
-}
-
-type PlaceResult = {
-  formatted_address?: string
-  name?: string
-  geometry?: { location?: { lat: () => number; lng: () => number } }
 }
 
 declare global {
@@ -117,16 +100,30 @@ declare global {
 
 let loader: Promise<MapsApi> | null = null
 
+async function ensureMapsApi(): Promise<MapsApi | null> {
+  const maps = window.google?.maps
+  if (!maps) return null
+  if (typeof maps.importLibrary === 'function') {
+    try {
+      await maps.importLibrary('maps')
+      await maps.importLibrary('geocoding').catch(() => undefined)
+    } catch {
+      return null
+    }
+  }
+  if (typeof maps.Map !== 'function' || typeof maps.LatLng !== 'function') return null
+  return maps
+}
+
 export function loadGoogleMaps(key: string) {
-  const ready = window.google?.maps
-  if (ready) return Promise.resolve(ready)
+  mapsApiKey = key.trim()
   if (loader) return loader
   loader = new Promise((resolve, reject) => {
     let settled = false
-    const finishOk = (): boolean => {
+    const finishOk = async () => {
       if (settled) return true
-      const maps = window.google?.maps
-      if (!maps) return false
+      const maps = await ensureMapsApi()
+      if (!maps || settled) return !!maps
       settled = true
       resolve(maps)
       return true
@@ -140,20 +137,16 @@ export function loadGoogleMaps(key: string) {
 
     const existing = document.querySelector<HTMLScriptElement>('script[data-yp-maps]')
     if (existing) {
-      if (finishOk()) return
-      // Script tag may already have finished — `load` will never fire again.
-      existing.addEventListener('load', () => {
-        if (!finishOk()) finishErr('Google Maps did not initialize.')
-      })
+      void finishOk()
+      existing.addEventListener('load', () => { void finishOk() })
       existing.addEventListener('error', () => finishErr('Google Maps failed to load.'))
       let ticks = 0
       const poll = window.setInterval(() => {
         ticks += 1
-        if (finishOk()) {
-          window.clearInterval(poll)
-          return
-        }
-        if (ticks >= 100) {
+        void finishOk().then((ok) => {
+          if (ok || settled) window.clearInterval(poll)
+        })
+        if (ticks >= 100 && !settled) {
           window.clearInterval(poll)
           finishErr('Google Maps timed out.')
         }
@@ -162,15 +155,19 @@ export function loadGoogleMaps(key: string) {
     }
 
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places`
+    // Classic bootstrap avoids a half-loaded async stub that never exposes Map().
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly`
     script.async = true
     script.defer = true
     script.dataset.ypMaps = '1'
-    script.onload = () => {
-      if (!finishOk()) finishErr('Google Maps did not initialize.')
-    }
+    script.onload = () => { void finishOk() }
     script.onerror = () => finishErr('Google Maps failed to load.')
     document.head.appendChild(script)
+
+    // Safety if onload never fires.
+    window.setTimeout(() => {
+      if (!settled) finishErr('Google Maps timed out.')
+    }, 20000)
   })
   return loader
 }
@@ -207,94 +204,191 @@ function around(maps: MapsApi, near: { lat: number; lng: number }, delta = 0.12)
 
 export function reverseGeocode(maps: MapsApi, lat: number, lng: number) {
   return new Promise<string>((resolve) => {
-    const geocoder = new maps.Geocoder()
-    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-      const hit = status === 'OK' ? pickGeocodeAddress(results) : null
-      if (hit) resolve(hit.formatted_address)
-      else resolve(`${lat.toFixed(5)}, ${lng.toFixed(5)}`)
-    })
-  })
-}
-
-export function searchPlaces(maps: MapsApi, query: string, near?: { lat: number; lng: number }) {
-  return new Promise<Prediction[]>((resolve) => {
-    try {
-      const service = new maps.places.AutocompleteService()
-      service.getPlacePredictions(
-        {
-          input: query,
-          componentRestrictions: { country: 'ph' },
-          ...(near ? { location: new maps.LatLng(near.lat, near.lng), radius: 25000 } : {}),
-        },
-        (predictions, status) => {
-          if (status === maps.places.PlacesServiceStatus.OK && predictions) resolve(predictions)
-          else resolve([])
-        },
-      )
-    } catch {
-      resolve([])
+    const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`
+    let done = false
+    const finish = (value: string) => {
+      if (done) return
+      done = true
+      resolve(value)
     }
-  })
-}
-
-export function placeDetails(maps: MapsApi, placeId: string, map?: MapHandle | null) {
-  return new Promise<{ address: string; lat: number; lng: number }>((resolve, reject) => {
+    window.setTimeout(() => finish(fallback), 8000)
     try {
-      const service = new maps.places.PlacesService(map ?? document.getElementById('yp-places-host') ?? placesHost())
-      service.getDetails({ placeId, fields: ['formatted_address', 'geometry', 'name'] }, (place, status) => {
-        const loc = place?.geometry?.location
-        if (status !== maps.places.PlacesServiceStatus.OK || !loc) {
-          reject(new Error('Could not load that place.'))
+      const geocoder = new maps.Geocoder()
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        const hit = status === 'OK' ? pickGeocodeAddress(results) : null
+        if (hit) {
+          finish(hit.formatted_address)
           return
         }
-        resolve({
-          address: place.formatted_address || place.name || 'Selected place',
-          lat: loc.lat(),
-          lng: loc.lng(),
-        })
+        void reverseGeocodePlaces(lat, lng).then((address) => finish(address || fallback))
       })
-    } catch (err) {
-      reject(err instanceof Error ? err : new Error('Could not load that place.'))
+    } catch {
+      void reverseGeocodePlaces(lat, lng).then((address) => finish(address || fallback))
     }
   })
 }
 
-function placesHost() {
-  let host = document.getElementById('yp-places-host')
-  if (!host) {
-    host = document.createElement('div')
-    host.id = 'yp-places-host'
-    document.body.appendChild(host)
+async function reverseGeocodePlaces(lat: number, lng: number) {
+  if (!mapsApiKey) return null
+  try {
+    const response = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': mapsApiKey,
+        'X-Goog-FieldMask': 'places.formattedAddress,places.displayName',
+      },
+      body: JSON.stringify({
+        maxResultCount: 3,
+        locationRestriction: {
+          circle: {
+            center: { latitude: lat, longitude: lng },
+            radius: 80,
+          },
+        },
+      }),
+      signal: AbortSignal.timeout(7000),
+    })
+    if (!response.ok) return null
+    const data = (await response.json()) as {
+      places?: { formattedAddress?: string; displayName?: { text?: string } }[]
+    }
+    const place = data.places?.[0]
+    return place?.formattedAddress || place?.displayName?.text || null
+  } catch {
+    return null
   }
-  return host
+}
+
+export async function searchPlaces(_maps: MapsApi, query: string, near?: { lat: number; lng: number }) {
+  const trimmed = query.trim()
+  if (trimmed.length < 2 || !mapsApiKey) return []
+  try {
+    const body: Record<string, unknown> = {
+      input: trimmed,
+      includedRegionCodes: ['ph'],
+    }
+    if (near) {
+      body.locationBias = {
+        circle: {
+          center: { latitude: near.lat, longitude: near.lng },
+          radius: 25000,
+        },
+      }
+    }
+    const response = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': mapsApiKey,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!response.ok) return []
+    const data = (await response.json()) as {
+      suggestions?: {
+        placePrediction?: {
+          placeId?: string
+          text?: { text?: string }
+          structuredFormat?: { mainText?: { text?: string }; secondaryText?: { text?: string } }
+        }
+      }[]
+    }
+    return (data.suggestions ?? [])
+      .map((item) => {
+        const prediction = item.placePrediction
+        const placeId = prediction?.placeId ?? ''
+        const description = prediction?.text?.text ?? ''
+        const main = prediction?.structuredFormat?.mainText?.text ?? description
+        const secondary = prediction?.structuredFormat?.secondaryText?.text ?? ''
+        return {
+          place_id: placeId,
+          description,
+          structured_formatting: { main_text: main, secondary_text: secondary },
+        } satisfies Prediction
+      })
+      .filter((item) => item.place_id && item.description)
+  } catch {
+    return []
+  }
+}
+
+export async function placeDetails(_maps: MapsApi, placeId: string, _map?: MapHandle | null) {
+  if (!placeId || !mapsApiKey) throw new Error('Could not load that place.')
+  const id = placeId.startsWith('places/') ? placeId.slice('places/'.length) : placeId
+  const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(id)}`, {
+    headers: {
+      'X-Goog-Api-Key': mapsApiKey,
+      'X-Goog-FieldMask': 'id,displayName,formattedAddress,location',
+    },
+    signal: AbortSignal.timeout(8000),
+  })
+  if (!response.ok) throw new Error('Could not load that place.')
+  const place = (await response.json()) as {
+    formattedAddress?: string
+    displayName?: { text?: string }
+    location?: { latitude?: number; longitude?: number }
+  }
+  const lat = place.location?.latitude
+  const lng = place.location?.longitude
+  if (lat == null || lng == null) throw new Error('Could not load that place.')
+  return {
+    address: place.formattedAddress || place.displayName?.text || 'Selected place',
+    lat,
+    lng,
+  }
 }
 
 export function geocodeText(maps: MapsApi, query: string, near?: { lat: number; lng: number }) {
   return new Promise<StopResult[]>((resolve) => {
-    const geocoder = new maps.Geocoder()
-    geocoder.geocode(
-      {
-        address: query,
-        componentRestrictions: { country: 'PH' },
-        region: 'ph',
-        ...(near ? { bounds: around(maps, near) } : {}),
-      },
-      (results, status) => {
-        if (status !== 'OK' || !results?.length) {
-          resolve([])
-          return
+    const finishFromPlaces = async () => {
+      const hints = await searchPlaces(maps, query, near)
+      const stops: StopResult[] = []
+      for (const hint of hints.slice(0, 5)) {
+        try {
+          const place = await placeDetails(maps, hint.place_id)
+          stops.push({
+            label: hint.structured_formatting?.main_text || place.address.split(',')[0] || query,
+            details: place.address,
+            lat: place.lat,
+            lng: place.lng,
+          })
+        } catch {
+          // Skip failed place lookups.
         }
-        resolve(results.map((item) => {
-          const loc = item.geometry?.location
-          return {
-            label: item.formatted_address.split(',')[0] || query,
-            details: item.formatted_address,
-            lat: loc?.lat() ?? near?.lat ?? PH.lat,
-            lng: loc?.lng() ?? near?.lng ?? PH.lng,
+      }
+      resolve(stops)
+    }
+
+    try {
+      const geocoder = new maps.Geocoder()
+      geocoder.geocode(
+        {
+          address: query,
+          componentRestrictions: { country: 'PH' },
+          region: 'ph',
+          ...(near ? { bounds: around(maps, near) } : {}),
+        },
+        (results, status) => {
+          if (status !== 'OK' || !results?.length) {
+            void finishFromPlaces()
+            return
           }
-        }))
-      },
-    )
+          resolve(results.map((item) => {
+            const loc = item.geometry?.location
+            return {
+              label: item.formatted_address.split(',')[0] || query,
+              details: item.formatted_address,
+              lat: loc?.lat() ?? near?.lat ?? PH.lat,
+              lng: loc?.lng() ?? near?.lng ?? PH.lng,
+            }
+          }))
+        },
+      )
+    } catch {
+      void finishFromPlaces()
+    }
   })
 }
 
@@ -433,6 +527,11 @@ export function riderIcon(maps: MapsApi, vehicle = 'Motorcycle') {
   }
 }
 
+type RouteHandle = DirectionsRendererHandle & {
+  polylines: PolylineHandle[]
+  requestId: number
+}
+
 export function drawDrivingRoute(
   maps: MapsApi,
   map: MapHandle,
@@ -440,22 +539,75 @@ export function drawDrivingRoute(
   destination: { lat: number; lng: number },
   renderer: DirectionsRendererHandle | null,
 ) {
-  const next = renderer ?? new maps.DirectionsRenderer({
-    suppressMarkers: true,
-    preserveViewport: true,
-    polylineOptions: {
-      strokeColor: '#e30613',
-      strokeOpacity: 0.4,
-      strokeWeight: 5,
+  const next = (renderer as RouteHandle | null) ?? {
+    polylines: [] as PolylineHandle[],
+    requestId: 0,
+    setMap(m: unknown) {
+      this.polylines.forEach((line) => line.setMap(m))
     },
-  })
-  next.setMap(map)
-  const service = new maps.DirectionsService()
-  service.route(
-    { origin, destination, travelMode: maps.TravelMode.DRIVING },
-    (result, status) => {
-      if (status === 'OK' && result) next.setDirections(result)
-    },
-  )
+  }
+  next.polylines.forEach((line) => line.setMap(null))
+  next.polylines = []
+  const requestId = (next.requestId = (next.requestId || 0) + 1)
+
+  void (async () => {
+    try {
+      const routesLib = (await (maps.importLibrary
+        ? maps.importLibrary('routes')
+        : window.google?.maps?.importLibrary?.('routes'))) as {
+        Route?: {
+          computeRoutes: (req: Record<string, unknown>) => Promise<{
+            routes?: {
+              createPolylines?: (opts?: Record<string, unknown>) => PolylineHandle[]
+              path?: { lat: () => number; lng: () => number }[]
+            }[]
+          }>
+        }
+      } | null
+      const Route = routesLib?.Route
+      if (!Route?.computeRoutes) return
+
+      const result = await Route.computeRoutes({
+        origin,
+        destination,
+        travelMode: 'DRIVING',
+        fields: ['path'],
+      })
+      if (next.requestId !== requestId) return
+      const route = result.routes?.[0]
+      if (!route) return
+
+      let polylines: PolylineHandle[] = []
+      if (typeof route.createPolylines === 'function') {
+        polylines = route.createPolylines({
+          polylineOptions: {
+            strokeColor: '#e30613',
+            strokeOpacity: 0.4,
+            strokeWeight: 5,
+          },
+        }) ?? []
+      } else if (route.path?.length && maps.Polyline) {
+        polylines = [
+          new maps.Polyline({
+            path: route.path,
+            strokeColor: '#e30613',
+            strokeOpacity: 0.4,
+            strokeWeight: 5,
+            map,
+          }),
+        ]
+      }
+
+      if (next.requestId !== requestId) {
+        polylines.forEach((line) => line.setMap(null))
+        return
+      }
+      next.polylines = polylines
+      polylines.forEach((line) => line.setMap(map))
+    } catch {
+      // Keep map usable even if routing is unavailable.
+    }
+  })()
+
   return next
 }

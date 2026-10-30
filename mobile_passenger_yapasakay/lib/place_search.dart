@@ -13,6 +13,7 @@ Future<Stop?> showPlaceSearchDialog(
   required CustomerApi api,
   required String mapsKey,
   required String title,
+  String? mapsReferer,
   double? biasLat,
   double? biasLng,
   bool allowCurrentLocation = false,
@@ -29,6 +30,7 @@ Future<Stop?> showPlaceSearchDialog(
     builder: (ctx) => _PlaceSearchSheet(
       api: api,
       mapsKey: mapsKey,
+      mapsReferer: mapsReferer,
       title: title,
       biasLat: biasLat,
       biasLng: biasLng,
@@ -42,6 +44,7 @@ class _PlaceSearchSheet extends StatefulWidget {
     required this.api,
     required this.mapsKey,
     required this.title,
+    this.mapsReferer,
     this.biasLat,
     this.biasLng,
     this.allowCurrentLocation = false,
@@ -49,6 +52,7 @@ class _PlaceSearchSheet extends StatefulWidget {
 
   final CustomerApi api;
   final String mapsKey;
+  final String? mapsReferer;
   final String title;
   final double? biasLat;
   final double? biasLng;
@@ -107,8 +111,20 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
     try {
       final key = await _key();
       final results = await Future.wait([
-        autocompletePlaces(text, key, biasLat: widget.biasLat, biasLng: widget.biasLng),
-        geocodeAddress(text, key, biasLat: widget.biasLat, biasLng: widget.biasLng),
+        autocompletePlaces(
+          text,
+          key,
+          biasLat: widget.biasLat,
+          biasLng: widget.biasLng,
+          referer: widget.mapsReferer,
+        ),
+        geocodeAddress(
+          text,
+          key,
+          biasLat: widget.biasLat,
+          biasLng: widget.biasLng,
+          referer: widget.mapsReferer,
+        ),
       ]);
       if (!mounted) return;
       final preds = results[0] as List<PlacePrediction>;
@@ -134,12 +150,13 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
     setState(() => _busy = true);
     try {
       final key = await _key();
-      final stop = await placeDetails(prediction.placeId, key) ??
+      final stop = await placeDetails(prediction.placeId, key, referer: widget.mapsReferer) ??
           await geocodeAddress(
             prediction.description,
             key,
             biasLat: widget.biasLat,
             biasLng: widget.biasLng,
+            referer: widget.mapsReferer,
           );
       if (!mounted) return;
       if (stop == null) {
@@ -175,7 +192,12 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
       }
       final pos = await Geolocator.getCurrentPosition();
       final key = await _key();
-      final stop = await reverseGeocode(pos.latitude, pos.longitude, key) ??
+      final stop = await reverseGeocode(
+            pos.latitude,
+            pos.longitude,
+            key,
+            referer: widget.mapsReferer,
+          ) ??
           Stop(
             label: 'Current location',
             details: 'Current location',

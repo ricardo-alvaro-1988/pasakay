@@ -23,6 +23,7 @@ class CustomerSession extends ChangeNotifier {
   bool pabiliEnabled = false;
   String? googleClientId;
   String? mapsKey;
+  String? mapsReferer;
   String? hailBookRiderId;
   String? hailBookVehicleType;
   int unreadChatCount = 0;
@@ -173,6 +174,7 @@ class CustomerSession extends ChangeNotifier {
       googleClientId = asTextOrNull(auth['googleClientId']);
       final maps = await api.mapsConfig();
       mapsKey = asTextOrNull(maps['googleMapsBrowserKey']);
+      mapsReferer = asTextOrNull(maps['publicOrigin']) ?? asTextOrNull(auth['publicOrigin']);
     } catch (_) {}
   }
 

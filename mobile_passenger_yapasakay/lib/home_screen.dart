@@ -247,7 +247,12 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       final pos = await Geolocator.getCurrentPosition();
       final key = await _mapsKey();
-      final stop = await reverseGeocode(pos.latitude, pos.longitude, key) ??
+      final stop = await reverseGeocode(
+            pos.latitude,
+            pos.longitude,
+            key,
+            referer: widget.session.mapsReferer,
+          ) ??
           Stop(
             label: 'Current location',
             details: 'Current location',
@@ -289,7 +294,12 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final pos = await Geolocator.getCurrentPosition();
       final key = await _mapsKey();
-      final stop = await reverseGeocode(pos.latitude, pos.longitude, key) ??
+      final stop = await reverseGeocode(
+            pos.latitude,
+            pos.longitude,
+            key,
+            referer: widget.session.mapsReferer,
+          ) ??
           Stop(
             label: 'Current location',
             details: 'Current location',
@@ -315,6 +325,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       api: widget.session.api,
       mapsKey: key,
+      mapsReferer: widget.session.mapsReferer,
       title: pickup ? 'Pickup' : 'Drop-off',
       biasLat: _pickup?.lat ?? widget.session.desk?.mapLat,
       biasLng: _pickup?.lng ?? widget.session.desk?.mapLng,
@@ -620,7 +631,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (key == _routeKey) return;
     _routeKey = key;
     final mapsKey = await _mapsKey();
-    final points = await fetchDrivingRoute(origin: origin, destination: dest, apiKey: mapsKey);
+    final points = await fetchDrivingRoute(
+      origin: origin,
+      destination: dest,
+      apiKey: mapsKey,
+      referer: widget.session.mapsReferer,
+    );
     if (!mounted || _routeKey != key) return;
     setState(() {
       _polylines = {
