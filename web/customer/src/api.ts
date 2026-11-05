@@ -159,6 +159,7 @@ export type Quote = {
   customerBoostAmount?: number
   fareDiscountLabel?: string | null
   fareDiscountPercent?: number | null
+  routePolyline?: string | null
 }
 
 export type BookingDispatchMode = 'Broadcast' | 'Selection' | 'Both'

@@ -81,7 +81,8 @@ public record CustomerQuoteResponse(
     bool HasActivePromos = false,
     decimal CustomerBoostAmount = 0,
     string? FareDiscountLabel = null,
-    int? FareDiscountPercent = null);
+    int? FareDiscountPercent = null,
+    string? RoutePolyline = null);
 
 public record CustomerServiceCheckRequest(
     Guid? PickupBarangayId,

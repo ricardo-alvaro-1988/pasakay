@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -8,9 +9,10 @@ import 'session.dart';
 import 'theme.dart';
 import 'vehicle_art.dart';
 
-/// Same pattern as Ya Pabili / TryGoRide passenger:
-/// 1) Native Google Sign-In (needs Android OAuth client + SHA-1 in Google Cloud)
-/// 2) Only if that returns developer error 10 → browser OAuth once
+enum _AuthStep { phone, code, profile }
+
+/// Matches web customer AuthScreen:
+/// phone → SMS code → (new number) profile, plus Google (native then browser fallback).
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.session});
 
@@ -26,7 +28,48 @@ class _LoginScreenState extends State<LoginScreen> {
   GoogleSignIn? _google;
   static const _callbackScheme = 'trygoride-passenger';
 
+  _AuthStep _step = _AuthStep.phone;
+
+  final _phone = TextEditingController();
+  final _code = TextEditingController();
+  final _firstName = TextEditingController();
+  final _lastName = TextEditingController();
+  final _email = TextEditingController();
+  String _gender = 'Male';
+  String _registrationToken = '';
+
   CustomerApi get _api => widget.session.api;
+
+  @override
+  void initState() {
+    super.initState();
+    void refresh() {
+      if (mounted) setState(() {});
+    }
+
+    _phone.addListener(refresh);
+    _code.addListener(refresh);
+    _firstName.addListener(refresh);
+    _lastName.addListener(refresh);
+
+    widget.session.api.authConfig().then((auth) {
+      if (!mounted) return;
+      setState(() {
+        widget.session.googleClientId = asTextOrNull(auth['googleClientId']);
+        widget.session.phoneSignInEnabled = asFlag(auth['phoneSignInEnabled']);
+      });
+    }).catchError((_) {});
+  }
+
+  @override
+  void dispose() {
+    _phone.dispose();
+    _code.dispose();
+    _firstName.dispose();
+    _lastName.dispose();
+    _email.dispose();
+    super.dispose();
+  }
 
   Future<String> _ensureGoogleClientId() async {
     var clientId = widget.session.googleClientId;
@@ -34,6 +77,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final auth = await _api.authConfig();
       clientId = asTextOrNull(auth['googleClientId']);
       widget.session.googleClientId = clientId;
+      widget.session.phoneSignInEnabled = asFlag(auth['phoneSignInEnabled']);
     }
     if (clientId == null || clientId.isEmpty) {
       throw Exception('Google sign-in is not configured on the server.');
@@ -57,7 +101,6 @@ class _LoginScreenState extends State<LoginScreen> {
         message.contains('12501');
   }
 
-  /// ApiException: 10 = DEVELOPER_ERROR (SHA-1 / Android OAuth client missing).
   bool _needsBrowserFallback(Object ex) {
     final message = ex.toString().toLowerCase();
     if (message.contains('developer_error')) return true;
@@ -66,7 +109,6 @@ class _LoginScreenState extends State<LoginScreen> {
     return false;
   }
 
-  /// Backend rejected the native ID token (usually audience mismatch) → browser GIS.
   bool _isVerifyFailure(Object ex) {
     final message = ex.toString().toLowerCase();
     return message.contains('could not be verified') ||
@@ -84,7 +126,6 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<GoogleSignInAccount?> _interactiveAccount(GoogleSignIn google) async {
     var account = await google.signIn();
     if (account != null) return account;
-    // Common Android quirk: first picker select returns null.
     try {
       await google.signOut();
     } catch (_) {}
@@ -137,7 +178,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _signIn() async {
+  Future<void> _signInGoogle() async {
     if (_loading) return;
     setState(() {
       _loading = true;
@@ -148,10 +189,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final clientId = await _ensureGoogleClientId();
       final google = _googleClient(clientId);
 
-      // --- Native first (retry once on null account / missing id token) ---
       try {
         final account = await _interactiveAccount(google);
-        if (account == null) return; // user cancelled
+        if (account == null) return;
         final idToken = await _idTokenFor(google, account);
         if (idToken == null || idToken.isEmpty) {
           throw Exception('Google sign-in failed. Try again.');
@@ -160,7 +200,6 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       } catch (ex) {
         if (_isCancel(ex)) return;
-        // Native token rejected by API, or Android OAuth/SHA-1 missing → browser GIS once.
         final canBrowser = _needsBrowserFallback(ex) || _isVerifyFailure(ex);
         if (ex is ApiException && !canBrowser) rethrow;
         if (ex is! ApiException && !canBrowser) {
@@ -185,9 +224,109 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _sendCode() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _localError = null;
+      widget.session.error = null;
+    });
+    try {
+      await _api.requestCustomerOtp(_phone.text.trim());
+      if (!mounted) return;
+      setState(() => _step = _AuthStep.code);
+    } on ApiException catch (ex) {
+      if (!mounted) return;
+      setState(() => _localError = ex.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _localError = 'Could not send the code.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _verifyCode() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _localError = null;
+      widget.session.error = null;
+    });
+    try {
+      final result = await _api.verifyCustomerOtp(_phone.text.trim(), _code.text.trim());
+      if (result.needsProfile) {
+        final token = (result.registrationToken ?? '').trim();
+        if (token.isEmpty) {
+          throw ApiException('Could not continue sign-up.');
+        }
+        if (!mounted) return;
+        setState(() {
+          _registrationToken = token;
+          _step = _AuthStep.profile;
+        });
+        return;
+      }
+      await widget.session.finishPhoneAuth();
+      if (!widget.session.loggedIn) {
+        throw ApiException(widget.session.error ?? 'Could not sign in.');
+      }
+    } on ApiException catch (ex) {
+      if (!mounted) return;
+      setState(() => _localError = ex.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _localError = 'Could not sign in.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _completeProfile() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _localError = null;
+      widget.session.error = null;
+    });
+    try {
+      await _api.completeCustomerProfile(
+        registrationToken: _registrationToken,
+        firstName: _firstName.text.trim(),
+        lastName: _lastName.text.trim(),
+        gender: _gender,
+        email: _email.text.trim().isEmpty ? null : _email.text.trim(),
+      );
+      await widget.session.finishPhoneAuth();
+      if (!widget.session.loggedIn) {
+        throw ApiException(widget.session.error ?? 'Could not create the account.');
+      }
+    } on ApiException catch (ex) {
+      if (!mounted) return;
+      setState(() => _localError = ex.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _localError = 'Could not create the account.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _backToPhone() {
+    setState(() {
+      _step = _AuthStep.phone;
+      _code.clear();
+      _localError = null;
+      _registrationToken = '';
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final error = _localError ?? widget.session.error;
+    final phoneOn = widget.session.phoneSignInEnabled;
+    final busy = _loading || widget.session.busy;
+
     return Scaffold(
       backgroundColor: brandCanvas,
       body: SafeArea(
@@ -263,28 +402,146 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('Welcome back', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                  Text(
+                    _step == _AuthStep.profile ? 'Create account' : 'Welcome back',
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Sign in with Google to book rides and track your driver live.',
-                    style: TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
+                  Text(
+                    phoneOn
+                        ? (_step == _AuthStep.profile
+                            ? 'This number is new. Add your name to create the account.'
+                            : 'Sign in with your mobile number, or with Google, to book a ride on TryGoRide.')
+                        : 'Sign in with Google to book rides and track your driver live.',
+                    style: const TextStyle(color: brandMuted, fontWeight: FontWeight.w600),
                   ),
                   if (error != null && error.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Text(error, style: const TextStyle(color: brandSos, fontWeight: FontWeight.w600)),
                   ],
-                  const SizedBox(height: 18),
+                  if (phoneOn && _step == _AuthStep.phone) ...[
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: _phone,
+                      enabled: !busy,
+                      keyboardType: TextInputType.phone,
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) {
+                        if (_phone.text.trim().length >= 10) _sendCode();
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Mobile number',
+                        hintText: '09XX XXX XXXX',
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton(
+                      onPressed: busy || _phone.text.trim().length < 10 ? null : _sendCode,
+                      child: Text(busy ? 'Sending code…' : 'Send code'),
+                    ),
+                  ],
+                  if (phoneOn && _step == _AuthStep.code) ...[
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: _code,
+                      enabled: !busy,
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.done,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(6),
+                      ],
+                      onSubmitted: (_) {
+                        if (_code.text.trim().length == 6) _verifyCode();
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Code from SMS',
+                        hintText: '6-digit code',
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton(
+                      onPressed: busy || _code.text.trim().length != 6 ? null : _verifyCode,
+                      child: Text(busy ? 'Checking…' : 'Continue'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: busy ? null : _backToPhone,
+                      child: const Text('Use a different number'),
+                    ),
+                  ],
+                  if (phoneOn && _step == _AuthStep.profile) ...[
+                    const SizedBox(height: 18),
+                    TextField(
+                      controller: _firstName,
+                      enabled: !busy,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'First name'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _lastName,
+                      enabled: !busy,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(labelText: 'Last name'),
+                    ),
+                    const SizedBox(height: 12),
+                    InputDecorator(
+                      decoration: const InputDecoration(labelText: 'Gender'),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          isExpanded: true,
+                          value: _gender,
+                          items: const [
+                            DropdownMenuItem(value: 'Male', child: Text('Male')),
+                            DropdownMenuItem(value: 'Female', child: Text('Female')),
+                            DropdownMenuItem(value: 'Other', child: Text('Other')),
+                          ],
+                          onChanged: busy
+                              ? null
+                              : (value) {
+                                  if (value != null) setState(() => _gender = value);
+                                },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _email,
+                      enabled: !busy,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(labelText: 'Email (optional)'),
+                    ),
+                    const SizedBox(height: 14),
+                    FilledButton(
+                      onPressed: busy ||
+                              _firstName.text.trim().isEmpty ||
+                              _lastName.text.trim().isEmpty
+                          ? null
+                          : _completeProfile,
+                      child: Text(busy ? 'Creating account…' : 'Create account'),
+                    ),
+                  ],
+                  if (phoneOn) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'or',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: brandMuted, fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                  const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton(
-                      onPressed: _loading || widget.session.busy ? null : _signIn,
+                      onPressed: busy ? null : _signInGoogle,
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: brandRed, width: 2),
                         foregroundColor: brandInk,
                         minimumSize: const Size(64, 52),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
                       ),
-                      child: _loading || widget.session.busy
+                      child: busy && !phoneOn
                           ? const SizedBox(
                               width: 22,
                               height: 22,

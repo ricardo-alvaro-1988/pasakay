@@ -530,6 +530,84 @@ export function riderIcon(maps: MapsApi, vehicle = 'Motorcycle') {
 type RouteHandle = DirectionsRendererHandle & {
   polylines: PolylineHandle[]
   requestId: number
+  sourceKey?: string
+}
+
+/** Google encoded polyline → lat/lng path (no extra Maps SKU). */
+export function decodeEncodedPolyline(encoded: string): { lat: number; lng: number }[] {
+  const path: { lat: number; lng: number }[] = []
+  let index = 0
+  let lat = 0
+  let lng = 0
+  while (index < encoded.length) {
+    let result = 0
+    let shift = 0
+    let b: number
+    do {
+      b = encoded.charCodeAt(index++) - 63
+      result |= (b & 0x1f) << shift
+      shift += 5
+    } while (b >= 0x20)
+    lat += result & 1 ? ~(result >> 1) : result >> 1
+    result = 0
+    shift = 0
+    do {
+      b = encoded.charCodeAt(index++) - 63
+      result |= (b & 0x1f) << shift
+      shift += 5
+    } while (b >= 0x20)
+    lng += result & 1 ? ~(result >> 1) : result >> 1
+    path.push({ lat: lat / 1e5, lng: lng / 1e5 })
+  }
+  return path
+}
+
+function emptyRouteHandle(): RouteHandle {
+  return {
+    polylines: [],
+    requestId: 0,
+    setMap(m: unknown) {
+      this.polylines.forEach((line) => line.setMap(m))
+    },
+  }
+}
+
+export function clearDrivingRoute(renderer: DirectionsRendererHandle | null) {
+  const next = renderer as RouteHandle | null
+  if (!next) return null
+  next.polylines.forEach((line) => line.setMap(null))
+  next.polylines = []
+  next.sourceKey = undefined
+  return next
+}
+
+/** Draw from server quote polyline — avoids a second client Routes call. */
+export function drawEncodedRoute(
+  maps: MapsApi,
+  map: MapHandle,
+  encoded: string,
+  renderer: DirectionsRendererHandle | null,
+  sourceKey?: string,
+) {
+  const next = (renderer as RouteHandle | null) ?? emptyRouteHandle()
+  if (sourceKey && next.sourceKey === sourceKey && next.polylines.length > 0) {
+    return next
+  }
+  next.polylines.forEach((line) => line.setMap(null))
+  next.polylines = []
+  next.requestId = (next.requestId || 0) + 1
+  next.sourceKey = sourceKey
+  const path = decodeEncodedPolyline(encoded)
+  if (!path.length || !maps.Polyline) return next
+  const line = new maps.Polyline({
+    path,
+    strokeColor: '#e30613',
+    strokeOpacity: 0.4,
+    strokeWeight: 5,
+    map,
+  })
+  next.polylines = [line]
+  return next
 }
 
 export function drawDrivingRoute(
@@ -538,17 +616,16 @@ export function drawDrivingRoute(
   origin: { lat: number; lng: number },
   destination: { lat: number; lng: number },
   renderer: DirectionsRendererHandle | null,
+  sourceKey?: string,
 ) {
-  const next = (renderer as RouteHandle | null) ?? {
-    polylines: [] as PolylineHandle[],
-    requestId: 0,
-    setMap(m: unknown) {
-      this.polylines.forEach((line) => line.setMap(m))
-    },
+  const next = (renderer as RouteHandle | null) ?? emptyRouteHandle()
+  if (sourceKey && next.sourceKey === sourceKey && next.polylines.length > 0) {
+    return next
   }
   next.polylines.forEach((line) => line.setMap(null))
   next.polylines = []
   const requestId = (next.requestId = (next.requestId || 0) + 1)
+  next.sourceKey = sourceKey
 
   void (async () => {
     try {

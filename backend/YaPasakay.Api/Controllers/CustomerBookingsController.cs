@@ -334,7 +334,8 @@ public class CustomerBookingsController(
             prepared.DiscountPercent,
             prepared.PromoDisplayCode,
             hasPromos,
-            prepared.CustomerBoostAmount));
+            prepared.CustomerBoostAmount,
+            RoutePolyline: prepared.RoutePolyline));
     }
 
     [HttpPost("service-check")]
@@ -1052,7 +1053,7 @@ public class CustomerBookingsController(
             };
         }
 
-        var (distance, eta) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
+        var (distance, eta, routePolyline) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
 
         var fareRow = await OperatorMaps.LoadFareMatrixAsync(
             db,
@@ -1175,6 +1176,7 @@ public class CustomerBookingsController(
             DeriveFareZoneId = deriveZoneId,
             PassengerCount = passengers,
             EtaMinutes = eta,
+            RoutePolyline = routePolyline,
             VehicleType = vehicle,
             VehicleCategoryId = vehicleCategoryId
         };
@@ -1507,6 +1509,7 @@ public class CustomerBookingsController(
         public Guid? DeriveFareZoneId { get; set; }
         public int PassengerCount { get; set; } = 1;
         public int EtaMinutes { get; set; }
+        public string? RoutePolyline { get; set; }
         public VehicleType VehicleType { get; set; }
         public Guid? VehicleCategoryId { get; set; }
     }

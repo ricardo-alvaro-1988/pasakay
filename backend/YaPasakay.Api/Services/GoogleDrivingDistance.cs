@@ -8,11 +8,13 @@ namespace YaPasakay.Api.Services;
 
 public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory httpClientFactory, ILogger<GoogleDrivingDistance> logger)
 {
-    private static readonly ConcurrentDictionary<string, (decimal Km, int EtaMinutes, DateTime AtUtc)> Cache = new();
-    private static readonly ConcurrentDictionary<string, Task<(decimal Km, int EtaMinutes)>> Inflight = new();
+    private static readonly ConcurrentDictionary<string, (decimal Km, int EtaMinutes, string? Polyline, DateTime AtUtc)> Cache = new();
+    private static readonly ConcurrentDictionary<string, Task<(decimal Km, int EtaMinutes, string? Polyline)>> Inflight = new();
+    private static readonly ConcurrentDictionary<string, (string? Address, DateTime AtUtc)> ReverseCache = new();
     private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(8);
+    private static readonly TimeSpan ReverseCacheTtl = TimeSpan.FromMinutes(15);
 
-    public async Task<(decimal Km, int EtaMinutes)> MeasureAsync(
+    public async Task<(decimal Km, int EtaMinutes, string? EncodedPolyline)> MeasureAsync(
         double pickupLat,
         double pickupLng,
         double dropoffLat,
@@ -26,14 +28,14 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
         var key = string.Create(CultureInfo.InvariantCulture, $"{pickupLat:F5},{pickupLng:F5}|{dropoffLat:F5},{dropoffLng:F5}");
         if (Cache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.AtUtc < CacheTtl)
         {
-            return (cached.Km, cached.EtaMinutes);
+            return (cached.Km, cached.EtaMinutes, cached.Polyline);
         }
 
         while (true)
         {
             if (Cache.TryGetValue(key, out cached) && DateTime.UtcNow - cached.AtUtc < CacheTtl)
             {
-                return (cached.Km, cached.EtaMinutes);
+                return (cached.Km, cached.EtaMinutes, cached.Polyline);
             }
 
             if (Inflight.TryGetValue(key, out var existing))
@@ -58,7 +60,7 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
         }
     }
 
-    private async Task<(decimal Km, int EtaMinutes)> MeasureUncachedAsync(
+    private async Task<(decimal Km, int EtaMinutes, string? EncodedPolyline)> MeasureUncachedAsync(
         string key,
         double pickupLat,
         double pickupLng,
@@ -70,14 +72,14 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
     {
         if (Cache.TryGetValue(key, out var cached) && DateTime.UtcNow - cached.AtUtc < CacheTtl)
         {
-            return (cached.Km, cached.EtaMinutes);
+            return (cached.Km, cached.EtaMinutes, cached.Polyline);
         }
 
         var apiKey = config["Maps:GoogleApiKey"] ?? config["Maps:BrowserApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             logger.LogWarning("Maps API key missing; using straight-line distance {Km} km", fallbackKm);
-            return (fallbackKm, fallbackEta);
+            return (fallbackKm, fallbackEta, null);
         }
 
         var payload = JsonSerializer.Serialize(new
@@ -92,7 +94,9 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
         {
             using var request = new HttpRequestMessage(HttpMethod.Post, "https://routes.googleapis.com/directions/v2:computeRoutes");
             request.Headers.TryAddWithoutValidation("X-Goog-Api-Key", apiKey.Trim());
-            request.Headers.TryAddWithoutValidation("X-Goog-FieldMask", "routes.duration,routes.distanceMeters");
+            request.Headers.TryAddWithoutValidation(
+                "X-Goog-FieldMask",
+                "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline");
             AddMapsReferer(request);
             request.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 
@@ -104,22 +108,28 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogWarning("Routes API HTTP {Status}: {Body}; using straight-line {Km} km", (int)response.StatusCode, Truncate(body), fallbackKm);
-                return (fallbackKm, fallbackEta);
+                return (fallbackKm, fallbackEta, null);
             }
 
             using var doc = JsonDocument.Parse(body);
             if (!doc.RootElement.TryGetProperty("routes", out var routes) || routes.GetArrayLength() == 0)
             {
-                return (fallbackKm, fallbackEta);
+                return (fallbackKm, fallbackEta, null);
             }
 
             var route = routes[0];
             var meters = route.TryGetProperty("distanceMeters", out var metersEl) ? metersEl.GetInt32() : 0;
             var seconds = ParseDurationSeconds(route);
+            string? polyline = null;
+            if (route.TryGetProperty("polyline", out var polyEl)
+                && polyEl.TryGetProperty("encodedPolyline", out var encodedEl))
+            {
+                polyline = encodedEl.GetString();
+            }
 
             if (meters <= 0)
             {
-                return (fallbackKm, fallbackEta);
+                return (fallbackKm, fallbackEta, polyline);
             }
 
             var km = Math.Round((decimal)meters / 1000m, 1, MidpointRounding.AwayFromZero);
@@ -132,13 +142,13 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
                 ? Math.Max(1, (int)Math.Round(seconds / 60.0, MidpointRounding.AwayFromZero))
                 : fallbackEta;
 
-            Cache[key] = (km, eta, DateTime.UtcNow);
-            return (km, eta);
+            Cache[key] = (km, eta, polyline, DateTime.UtcNow);
+            return (km, eta, polyline);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Routes API failed; using straight-line {Km} km", fallbackKm);
-            return (fallbackKm, fallbackEta);
+            return (fallbackKm, fallbackEta, null);
         }
     }
 
@@ -148,6 +158,12 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
     /// </summary>
     public async Task<string?> ReverseGeocodeAsync(double lat, double lng, CancellationToken cancellationToken = default)
     {
+        var cacheKey = string.Create(CultureInfo.InvariantCulture, $"{lat:F4},{lng:F4}");
+        if (ReverseCache.TryGetValue(cacheKey, out var cached) && DateTime.UtcNow - cached.AtUtc < ReverseCacheTtl)
+        {
+            return cached.Address;
+        }
+
         var apiKey = config["Maps:GoogleApiKey"] ?? config["Maps:BrowserApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
         {
@@ -188,6 +204,7 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
             using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
             if (!doc.RootElement.TryGetProperty("places", out var places) || places.GetArrayLength() == 0)
             {
+                ReverseCache[cacheKey] = (null, DateTime.UtcNow);
                 return null;
             }
 
@@ -230,6 +247,7 @@ public class GoogleDrivingDistance(IConfiguration config, IHttpClientFactory htt
                 }
             }
 
+            ReverseCache[cacheKey] = (best, DateTime.UtcNow);
             return best;
         }
         catch (Exception ex)

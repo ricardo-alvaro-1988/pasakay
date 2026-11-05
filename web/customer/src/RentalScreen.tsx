@@ -166,13 +166,16 @@ export function RentalScreen({
           const { googleMapsBrowserKey } = await api.mapsConfig()
           const maps = await loadGoogleMaps(googleMapsBrowserKey)
           const center = near ?? PH
-          const [predictions, geos] = await Promise.all([
-            searchPlaces(maps, query, center),
-            geocodeText(maps, query, center),
-          ])
+          const predictions = await searchPlaces(maps, query, center)
           if (ignore) return
           setHints(predictions.slice(0, 8))
-          setGeoHits(geos.slice(0, 6))
+          if (predictions.length > 0) {
+            setGeoHits([])
+          } else {
+            const geos = await geocodeText(maps, query, center)
+            if (ignore) return
+            setGeoHits(geos.slice(0, 6))
+          }
         } catch {
           if (!ignore) {
             setHints([])

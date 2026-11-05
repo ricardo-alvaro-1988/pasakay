@@ -190,7 +190,10 @@ export default function FleetMap({
 
   useEffect(() => {
     let cancelled = false
+    let started = false
     async function start() {
+      if (started || cancelled) return
+      started = true
       try {
         const { googleMapsBrowserKey: key } = await api.mapsConfig()
         if (cancelled) {
@@ -222,9 +225,27 @@ export default function FleetMap({
         }
       }
     }
-    void start()
+
+    const node = el.current
+    let observer: IntersectionObserver | null = null
+    if (node && typeof IntersectionObserver !== 'undefined') {
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            observer?.disconnect()
+            void start()
+          }
+        },
+        { rootMargin: '120px' },
+      )
+      observer.observe(node)
+    } else {
+      void start()
+    }
+
     return () => {
       cancelled = true
+      observer?.disconnect()
       for (const pin of pinsRef.current) {
         pin.setMap(null)
       }

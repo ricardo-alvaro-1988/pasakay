@@ -24,7 +24,7 @@ public class PabiliPricingService(AppDbContext db, GoogleDrivingDistance driving
             return (0, 0, 0, "Pabili delivery pricing is not configured for this area.");
         }
 
-        var (distanceKm, _) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
+        var (distanceKm, _, _) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
         var beyond = Math.Max(0m, distanceKm - matrix.KmScope);
         var succeeding = CommissionCut.Round(beyond * matrix.SucceedingKm);
         var surcharge = PabiliSurchargeRules.ActiveAmount(matrix.Surcharges);

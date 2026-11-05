@@ -186,6 +186,33 @@ class AuthResponse {
   }
 }
 
+/// Result of POST /api/auth/customer-verify-otp (matches web customer).
+class CustomerOtpVerifyResult {
+  CustomerOtpVerifyResult({
+    required this.needsProfile,
+    this.registrationToken,
+    this.auth,
+  });
+
+  final bool needsProfile;
+  final String? registrationToken;
+  final AuthResponse? auth;
+
+  factory CustomerOtpVerifyResult.fromJson(Map<String, dynamic> json) {
+    final needsProfile = asFlag(json['needsProfile']);
+    if (needsProfile) {
+      return CustomerOtpVerifyResult(
+        needsProfile: true,
+        registrationToken: asTextOrNull(json['registrationToken']),
+      );
+    }
+    return CustomerOtpVerifyResult(
+      needsProfile: false,
+      auth: AuthResponse.fromJson(json),
+    );
+  }
+}
+
 class Branding {
   Branding({
     required this.brandName,
@@ -337,6 +364,7 @@ class Quote {
     this.customerBoostAmount,
     this.fareDiscountLabel,
     this.fareDiscountPercent,
+    this.routePolyline,
   });
 
   final double fare;
@@ -356,6 +384,7 @@ class Quote {
   final double? customerBoostAmount;
   final String? fareDiscountLabel;
   final double? fareDiscountPercent;
+  final String? routePolyline;
 
   double get displayFare => customerFare ?? fare;
 
@@ -377,6 +406,7 @@ class Quote {
         customerBoostAmount: asDoubleOrNull(json['customerBoostAmount']),
         fareDiscountLabel: asTextOrNull(json['fareDiscountLabel']),
         fareDiscountPercent: asDoubleOrNull(json['fareDiscountPercent']),
+        routePolyline: asTextOrNull(json['routePolyline']),
       );
 }
 
