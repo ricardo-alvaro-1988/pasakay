@@ -174,7 +174,8 @@ class _StopRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
-                      color: isSet ? brandInk : brandMuted,
+                      // Always dark-on-light — Android force-dark must not invert this.
+                      color: isSet ? const Color(0xFF16181D) : const Color(0xFF667085),
                     ),
                   ),
                 ],

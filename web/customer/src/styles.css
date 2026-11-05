@@ -1341,6 +1341,7 @@ button.brand-pill:active { transform: scale(.98); }
   font-size: 13px;
   line-height: 1.35;
   font-weight: 650;
+  color: var(--text);
   overflow: hidden;
   overflow-wrap: anywhere;
   word-break: break-word;
