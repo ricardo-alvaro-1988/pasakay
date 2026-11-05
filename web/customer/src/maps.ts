@@ -61,6 +61,24 @@ type MapsApi = {
 }
 
 let mapsApiKey = ''
+/** Places Autocomplete→Details session; cleared after Details terminates the session. */
+let placesSessionToken: string | null = null
+const reverseGeocodeCache = new Map<string, { address: string; at: number }>()
+const REVERSE_CACHE_TTL_MS = 10 * 60 * 1000
+
+function placesSession(): string {
+  if (!placesSessionToken) {
+    placesSessionToken =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
+  }
+  return placesSessionToken
+}
+
+function endPlacesSession() {
+  placesSessionToken = null
+}
 
 export type Prediction = {
   place_id: string
@@ -204,11 +222,20 @@ function around(maps: MapsApi, near: { lat: number; lng: number }, delta = 0.12)
 
 export function reverseGeocode(maps: MapsApi, lat: number, lng: number) {
   return new Promise<string>((resolve) => {
+    const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`
+    const cached = reverseGeocodeCache.get(cacheKey)
+    if (cached && Date.now() - cached.at < REVERSE_CACHE_TTL_MS) {
+      resolve(cached.address)
+      return
+    }
     const fallback = `${lat.toFixed(5)}, ${lng.toFixed(5)}`
     let done = false
     const finish = (value: string) => {
       if (done) return
       done = true
+      if (value && value !== fallback) {
+        reverseGeocodeCache.set(cacheKey, { address: value, at: Date.now() })
+      }
       resolve(value)
     }
     window.setTimeout(() => finish(fallback), 8000)
@@ -267,6 +294,7 @@ export async function searchPlaces(_maps: MapsApi, query: string, near?: { lat: 
     const body: Record<string, unknown> = {
       input: trimmed,
       includedRegionCodes: ['ph'],
+      sessionToken: placesSession(),
     }
     if (near) {
       body.locationBias = {
@@ -317,26 +345,33 @@ export async function searchPlaces(_maps: MapsApi, query: string, near?: { lat: 
 export async function placeDetails(_maps: MapsApi, placeId: string, _map?: MapHandle | null) {
   if (!placeId || !mapsApiKey) throw new Error('Could not load that place.')
   const id = placeId.startsWith('places/') ? placeId.slice('places/'.length) : placeId
-  const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(id)}`, {
-    headers: {
-      'X-Goog-Api-Key': mapsApiKey,
-      'X-Goog-FieldMask': 'id,displayName,formattedAddress,location',
-    },
-    signal: AbortSignal.timeout(8000),
-  })
-  if (!response.ok) throw new Error('Could not load that place.')
-  const place = (await response.json()) as {
-    formattedAddress?: string
-    displayName?: { text?: string }
-    location?: { latitude?: number; longitude?: number }
-  }
-  const lat = place.location?.latitude
-  const lng = place.location?.longitude
-  if (lat == null || lng == null) throw new Error('Could not load that place.')
-  return {
-    address: place.formattedAddress || place.displayName?.text || 'Selected place',
-    lat,
-    lng,
+  const token = placesSession()
+  const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(id)}?sessionToken=${encodeURIComponent(token)}`
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'X-Goog-Api-Key': mapsApiKey,
+        'X-Goog-FieldMask': 'id,displayName,formattedAddress,location',
+      },
+      signal: AbortSignal.timeout(8000),
+    })
+    if (!response.ok) throw new Error('Could not load that place.')
+    const place = (await response.json()) as {
+      formattedAddress?: string
+      displayName?: { text?: string }
+      location?: { latitude?: number; longitude?: number }
+    }
+    const lat = place.location?.latitude
+    const lng = place.location?.longitude
+    if (lat == null || lng == null) throw new Error('Could not load that place.')
+    return {
+      address: place.formattedAddress || place.displayName?.text || 'Selected place',
+      lat,
+      lng,
+    }
+  } finally {
+    // Terminate the Autocomplete billing session after Details (or a failed attempt).
+    endPlacesSession()
   }
 }
 
@@ -344,21 +379,24 @@ export function geocodeText(maps: MapsApi, query: string, near?: { lat: number; 
   return new Promise<StopResult[]>((resolve) => {
     const finishFromPlaces = async () => {
       const hints = await searchPlaces(maps, query, near)
-      const stops: StopResult[] = []
-      for (const hint of hints.slice(0, 5)) {
-        try {
-          const place = await placeDetails(maps, hint.place_id)
-          stops.push({
+      const hint = hints[0]
+      if (!hint) {
+        resolve([])
+        return
+      }
+      try {
+        const place = await placeDetails(maps, hint.place_id)
+        resolve([
+          {
             label: hint.structured_formatting?.main_text || place.address.split(',')[0] || query,
             details: place.address,
             lat: place.lat,
             lng: place.lng,
-          })
-        } catch {
-          // Skip failed place lookups.
-        }
+          },
+        ])
+      } catch {
+        resolve([])
       }
-      resolve(stops)
     }
 
     try {
@@ -610,6 +648,7 @@ export function drawEncodedRoute(
   return next
 }
 
+/** Straight preview only — never bills Routes; replaced by drawEncodedRoute when quote returns. */
 export function drawDrivingRoute(
   maps: MapsApi,
   map: MapHandle,
@@ -624,67 +663,16 @@ export function drawDrivingRoute(
   }
   next.polylines.forEach((line) => line.setMap(null))
   next.polylines = []
-  const requestId = (next.requestId = (next.requestId || 0) + 1)
+  next.requestId = (next.requestId || 0) + 1
   next.sourceKey = sourceKey
-
-  void (async () => {
-    try {
-      const routesLib = (await (maps.importLibrary
-        ? maps.importLibrary('routes')
-        : window.google?.maps?.importLibrary?.('routes'))) as {
-        Route?: {
-          computeRoutes: (req: Record<string, unknown>) => Promise<{
-            routes?: {
-              createPolylines?: (opts?: Record<string, unknown>) => PolylineHandle[]
-              path?: { lat: () => number; lng: () => number }[]
-            }[]
-          }>
-        }
-      } | null
-      const Route = routesLib?.Route
-      if (!Route?.computeRoutes) return
-
-      const result = await Route.computeRoutes({
-        origin,
-        destination,
-        travelMode: 'DRIVING',
-        fields: ['path'],
-      })
-      if (next.requestId !== requestId) return
-      const route = result.routes?.[0]
-      if (!route) return
-
-      let polylines: PolylineHandle[] = []
-      if (typeof route.createPolylines === 'function') {
-        polylines = route.createPolylines({
-          polylineOptions: {
-            strokeColor: '#e30613',
-            strokeOpacity: 0.4,
-            strokeWeight: 5,
-          },
-        }) ?? []
-      } else if (route.path?.length && maps.Polyline) {
-        polylines = [
-          new maps.Polyline({
-            path: route.path,
-            strokeColor: '#e30613',
-            strokeOpacity: 0.4,
-            strokeWeight: 5,
-            map,
-          }),
-        ]
-      }
-
-      if (next.requestId !== requestId) {
-        polylines.forEach((line) => line.setMap(null))
-        return
-      }
-      next.polylines = polylines
-      polylines.forEach((line) => line.setMap(map))
-    } catch {
-      // Keep map usable even if routing is unavailable.
-    }
-  })()
-
+  if (!maps.Polyline) return next
+  const line = new maps.Polyline({
+    path: [origin, destination],
+    strokeColor: '#e30613',
+    strokeOpacity: 0.35,
+    strokeWeight: 4,
+    map,
+  })
+  next.polylines = [line]
   return next
 }

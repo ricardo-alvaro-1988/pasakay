@@ -683,12 +683,14 @@ public class CustomerBookingsController(
             }
         }
 
+        // Reuse preview Routes measure — same OD; avoids a second Compute Routes bill on confirm.
         var prepared = await PrepareAsync(
             body,
             requireHailReady: isDirectHail || isFavoriteDirect,
             requireRider: !isScheduled,
             customer.Id,
-            cancellationToken);
+            cancellationToken,
+            measuredRoute: (preview.DistanceKm, preview.EtaMinutes, preview.RoutePolyline));
         if (prepared.Error is not null || prepared.Operator is null || prepared.Pickup is null || prepared.Dropoff is null)
         {
             return BadRequest(new { message = prepared.Error ?? "Could not create this booking." });
@@ -930,7 +932,8 @@ public class CustomerBookingsController(
         bool requireHailReady,
         bool requireRider,
         Guid? customerId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        (decimal Km, int EtaMinutes, string? Polyline)? measuredRoute = null)
     {
         var pickupDetails = (request.PickupDetails ?? string.Empty).Trim();
         var dropoffDetails = (request.DropoffDetails ?? string.Empty).Trim();
@@ -1053,7 +1056,19 @@ public class CustomerBookingsController(
             };
         }
 
-        var (distance, eta, routePolyline) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
+        decimal distance;
+        int eta;
+        string? routePolyline;
+        if (measuredRoute is { } pre)
+        {
+            distance = pre.Km;
+            eta = pre.EtaMinutes;
+            routePolyline = pre.Polyline;
+        }
+        else
+        {
+            (distance, eta, routePolyline) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
+        }
 
         var fareRow = await OperatorMaps.LoadFareMatrixAsync(
             db,

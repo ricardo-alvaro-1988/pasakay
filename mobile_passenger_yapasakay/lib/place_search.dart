@@ -69,6 +69,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
   String? _error;
   List<PlacePrediction> _predictions = const [];
   List<Stop> _geoHits = const [];
+  String _placesSession = newPlacesSessionToken();
 
   @override
   void dispose() {
@@ -116,6 +117,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
         biasLat: widget.biasLat,
         biasLng: widget.biasLng,
         referer: widget.mapsReferer,
+        sessionToken: _placesSession,
       );
       Stop? geo;
       if (preds.isEmpty) {
@@ -126,6 +128,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
           biasLng: widget.biasLng,
           referer: widget.mapsReferer,
         );
+        _placesSession = newPlacesSessionToken();
       }
       if (!mounted) return;
       setState(() {
@@ -149,7 +152,12 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
     setState(() => _busy = true);
     try {
       final key = await _key();
-      final stop = await placeDetails(prediction.placeId, key, referer: widget.mapsReferer) ??
+      final stop = await placeDetails(
+            prediction.placeId,
+            key,
+            referer: widget.mapsReferer,
+            sessionToken: _placesSession,
+          ) ??
           await geocodeAddress(
             prediction.description,
             key,
@@ -157,6 +165,7 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
             biasLng: widget.biasLng,
             referer: widget.mapsReferer,
           );
+      _placesSession = newPlacesSessionToken();
       if (!mounted) return;
       if (stop == null) {
         setState(() {
