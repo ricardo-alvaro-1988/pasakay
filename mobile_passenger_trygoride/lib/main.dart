@@ -65,6 +65,7 @@ class _PassengerAppState extends State<PassengerApp> with WidgetsBindingObserver
     return MaterialApp(
       title: 'TryGoRide',
       theme: passengerTheme(),
+      themeMode: ThemeMode.light,
       home: _restoring
           ? const Scaffold(body: Center(child: CircularProgressIndicator()))
           : _HomeGate(session: widget.session),

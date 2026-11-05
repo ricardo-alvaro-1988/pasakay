@@ -25,8 +25,10 @@ import {
 } from './api'
 import {
   PH,
+  clearDrivingRoute,
   DirectionsRendererHandle,
   drawDrivingRoute,
+  drawEncodedRoute,
   geocodeText,
   loadGoogleMaps,
   MapHandle,
@@ -458,6 +460,7 @@ function Home({
   const [draftBoost, setDraftBoost] = useState(0)
   const [boostCustom, setBoostCustom] = useState('')
   const [quotes, setQuotes] = useState<Record<string, Quote | null>>({})
+  const [routePolyline, setRoutePolyline] = useState<string | null>(null)
   const [quoting, setQuoting] = useState(false)
   const [coverageHint, setCoverageHint] = useState(false)
   const [searchFor, setSearchFor] = useState<SearchTarget>(null)
@@ -675,16 +678,8 @@ function Home({
       points.push({ lat: trip.riderLat, lng: trip.riderLng })
     }
 
-    const origin = trip?.status === 'Waiting' && trip.riderLat && trip.riderLng
-      ? { lat: trip.riderLat, lng: trip.riderLng }
-      : a
-    const dest = trip?.status === 'Waiting' ? a : b
-    if (origin && dest) {
-      routeRef.current = drawDrivingRoute(maps, map, origin, dest, routeRef.current)
-    } else if (routeRef.current) {
-      routeRef.current.setMap(null)
-      routeRef.current = null
-    }
+    // Rider marker moves with GPS; route polyline is updated in a separate effect
+    // so live tracking does not bill Routes on every tick.
 
     if (points.length >= 2) {
       const bounds = new maps.LatLngBounds()
@@ -700,9 +695,48 @@ function Home({
   }, [pickup, dropoff, trip])
 
   useEffect(() => {
+    const maps = mapsRef.current
+    const map = mapRef.current
+    if (!maps || !map || !mapReady) return
+    try {
+      const a = trip?.pickupLat && trip.pickupLng ? { lat: trip.pickupLat, lng: trip.pickupLng } : pickup
+      const b = trip?.dropoffLat && trip.dropoffLng ? { lat: trip.dropoffLat, lng: trip.dropoffLng } : dropoff
+      if (!a || !b) {
+        routeRef.current = clearDrivingRoute(routeRef.current)
+        return
+      }
+      const key = `${a.lat.toFixed(5)},${a.lng.toFixed(5)}->${b.lat.toFixed(5)},${b.lng.toFixed(5)}`
+      if (routePolyline) {
+        routeRef.current = drawEncodedRoute(maps, map, routePolyline, routeRef.current, key)
+        return
+      }
+      // Draft booking without server polyline yet: one client Routes call per OD.
+      if (!trip) {
+        routeRef.current = drawDrivingRoute(maps, map, a, b, routeRef.current, key)
+      }
+      // Active trip: keep whatever polyline we already drew (no live re-route).
+    } catch {
+      /* route overlay must not break booking */
+    }
+  }, [
+    mapReady,
+    pickup?.lat,
+    pickup?.lng,
+    dropoff?.lat,
+    dropoff?.lng,
+    trip?.id,
+    trip?.pickupLat,
+    trip?.pickupLng,
+    trip?.dropoffLat,
+    trip?.dropoffLng,
+    routePolyline,
+  ])
+
+  useEffect(() => {
     if (!pickup || !dropoff || trip) {
       setQuoting(false)
       setCoverageHint(false)
+      if (!pickup || !dropoff) setRoutePolyline(null)
       return
     }
     let ignore = false
@@ -756,6 +790,8 @@ function Home({
         }
         if (ignore) return
         setQuotes(next)
+        const poly = Object.values(next).find((q) => q?.routePolyline)?.routePolyline ?? null
+        setRoutePolyline(poly)
         const anyQuote = Object.values(next).some(Boolean)
         const uncovered = !anyQuote && isOperatorCoverageError(quoteError)
         setCoverageHint(uncovered)
@@ -770,8 +806,12 @@ function Home({
         if (!ignore) setQuoting(false)
       }
     }
-    void load()
-    return () => { ignore = true }
+    setQuoting(true)
+    const handle = window.setTimeout(() => { void load() }, 350)
+    return () => {
+      ignore = true
+      window.clearTimeout(handle)
+    }
     // Depend on stable offer ids / types strings — not fresh array identities — so quoting can finish.
   }, [pickup, dropoff, payment, paymentRef, promoCode, trip, lockedRider?.riderId, lockedRider?.vehicleType, passengers, noOperator.useOffers, noOperator.motorcycleAvailable, noOperator.tricycleAvailable, noOperator.availableTypes.join('|'), noOperator.availableVehicles.map((v) => `${v.id}:${v.available}:${v.maxPassengers}`).join('|')])
 
@@ -937,8 +977,24 @@ function Home({
     }
     const near = pickup ?? (desk.mapLat && desk.mapLng ? { lat: desk.mapLat, lng: desk.mapLng } : PH)
     const handle = window.setTimeout(() => {
-      searchPlaces(maps, query, near).then(setHints).catch(() => setHints([]))
-      geocodeText(maps, query, near).then(setGeoHits).catch(() => setGeoHits([]))
+      searchPlaces(maps, query, near)
+        .then(async (hints) => {
+          setHints(hints)
+          if (hints.length > 0) {
+            setGeoHits([])
+            return
+          }
+          // Free-text fallback only when Autocomplete returns nothing.
+          try {
+            setGeoHits(await geocodeText(maps, query, near))
+          } catch {
+            setGeoHits([])
+          }
+        })
+        .catch(() => {
+          setHints([])
+          setGeoHits([])
+        })
     }, 180)
     return () => window.clearTimeout(handle)
   }, [query, searchFor, pickup])

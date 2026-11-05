@@ -453,18 +453,20 @@ export function PabiliStorefront({
       void (async () => {
         try {
           const maps = mapsRef.current ?? await ensureMaps()
-          const [hints, hits] = await Promise.all([
-            searchPlaces(maps, term, { lat: gps.lat, lng: gps.lng }),
-            geocodeText(maps, term, { lat: gps.lat, lng: gps.lng }),
-          ])
+          const hints = await searchPlaces(maps, term, { lat: gps.lat, lng: gps.lng })
           if (gen !== locationSearchGen.current) return
           const nextHints = hints.slice(0, 8)
-          const nextHits = hits.slice(0, 6).map((h) => ({
-            label: h.label,
-            details: h.details,
-            lat: h.lat,
-            lng: h.lng,
-          }))
+          let nextHits: { label: string; details: string; lat: number; lng: number }[] = []
+          if (nextHints.length === 0) {
+            const hits = await geocodeText(maps, term, { lat: gps.lat, lng: gps.lng })
+            if (gen !== locationSearchGen.current) return
+            nextHits = hits.slice(0, 6).map((h) => ({
+              label: h.label,
+              details: h.details,
+              lat: h.lat,
+              lng: h.lng,
+            }))
+          }
           setLocationHints(nextHints)
           setLocationHits(nextHits)
           setLocationSearchNote(nextHints.length || nextHits.length ? '' : 'No matching places. Try another address or tap the map.')

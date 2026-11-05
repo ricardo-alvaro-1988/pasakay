@@ -120,7 +120,10 @@ class CustomerApi {
     return !path.startsWith('/api/auth/refresh') &&
         !path.startsWith('/api/auth/google') &&
         !path.startsWith('/api/auth/login') &&
-        !path.startsWith('/api/auth/customer-pin-login');
+        !path.startsWith('/api/auth/customer-pin-login') &&
+        !path.startsWith('/api/auth/customer-request-otp') &&
+        !path.startsWith('/api/auth/customer-verify-otp') &&
+        !path.startsWith('/api/auth/customer-complete-profile');
   }
 
   Future<bool> _refreshSession() async {
@@ -168,7 +171,10 @@ class CustomerApi {
         path.startsWith('/api/auth/login') ||
         path.startsWith('/api/auth/customer-pin-login') ||
         path.startsWith('/api/auth/verify-otp') ||
-        path.startsWith('/api/auth/request-otp');
+        path.startsWith('/api/auth/request-otp') ||
+        path.startsWith('/api/auth/customer-request-otp') ||
+        path.startsWith('/api/auth/customer-verify-otp') ||
+        path.startsWith('/api/auth/customer-complete-profile');
     if (response.statusCode == 401 && !isSignIn) {
       if (!retried && _shouldAttemptRefresh(path) && await _refreshSession()) {
         return _send(call, path, retried: true, auth: auth);
@@ -236,6 +242,58 @@ class CustomerApi {
       '/api/auth/google',
       auth: false,
       body: jsonEncode({'idToken': idToken}),
+    );
+    final auth = AuthResponse.fromJson(body);
+    await saveAuth(auth);
+    return auth;
+  }
+
+  Future<void> requestCustomerOtp(String phone) async {
+    await _request(
+      'POST',
+      '/api/auth/customer-request-otp',
+      auth: false,
+      body: jsonEncode({'phone': phone}),
+    );
+  }
+
+  Future<CustomerOtpVerifyResult> verifyCustomerOtp(String phone, String code) async {
+    final body = await _request(
+      'POST',
+      '/api/auth/customer-verify-otp',
+      auth: false,
+      body: jsonEncode({'phone': phone, 'code': code}),
+    );
+    final result = CustomerOtpVerifyResult.fromJson(body);
+    final auth = result.auth;
+    if (auth != null) {
+      await saveAuth(auth);
+    }
+    return result;
+  }
+
+  Future<AuthResponse> completeCustomerProfile({
+    required String registrationToken,
+    required String firstName,
+    required String lastName,
+    required String gender,
+    String? email,
+  }) async {
+    final payload = <String, dynamic>{
+      'registrationToken': registrationToken,
+      'firstName': firstName,
+      'lastName': lastName,
+      'gender': gender,
+    };
+    final trimmedEmail = email?.trim() ?? '';
+    if (trimmedEmail.isNotEmpty) {
+      payload['email'] = trimmedEmail;
+    }
+    final body = await _request(
+      'POST',
+      '/api/auth/customer-complete-profile',
+      auth: false,
+      body: jsonEncode(payload),
     );
     final auth = AuthResponse.fromJson(body);
     await saveAuth(auth);

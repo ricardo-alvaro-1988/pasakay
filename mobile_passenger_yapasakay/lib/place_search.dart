@@ -110,25 +110,24 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
     });
     try {
       final key = await _key();
-      final results = await Future.wait([
-        autocompletePlaces(
+      final preds = await autocompletePlaces(
+        text,
+        key,
+        biasLat: widget.biasLat,
+        biasLng: widget.biasLng,
+        referer: widget.mapsReferer,
+      );
+      Stop? geo;
+      if (preds.isEmpty) {
+        geo = await geocodeAddress(
           text,
           key,
           biasLat: widget.biasLat,
           biasLng: widget.biasLng,
           referer: widget.mapsReferer,
-        ),
-        geocodeAddress(
-          text,
-          key,
-          biasLat: widget.biasLat,
-          biasLng: widget.biasLng,
-          referer: widget.mapsReferer,
-        ),
-      ]);
+        );
+      }
       if (!mounted) return;
-      final preds = results[0] as List<PlacePrediction>;
-      final geo = results[1] as Stop?;
       setState(() {
         _predictions = preds;
         _geoHits = geo == null ? const [] : [geo];

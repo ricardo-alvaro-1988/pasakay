@@ -337,6 +337,7 @@ class Quote {
     this.customerBoostAmount,
     this.fareDiscountLabel,
     this.fareDiscountPercent,
+    this.routePolyline,
   });
 
   final double fare;
@@ -356,6 +357,7 @@ class Quote {
   final double? customerBoostAmount;
   final String? fareDiscountLabel;
   final double? fareDiscountPercent;
+  final String? routePolyline;
 
   double get displayFare => customerFare ?? fare;
 
@@ -377,6 +379,7 @@ class Quote {
         customerBoostAmount: asDoubleOrNull(json['customerBoostAmount']),
         fareDiscountLabel: asTextOrNull(json['fareDiscountLabel']),
         fareDiscountPercent: asDoubleOrNull(json['fareDiscountPercent']),
+        routePolyline: asTextOrNull(json['routePolyline']),
       );
 }
 

@@ -460,6 +460,9 @@ class _HomeScreenState extends State<HomeScreen> {
           _quote = selected == null ? null : entries[selected.id];
           _quoting = false;
         });
+        // Force redraw once quotes include a server polyline (skips client Routes).
+        _routeKey = null;
+        unawaited(_syncRoute());
       } else {
         final body = _bookBody();
         if (body == null) return;
@@ -469,6 +472,8 @@ class _HomeScreenState extends State<HomeScreen> {
           _quote = quote;
           _quoting = false;
         });
+        _routeKey = null;
+        unawaited(_syncRoute());
       }
     } on ApiException catch (ex) {
       if (!mounted) return;
@@ -601,14 +606,19 @@ class _HomeScreenState extends State<HomeScreen> {
       if (dropoff != null) dropoff,
       if (trip?.riderLat != null && trip?.riderLng != null) LatLng(trip!.riderLat!, trip.riderLng!),
     ];
-    if (trip != null &&
-        trip.status == 'Waiting' &&
-        trip.riderLat != null &&
-        trip.riderLng != null &&
-        pickup != null) {
-      return (origin: LatLng(trip.riderLat!, trip.riderLng!), dest: pickup, pins: pins);
-    }
+    // Always pickup → dropoff for the route line. Rider GPS only moves the marker
+    // (avoids Routes API charges on every desk poll while Waiting).
     return (origin: pickup, dest: dropoff, pins: pins);
+  }
+
+  String? _quotePolyline() {
+    final selected = _quote?.routePolyline?.trim();
+    if (selected != null && selected.isNotEmpty) return selected;
+    for (final q in _quotes.values) {
+      final p = q.routePolyline?.trim();
+      if (p != null && p.isNotEmpty) return p;
+    }
+    return null;
   }
 
   Future<void> _syncRoute() async {
@@ -627,17 +637,32 @@ class _HomeScreenState extends State<HomeScreen> {
     }
     final trip = widget.session.desk?.activeTrip;
     final key =
-        '${trip?.id ?? 'draft'}:${trip?.status ?? ''}:${origin.latitude},${origin.longitude}->${dest.latitude},${dest.longitude}:${trip?.riderLat},${trip?.riderLng}';
+        '${origin.latitude.toStringAsFixed(5)},${origin.longitude.toStringAsFixed(5)}->${dest.latitude.toStringAsFixed(5)},${dest.longitude.toStringAsFixed(5)}';
     if (key == _routeKey) return;
+
+    final encoded = _quotePolyline();
+    List<LatLng> points;
+    if (encoded != null) {
+      points = decodePolyline(encoded);
+      if (points.length < 2) points = [origin, dest];
+    } else if (trip != null) {
+      // Active trip: keep existing line or fall back to straight — no live Routes.
+      if (_polylines.isNotEmpty) {
+        _routeKey = key;
+        return;
+      }
+      points = [origin, dest];
+    } else {
+      final mapsKey = await _mapsKey();
+      points = await fetchDrivingRoute(
+        origin: origin,
+        destination: dest,
+        apiKey: mapsKey,
+        referer: widget.session.mapsReferer,
+      );
+    }
+    if (!mounted) return;
     _routeKey = key;
-    final mapsKey = await _mapsKey();
-    final points = await fetchDrivingRoute(
-      origin: origin,
-      destination: dest,
-      apiKey: mapsKey,
-      referer: widget.session.mapsReferer,
-    );
-    if (!mounted || _routeKey != key) return;
     setState(() {
       _polylines = {
         Polyline(

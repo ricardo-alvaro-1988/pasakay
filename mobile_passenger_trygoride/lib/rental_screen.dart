@@ -79,6 +79,7 @@ class _RentalScreenState extends State<RentalScreen> {
       context,
       api: widget.session.api,
       mapsKey: key,
+      mapsReferer: widget.session.mapsReferer,
       title: pickup ? 'Pickup' : 'Drop-off',
       allowCurrentLocation: pickup,
       biasLat: _pickup?.lat ?? widget.session.desk?.mapLat,

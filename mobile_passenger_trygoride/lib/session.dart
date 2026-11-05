@@ -22,7 +22,9 @@ class CustomerSession extends ChangeNotifier {
   bool rentalEnabled = false;
   bool pabiliEnabled = false;
   String? googleClientId;
+  bool phoneSignInEnabled = false;
   String? mapsKey;
+  String? mapsReferer;
   String? hailBookRiderId;
   String? hailBookVehicleType;
   int unreadChatCount = 0;
@@ -171,8 +173,10 @@ class CustomerSession extends ChangeNotifier {
     try {
       final auth = await api.authConfig();
       googleClientId = asTextOrNull(auth['googleClientId']);
+      phoneSignInEnabled = asFlag(auth['phoneSignInEnabled']);
       final maps = await api.mapsConfig();
       mapsKey = asTextOrNull(maps['googleMapsBrowserKey']);
+      mapsReferer = asTextOrNull(maps['publicOrigin']) ?? asTextOrNull(auth['publicOrigin']);
     } catch (_) {}
   }
 
@@ -198,16 +202,7 @@ class CustomerSession extends ChangeNotifier {
     notifyListeners();
     try {
       await api.googleSignIn(idToken);
-      await _loadPublicConfig();
-      desk = await api.desk();
-      _deskSignature = _signature(desk);
-      await _loadServices();
-      error = null;
-      busy = false;
-      notifyListeners();
-      if (!needsMobile) {
-        unawaited(_startLoops());
-      }
+      await _finishAuthenticated();
     } on ApiException catch (ex) {
       busy = false;
       error = ex.message;
@@ -219,6 +214,39 @@ class CustomerSession extends ChangeNotifier {
       notifyListeners();
       if (ex is ApiException) rethrow;
       throw ApiException(error!);
+    }
+  }
+
+  /// After customer OTP verify / complete-profile (tokens already saved on [api]).
+  Future<void> finishPhoneAuth() async {
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      await _finishAuthenticated();
+    } on ApiException catch (ex) {
+      busy = false;
+      error = ex.message;
+      notifyListeners();
+      throw ApiException(ex.message);
+    } catch (_) {
+      busy = false;
+      error = 'Could not sign in.';
+      notifyListeners();
+      throw ApiException(error!);
+    }
+  }
+
+  Future<void> _finishAuthenticated() async {
+    await _loadPublicConfig();
+    desk = await api.desk();
+    _deskSignature = _signature(desk);
+    await _loadServices();
+    error = null;
+    busy = false;
+    notifyListeners();
+    if (!needsMobile) {
+      unawaited(_startLoops());
     }
   }
 
