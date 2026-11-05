@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 
@@ -10,6 +11,15 @@ class PlacePrediction {
   final String placeId;
   final String description;
   final String mainText;
+}
+
+final Map<String, (Stop stop, DateTime at)> _reverseCache = {};
+const _reverseTtl = Duration(minutes: 10);
+
+String newPlacesSessionToken() {
+  final r = Random.secure();
+  final hex = List.generate(32, (_) => r.nextInt(16).toRadixString(16)).join();
+  return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
 }
 
 Map<String, String> _mapsHeaders(String apiKey, {String? referer, String? fieldMask}) {
@@ -33,6 +43,7 @@ Future<List<PlacePrediction>> autocompletePlaces(
   double? biasLat,
   double? biasLng,
   String? referer,
+  String? sessionToken,
 }) async {
   final trimmed = query.trim();
   if (trimmed.length < 2 || apiKey.isEmpty) return const [];
@@ -40,6 +51,9 @@ Future<List<PlacePrediction>> autocompletePlaces(
     'input': trimmed,
     'includedRegionCodes': ['ph'],
   };
+  if (sessionToken != null && sessionToken.isNotEmpty) {
+    body['sessionToken'] = sessionToken;
+  }
   if (biasLat != null && biasLng != null) {
     body['locationBias'] = {
       'circle': {
@@ -73,10 +87,19 @@ Future<List<PlacePrediction>> autocompletePlaces(
   }).where((p) => p.placeId.isNotEmpty).take(8).toList();
 }
 
-Future<Stop?> placeDetails(String placeId, String apiKey, {String? referer}) async {
+Future<Stop?> placeDetails(
+  String placeId,
+  String apiKey, {
+  String? referer,
+  String? sessionToken,
+}) async {
   if (placeId.isEmpty || apiKey.isEmpty) return null;
   final id = placeId.startsWith('places/') ? placeId.substring('places/'.length) : placeId;
-  final uri = Uri.https('places.googleapis.com', '/v1/places/$id');
+  final query = <String, String>{};
+  if (sessionToken != null && sessionToken.isNotEmpty) {
+    query['sessionToken'] = sessionToken;
+  }
+  final uri = Uri.https('places.googleapis.com', '/v1/places/$id', query.isEmpty ? null : query);
   final response = await http
       .get(
         uri,
@@ -107,19 +130,27 @@ Future<Stop?> geocodeAddress(
   double? biasLng,
   String? referer,
 }) async {
+  final session = newPlacesSessionToken();
   final hints = await autocompletePlaces(
     query,
     apiKey,
     biasLat: biasLat,
     biasLng: biasLng,
     referer: referer,
+    sessionToken: session,
   );
   if (hints.isEmpty) return null;
-  return placeDetails(hints.first.placeId, apiKey, referer: referer);
+  // One Details only — never fan out across suggestions.
+  return placeDetails(hints.first.placeId, apiKey, referer: referer, sessionToken: session);
 }
 
 Future<Stop?> reverseGeocode(double lat, double lng, String apiKey, {String? referer}) async {
   if (apiKey.isEmpty) return null;
+  final cacheKey = '${lat.toStringAsFixed(4)},${lng.toStringAsFixed(4)}';
+  final cached = _reverseCache[cacheKey];
+  if (cached != null && DateTime.now().difference(cached.$2) < _reverseTtl) {
+    return cached.$1;
+  }
   final uri = Uri.https('places.googleapis.com', '/v1/places:searchNearby');
   final body = jsonEncode({
     'maxResultCount': 3,
@@ -151,10 +182,12 @@ Future<Stop?> reverseGeocode(double lat, double lng, String apiKey, {String? ref
   final name = asJsonMap(first['displayName']);
   final formatted = asText(first['formattedAddress'], asText(name?['text'], 'Current location'));
   final label = formatted.split(',').first.trim();
-  return Stop(
+  final stop = Stop(
     label: label.isEmpty ? 'Current location' : label,
     details: formatted,
     lat: lat,
     lng: lng,
   );
+  _reverseCache[cacheKey] = (stop, DateTime.now());
+  return stop;
 }

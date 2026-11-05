@@ -5,12 +5,31 @@ export type PlaceSuggestion = {
   description: string
 }
 
+let placesSessionToken: string | null = null
+const reverseCache = new Map<string, { address: string; at: number }>()
+const REVERSE_TTL_MS = 10 * 60 * 1000
+
+function placesSession(): string {
+  if (!placesSessionToken) {
+    placesSessionToken =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`
+  }
+  return placesSessionToken
+}
+
+function endPlacesSession() {
+  placesSessionToken = null
+}
+
 export async function searchPlacesNew(query: string, near?: { lat: number; lng: number }) {
   const trimmed = query.trim()
   if (trimmed.length < 2 || !mapsApiKey) return [] as PlaceSuggestion[]
   const body: Record<string, unknown> = {
     input: trimmed,
     includedRegionCodes: ['ph'],
+    sessionToken: placesSession(),
   }
   if (near) {
     body.locationBias = {
@@ -49,31 +68,44 @@ export async function searchPlacesNew(query: string, near?: { lat: number; lng: 
 export async function placeDetailsNew(placeId: string) {
   if (!placeId || !mapsApiKey) throw new Error('Could not load that place.')
   const id = placeId.startsWith('places/') ? placeId.slice('places/'.length) : placeId
-  const response = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(id)}`, {
-    headers: {
-      'X-Goog-Api-Key': mapsApiKey,
-      'X-Goog-FieldMask': 'id,displayName,formattedAddress,location',
-    },
-    signal: AbortSignal.timeout(8000),
-  })
-  if (!response.ok) throw new Error('Could not load that place.')
-  const place = (await response.json()) as {
-    formattedAddress?: string
-    displayName?: { text?: string }
-    location?: { latitude?: number; longitude?: number }
-  }
-  const lat = place.location?.latitude
-  const lng = place.location?.longitude
-  if (lat == null || lng == null) throw new Error('Could not load that place.')
-  return {
-    address: place.formattedAddress || place.displayName?.text || 'Selected place',
-    lat,
-    lng,
+  const token = placesSession()
+  try {
+    const response = await fetch(
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(id)}?sessionToken=${encodeURIComponent(token)}`,
+      {
+        headers: {
+          'X-Goog-Api-Key': mapsApiKey,
+          'X-Goog-FieldMask': 'id,displayName,formattedAddress,location',
+        },
+        signal: AbortSignal.timeout(8000),
+      },
+    )
+    if (!response.ok) throw new Error('Could not load that place.')
+    const place = (await response.json()) as {
+      formattedAddress?: string
+      displayName?: { text?: string }
+      location?: { latitude?: number; longitude?: number }
+    }
+    const lat = place.location?.latitude
+    const lng = place.location?.longitude
+    if (lat == null || lng == null) throw new Error('Could not load that place.')
+    return {
+      address: place.formattedAddress || place.displayName?.text || 'Selected place',
+      lat,
+      lng,
+    }
+  } finally {
+    endPlacesSession()
   }
 }
 
 export async function reverseGeocodePlacesNew(lat: number, lng: number) {
   if (!mapsApiKey) return null
+  const cacheKey = `${lat.toFixed(4)},${lng.toFixed(4)}`
+  const cached = reverseCache.get(cacheKey)
+  if (cached && Date.now() - cached.at < REVERSE_TTL_MS) {
+    return cached.address
+  }
   try {
     const response = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
       method: 'POST',
@@ -98,7 +130,11 @@ export async function reverseGeocodePlacesNew(lat: number, lng: number) {
       places?: { formattedAddress?: string; displayName?: { text?: string } }[]
     }
     const place = data.places?.[0]
-    return place?.formattedAddress || place?.displayName?.text || null
+    const address = place?.formattedAddress || place?.displayName?.text || null
+    if (address) {
+      reverseCache.set(cacheKey, { address, at: Date.now() })
+    }
+    return address
   } catch {
     return null
   }

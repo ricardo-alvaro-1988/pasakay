@@ -642,8 +642,8 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       points = [origin, dest];
     } else {
-      final mapsKey = await _mapsKey();
-      points = await fetchDrivingRoute(origin: origin, destination: dest, apiKey: mapsKey);
+      // Straight preview until quote polyline arrives — no client Routes bill.
+      points = [origin, dest];
     }
     if (!mounted) return;
     _routeKey = key;

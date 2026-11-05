@@ -710,7 +710,7 @@ function Home({
         routeRef.current = drawEncodedRoute(maps, map, routePolyline, routeRef.current, key)
         return
       }
-      // Draft booking without server polyline yet: one client Routes call per OD.
+      // Draft booking without server polyline yet: straight preview (no client Routes bill).
       if (!trip) {
         routeRef.current = drawDrivingRoute(maps, map, a, b, routeRef.current, key)
       }

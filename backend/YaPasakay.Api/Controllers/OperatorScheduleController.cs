@@ -188,10 +188,17 @@ public class OperatorScheduleController(
             }
         }
 
-        var (measuredKm, _, _) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
-        var distance = request.DistanceKm > 0
-            ? Math.Round(request.DistanceKm, 1, MidpointRounding.AwayFromZero)
-            : (measuredKm > 0 ? Math.Round(measuredKm, 1, MidpointRounding.AwayFromZero) : 4m);
+        decimal distance;
+        if (request.DistanceKm > 0)
+        {
+            // Client already measured (or quoted) — skip a second Routes bill.
+            distance = Math.Round(request.DistanceKm, 1, MidpointRounding.AwayFromZero);
+        }
+        else
+        {
+            var (measuredKm, _, _) = await driving.MeasureAsync(pickupLat, pickupLng, dropoffLat, dropoffLng, cancellationToken);
+            distance = measuredKm > 0 ? Math.Round(measuredKm, 1, MidpointRounding.AwayFromZero) : 4m;
+        }
 
         var fareRow = await OperatorMaps.LoadFareMatrixAsync(
             db, op.Id, vehicle, pickup.MunicipalityId, vehicleCategoryId, cancellationToken);
