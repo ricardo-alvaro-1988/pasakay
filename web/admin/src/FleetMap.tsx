@@ -49,40 +49,65 @@ declare global {
 }
 
 let mapsLoader: Promise<GoogleMaps> | null = null
+let mapsApiKey = ''
 
 function loadGoogleMaps(key: string) {
-  if (window.google?.maps) {
+  mapsApiKey = key.trim()
+  if (window.google?.maps && typeof window.google.maps.Map === 'function') {
     return Promise.resolve(window.google.maps)
   }
   if (mapsLoader) {
     return mapsLoader
   }
   mapsLoader = new Promise((resolve, reject) => {
+    let settled = false
+    const finishOk = () => {
+      if (settled) return
+      const maps = window.google?.maps
+      if (!maps || typeof maps.Map !== 'function') return
+      settled = true
+      resolve(maps)
+    }
+    const finishErr = (message: string) => {
+      if (settled) return
+      settled = true
+      mapsLoader = null
+      reject(new Error(message))
+    }
+
     const existing = document.querySelector<HTMLScriptElement>('script[data-yp-google-maps]')
     if (existing) {
-      existing.addEventListener('load', () => {
-        if (window.google?.maps) resolve(window.google.maps)
-        else reject(new Error('Google Maps did not initialize.'))
-      })
-      existing.addEventListener('error', () => reject(new Error('Google Maps failed to load.')))
+      existing.addEventListener('load', finishOk)
+      existing.addEventListener('error', () => finishErr('Google Maps failed to load.'))
+      finishOk()
+      let ticks = 0
+      const poll = window.setInterval(() => {
+        ticks += 1
+        finishOk()
+        if (settled || ticks >= 100) {
+          window.clearInterval(poll)
+          if (!settled) finishErr('Google Maps timed out.')
+        }
+      }, 50)
       return
     }
     const script = document.createElement('script')
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=drawing,geometry,places`
+    // Do not load legacy Places — new Google projects block it and break the whole map.
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&v=weekly&libraries=drawing,geometry`
     script.async = true
     script.defer = true
     script.dataset.ypGoogleMaps = '1'
-    script.onload = () => {
-      if (window.google?.maps) resolve(window.google.maps)
-      else reject(new Error('Google Maps did not initialize.'))
-    }
-    script.onerror = () => reject(new Error('Google Maps failed to load.'))
+    script.onload = finishOk
+    script.onerror = () => finishErr('Google Maps failed to load.')
     document.head.appendChild(script)
+    window.setTimeout(() => {
+      if (!settled) finishErr('Google Maps timed out.')
+    }, 20000)
   })
   return mapsLoader
 }
 
-export { loadGoogleMaps }
+export { loadGoogleMaps, mapsApiKey }
 
 function isStale(rider: FleetRider) {
   return Date.now() - new Date(rider.lastLocationAtUtc).getTime() > 15 * 60 * 1000
