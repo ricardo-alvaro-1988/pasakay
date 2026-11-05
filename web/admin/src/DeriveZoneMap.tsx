@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react'
 import { api } from './api'
 import { loadGoogleMaps } from './FleetMap'
+import { placeDetailsNew, searchPlacesNew } from './places-new'
 
 export type DeriveMapPoint = { lat: number; lng: number }
 
@@ -23,12 +24,6 @@ type GMaps = {
       handler: (...args: never[]) => void,
     ) => void
     trigger: (target: unknown, name: string) => void
-  }
-  places?: {
-    Autocomplete: new (
-      input: HTMLInputElement,
-      opts?: Record<string, unknown>,
-    ) => GAutocomplete
   }
 }
 
@@ -54,15 +49,6 @@ type GGeocoder = {
     cb: (results: Array<{ geometry?: { location?: GLatLng } }> | null, status: string) => void,
   ) => void
 }
-type GAutocomplete = {
-  addListener: (name: string, handler: () => void) => void
-  getPlace: () => {
-    geometry?: { location?: GLatLng; viewport?: GBounds }
-    formatted_address?: string
-    name?: string
-  }
-}
-
 const DEFAULT_CENTER = { lat: 13.4115, lng: 121.1803 }
 
 export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
@@ -98,7 +84,7 @@ export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
     })
   }
 
-  function geocodeQuery(gmaps: GMaps, map: GMap, text: string) {
+  async function geocodeQuery(gmaps: GMaps, map: GMap, text: string) {
     const trimmed = text.trim()
     if (!trimmed) {
       setSearchError('Enter a place or address to search.')
@@ -106,25 +92,20 @@ export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
     }
     setSearchBusy(true)
     setSearchError('')
-    const geocoder = new gmaps.Geocoder()
-    const bounds = map.getBounds?.()
-    geocoder.geocode(
-      {
-        address: trimmed,
-        componentRestrictions: { country: 'PH' },
-        ...(bounds ? { bounds } : {}),
-      },
-      (results, status) => {
-        setSearchBusy(false)
-        if (status !== 'OK' || !results?.[0]?.geometry?.location) {
-          setSearchError('No matching place found. Try a clearer address.')
-          return
-        }
-        const loc = results[0].geometry.location
-        const viewport = (results[0].geometry as { viewport?: GBounds }).viewport
-        goToLocation(gmaps, map, loc.lat(), loc.lng(), viewport)
-      },
-    )
+    try {
+      const hints = await searchPlacesNew(trimmed, pointsRef.current[0] ?? DEFAULT_CENTER)
+      const first = hints[0]
+      if (!first) {
+        setSearchError('No matching place found. Try a clearer address.')
+        return
+      }
+      const place = await placeDetailsNew(first.placeId)
+      goToLocation(gmaps, map, place.lat, place.lng)
+    } catch {
+      setSearchError('No matching place found. Try a clearer address.')
+    } finally {
+      setSearchBusy(false)
+    }
   }
 
   useEffect(() => {
@@ -150,24 +131,6 @@ export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
         onChangeRef.current(next)
       }) as (...args: never[]) => void)
       draw(gmaps, map, pointsRef.current)
-
-      const input = searchRef.current
-      if (input && gmaps.places?.Autocomplete) {
-        const autocomplete = new gmaps.places.Autocomplete(input, {
-          fields: ['geometry', 'name', 'formatted_address'],
-          componentRestrictions: { country: 'ph' },
-        })
-        autocomplete.addListener('place_changed', () => {
-          const place = autocomplete.getPlace()
-          const loc = place.geometry?.location
-          if (!loc) {
-            setSearchError('Could not locate that place.')
-            return
-          }
-          setSearchError('')
-          goToLocation(gmaps, map, loc.lat(), loc.lng(), place.geometry?.viewport)
-        })
-      }
     }
     void boot().catch(() => {})
     return () => {
@@ -262,7 +225,7 @@ export function DeriveZoneMap({ points, onChange, height = 360 }: Props) {
       setSearchError('Map is still loading.')
       return
     }
-    geocodeQuery(gmaps, map, searchRef.current?.value ?? '')
+    void geocodeQuery(gmaps, map, searchRef.current?.value ?? '')
   }
 
   return (

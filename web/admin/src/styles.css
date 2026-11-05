@@ -2380,6 +2380,31 @@ tr.row-scheduled:hover td { background: rgba(255, 176, 32, 0.24); }
 .merchant-pin-search-input::placeholder {
   color: var(--muted);
 }
+.merchant-pin-hints {
+  display: grid;
+  gap: 2px;
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel, #fff);
+}
+.merchant-pin-hint {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13px;
+  color: inherit;
+  cursor: pointer;
+}
+.merchant-pin-hint:hover,
+.merchant-pin-hint:focus-visible {
+  background: var(--chip);
+  outline: none;
+}
 .merchant-pin-map-host {
   width: 100%;
   border-radius: 14px;
