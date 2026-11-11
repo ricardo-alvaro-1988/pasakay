@@ -10,8 +10,8 @@ for script in re.findall(r"sh '''(.*?)'''", (root / 'Jenkinsfile').read_text(), 
     subprocess.run(['bash', '-n'], input=script.replace(chr(92)*2, chr(92)), text=True, check=True)
 for branch, expected in {
     'Staging': ['yapasakay'], 'origin/Staging': ['yapasakay'],
-    'main': ['pricebadz','pasakyaman','trygoride','pasakya','parasakay','angkasna'],
-    'origin/main': ['pricebadz','pasakyaman','trygoride','pasakya','parasakay','angkasna'],
+    'main': ['pricebadz','pasakyaman','trygoride','pasakya','parasakay','angkasna','mibitgo'],
+    'origin/main': ['pricebadz','pasakyaman','trygoride','pasakya','parasakay','angkasna','mibitgo'],
     'staging': None, 'master': None, 'feature/test': None, 'PR-1': None, '': None
 }.items():
     result = subprocess.run(['bash', str(root / 'deploy/branch-targets.sh'), branch],
@@ -26,4 +26,6 @@ for branch, expected in {
             assert host == 'yapasakay.com' and app == '/var/www/' + site
             assert service == site + '.service' and env == '/etc/' + site + '/' + site + '-api.env'
             assert releases == '/var/www/releases/' + site
+            if site == 'mibitgo':
+                assert health == 'http://127.0.0.1:5017/health'
 print('Shell syntax and nine branch routing cases passed.')

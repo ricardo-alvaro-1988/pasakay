@@ -51,6 +51,7 @@ Current routing is defined in [deploy/branch-targets.sh](branch-targets.sh), cal
 | main | pasakya | 5011 |
 | main | parasakay | 5012 |
 | main | angkasna | 5013 |
+| main | mibitgo | 5017 |
 
 The public `yapasakay.com` is the staging deployment target in this repository. Production means the `main` release stream and its configured targets; it does not mean deploying to the SSH host's namesake website. Job names recorded in [branch-deployments.md](branch-deployments.md) are `Yapasakay-Staging` and `Yapasakay`; verify effective live job branch settings.
 

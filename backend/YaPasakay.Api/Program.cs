@@ -208,7 +208,14 @@ using (var scope = app.Services.CreateScope())
         }
         else
         {
-            await DbSeeder.SeedAsync(db, seederLogger, uploadRoot);
+            if (app.Configuration.GetValue("Seed:DemoData", true))
+            {
+                await DbSeeder.SeedAsync(db, seederLogger, uploadRoot);
+            }
+            else
+            {
+                await DbSeeder.SeedEssentialAsync(db, app.Configuration["Seed:AdminPassword"], seederLogger);
+            }
         }
     }
     catch (Exception seedEx)

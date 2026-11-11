@@ -64,6 +64,33 @@ public static class DbSeeder
         await SeedAuditLogsAsync(db, op, cancellationToken);
     }
 
+    public static async Task SeedEssentialAsync(AppDbContext db, string? adminPassword, ILogger? logger = null, CancellationToken cancellationToken = default)
+    {
+        // New production brands need reference data without demo accounts, rides, or wallets.
+        if (!await db.Users.AnyAsync(x => x.Role == UserRole.Admin, cancellationToken))
+        {
+            if (string.IsNullOrWhiteSpace(adminPassword) || adminPassword.Length < 16)
+            {
+                throw new InvalidOperationException("Seed:AdminPassword must contain at least 16 characters when creating the first production administrator.");
+            }
+            db.Users.Add(new AppUser
+            {
+                PhoneNumber = AdminPhone,
+                FullName = "Administrator",
+                PasswordHash = SecretHasher.Hash(adminPassword),
+                Role = UserRole.Admin,
+                IsMainAdmin = true,
+                IsActive = true
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        await SeedBrandSettingsAsync(db, cancellationToken);
+        await SeedTerritoriesAsync(db, logger, cancellationToken);
+        await EnsureRoleAsync(db, "Support", "Handles tickets and SOS.", ["support"], cancellationToken);
+        await EnsureRoleAsync(db, "Operations", "Operators, customers, territories, and fares.", ["overview", "operators", "customers", "territories", "fares"], cancellationToken);
+        await EnsureRoleAsync(db, "Finance", "Billing, fare matrix, and audit.", ["billing", "fares", "audit"], cancellationToken);
+    }
+
     private static async Task SeedTerritoriesAsync(AppDbContext db, ILogger? logger, CancellationToken cancellationToken)
     {
         if (await db.Barangays.CountAsync(cancellationToken) >= 40_000)
