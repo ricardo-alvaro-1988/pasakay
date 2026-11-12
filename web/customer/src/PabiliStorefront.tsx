@@ -681,6 +681,50 @@ export function PabiliStorefront({
     setError('')
   }
 
+  function productQty(productId: string) {
+    return cart.filter((x) => x.productId === productId).reduce((s, x) => s + x.quantity, 0)
+  }
+
+  function bumpProduct(product: ProductCard, delta: number) {
+    const lines = cart.filter((x) => x.productId === product.id)
+    const total = lines.reduce((s, x) => s + x.quantity, 0)
+    if (delta > 0) {
+      if (total === 0 && product.addonGroups.length > 0) {
+        openProduct(product)
+        return
+      }
+      if (lines.length === 1) {
+        const key = lines[0].key
+        commitCart((prev) => prev.map((x) => (x.key === key ? { ...x, quantity: x.quantity + 1 } : x)))
+        return
+      }
+      if (lines.length > 1) {
+        openProduct(product)
+        return
+      }
+      commitCart((prev) => [
+        ...prev,
+        {
+          key: `${product.id}:`,
+          productId: product.id,
+          name: product.name,
+          imageUrl: product.imageUrl,
+          quantity: 1,
+          unitSellingPrice: product.sellingPrice,
+          addons: [],
+        },
+      ])
+      return
+    }
+    if (!lines.length) return
+    const target = lines[lines.length - 1]
+    commitCart((prev) => prev.flatMap((x) => {
+      if (x.key !== target.key) return [x]
+      if (x.quantity <= 1) return []
+      return [{ ...x, quantity: x.quantity - 1 }]
+    }))
+  }
+
   async function refreshQuote() {
     if (!store || !cart.length) {
       setQuote(null)
@@ -1141,19 +1185,42 @@ export function PabiliStorefront({
             </div>
           ) : null}
           <div className="pb-product-grid">
-            {filteredProducts.map((p) => (
-              <button key={p.id} type="button" className="pb-product-card" onClick={() => openProduct(p)}>
-                <div
-                  className="pb-product-img"
-                  style={p.imageUrl ? { backgroundImage: `url(${mediaUrl(p.imageUrl)})` } : undefined}
-                />
-                <div className="pb-product-body">
-                  <b>{p.name}</b>
-                  <small className="muted">{p.description || p.categoryName}</small>
-                  <span className="pb-price">{peso(p.sellingPrice)}</span>
-                </div>
-              </button>
-            ))}
+            {filteredProducts.map((p) => {
+              const qty = productQty(p.id)
+              return (
+                <article key={p.id} className="pb-product-card">
+                  <button
+                    type="button"
+                    className="pb-product-hit"
+                    onClick={() => openProduct(p)}
+                    aria-label={`View ${p.name}`}
+                  >
+                    <div
+                      className="pb-product-img"
+                      style={p.imageUrl ? { backgroundImage: `url(${mediaUrl(p.imageUrl)})` } : undefined}
+                    />
+                    <div className="pb-product-body">
+                      <b>{p.name}</b>
+                      <small className="muted">{p.description || p.categoryName}</small>
+                      <span className="pb-price">{peso(p.sellingPrice)}</span>
+                    </div>
+                  </button>
+                  <div className="pb-product-qty" role="group" aria-label={`Quantity for ${p.name}`}>
+                    {qty > 0 ? (
+                      <>
+                        <button type="button" aria-label="Decrease quantity" onClick={() => bumpProduct(p, -1)}>−</button>
+                        <span>{qty}</span>
+                        <button type="button" aria-label="Increase quantity" onClick={() => bumpProduct(p, 1)}>+</button>
+                      </>
+                    ) : (
+                      <button type="button" className="pb-product-add" aria-label={`Add ${p.name}`} onClick={() => bumpProduct(p, 1)}>
+                        +
+                      </button>
+                    )}
+                  </div>
+                </article>
+              )
+            })}
             {!filteredProducts.length ? (
               <p className="muted">
                 {storeSearch.trim() ? 'No products match your search.' : 'No products available.'}
@@ -1161,9 +1228,11 @@ export function PabiliStorefront({
             ) : null}
           </div>
           {cartCount > 0 ? (
-            <button type="button" className="pb-cart-cta" onClick={() => setView('cart')}>
-              View cart · {cartCount} · {peso(cartGoods)}
-            </button>
+            <div className="pb-cart-cta-bar">
+              <button type="button" className="pb-cart-cta" onClick={() => setView('cart')}>
+                View cart · {cartCount} · {peso(cartGoods)}
+              </button>
+            </div>
           ) : null}
         </main>
       )}
