@@ -84,6 +84,17 @@ public record CustomerQuoteResponse(
     int? FareDiscountPercent = null,
     string? RoutePolyline = null);
 
+public record CustomerRoutePreviewRequest(
+    double PickupLat,
+    double PickupLng,
+    double DropoffLat,
+    double DropoffLng);
+
+public record CustomerRoutePreviewResponse(
+    string? RoutePolyline,
+    decimal DistanceKm,
+    int EtaMinutes);
+
 public record CustomerServiceCheckRequest(
     Guid? PickupBarangayId,
     string PickupDetails,
