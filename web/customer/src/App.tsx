@@ -322,11 +322,8 @@ function RideApp({
 
   useEffect(() => {
     let dead = false
-    void (async () => {
+    async function applyServices(lat?: number, lng?: number) {
       try {
-        const cached = lastKnownGps(300_000)
-        const lat = desk.mapLat ?? cached?.lat
-        const lng = desk.mapLng ?? cached?.lng
         const res = await api.customerServices({ lat, lng })
         if (dead) return
         setPabiliEnabled(!!res.pabiliEnabled)
@@ -345,7 +342,26 @@ function RideApp({
           if (tab === 'rental') onTab('home')
         }
       }
-    })()
+    }
+
+    const cached = lastKnownGps(300_000)
+    const lat = desk.mapLat ?? cached?.lat
+    const lng = desk.mapLng ?? cached?.lng
+    void applyServices(lat, lng)
+
+    // Cold start often has no desk pin and no GPS cache — retry once GPS locks so
+    // Pabili/Rental nav is not stuck hidden after the operator enabled them.
+    if (lat == null || lng == null) {
+      void readBootGps()
+        .then((pos) => {
+          if (dead) return
+          void applyServices(pos.coords.latitude, pos.coords.longitude)
+        })
+        .catch(() => {
+          /* backend now returns services even without coords */
+        })
+    }
+
     return () => {
       dead = true
     }
