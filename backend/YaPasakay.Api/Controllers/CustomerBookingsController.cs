@@ -71,9 +71,16 @@ public class CustomerBookingsController(
         {
             // Lat/lng alone has no barangay pin — prefer an active operator that offers Pabili or Rental.
             op = await db.Operators.AsNoTracking()
-                .Where(x => x.IsActive && (
-                    (x.PabiliEnabled && x.Merchants.Any(m => m.IsActive))
-                    || x.RentalEnabled))
+                .Where(x => x.IsActive && (x.PabiliEnabled || x.RentalEnabled))
+                .OrderBy(x => x.CompanyName)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        else
+        {
+            // No location yet (GPS denied / cold start). Still surface nav items when any
+            // active operator offers them so Pabili/Rental are not hidden until a pin exists.
+            op = await db.Operators.AsNoTracking()
+                .Where(x => x.IsActive && (x.PabiliEnabled || x.RentalEnabled))
                 .OrderBy(x => x.CompanyName)
                 .FirstOrDefaultAsync(cancellationToken);
         }
