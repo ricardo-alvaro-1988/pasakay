@@ -708,12 +708,13 @@ function Home({
       }
       const key = `${a.lat.toFixed(5)},${a.lng.toFixed(5)}->${b.lat.toFixed(5)},${b.lng.toFixed(5)}`
       if (routePolyline) {
-        routeRef.current = drawEncodedRoute(maps, map, routePolyline, routeRef.current, key)
+        // Distinct cache key from the straight preview so the road path always replaces it.
+        routeRef.current = drawEncodedRoute(maps, map, routePolyline, routeRef.current, `enc:${key}`)
         return
       }
       // Draft booking without server polyline yet: straight preview (no client Routes bill).
       if (!trip) {
-        routeRef.current = drawDrivingRoute(maps, map, a, b, routeRef.current, key)
+        routeRef.current = drawDrivingRoute(maps, map, a, b, routeRef.current, `str:${key}`)
       }
       // Active trip: keep whatever polyline we already drew (no live re-route).
     } catch {
