@@ -22,6 +22,7 @@ import {
   isOperatorCoverageError,
   VehicleType,
   PaymentMethod,
+  PLATFORM_VEHICLE_TYPES,
 } from './api'
 import {
   PH,
@@ -732,11 +733,33 @@ function Home({
     routePolyline,
   ])
 
+  // Road route for the map — does not depend on a successful fare quote / operator coverage.
+  useEffect(() => {
+    if (!pickup?.lat || !pickup?.lng || !dropoff?.lat || !dropoff?.lng || trip) {
+      if (!pickup || !dropoff) setRoutePolyline(null)
+      return
+    }
+    let ignore = false
+    void api.routePreview({
+      pickupLat: pickup.lat,
+      pickupLng: pickup.lng,
+      dropoffLat: dropoff.lat,
+      dropoffLng: dropoff.lng,
+    }).then((result) => {
+      if (ignore || !result.routePolyline) return
+      setRoutePolyline(result.routePolyline)
+    }).catch(() => {
+      /* keep straight preview until a quote polyline arrives */
+    })
+    return () => {
+      ignore = true
+    }
+  }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng, trip?.id])
+
   useEffect(() => {
     if (!pickup || !dropoff || trip) {
       setQuoting(false)
       setCoverageHint(false)
-      if (!pickup || !dropoff) setRoutePolyline(null)
       return
     }
     let ignore = false
@@ -791,7 +814,8 @@ function Home({
         if (ignore) return
         setQuotes(next)
         const poly = Object.values(next).find((q) => q?.routePolyline)?.routePolyline ?? null
-        setRoutePolyline(poly)
+        // Never clear a good preview polyline when every fare quote fails.
+        if (poly) setRoutePolyline(poly)
         const anyQuote = Object.values(next).some(Boolean)
         const uncovered = !anyQuote && isOperatorCoverageError(quoteError)
         setCoverageHint(uncovered)
@@ -860,19 +884,36 @@ function Home({
   const selectedIsCargo = vehicleIsCargo(vehicle, selectedOffer?.isCargo)
   const showPassengerPicker = !!pickup && !selectedIsCargo && selectedMaxPassengers > 1
 
+  // Step 1 is preference-only (before pickup). Availability needs a pickup municipality,
+  // so fall back to the platform catalog instead of an empty / endless scan state.
+  const preferenceVehicleOptions = PLATFORM_VEHICLE_TYPES.map((type) => ({
+    id: type,
+    vehicleType: type,
+    name: vehicleLabel(type),
+    available: true,
+    maxPassengers: vehicleMaxPassengers(type),
+    isCargo: vehicleIsCargo(type),
+  }))
   const rideOptions = (() => {
     const raw = lockedRider
       ? [{ id: lockedRider.vehicleType, vehicleType: lockedRider.vehicleType, name: vehicleLabel(lockedRider.vehicleType), available: true } as const]
-      : (noOperator.useOffers
-          ? noOperator.availableVehicles
-          : noOperator.availableTypes.map((t) => ({
-              id: t,
-              vehicleType: t,
-              name: vehicleLabel(t),
-              available: true,
-              maxPassengers: vehicleMaxPassengers(t),
-              isCargo: vehicleIsCargo(t),
-            })))
+      : bookStep === 1 && !pickup
+        ? preferenceVehicleOptions
+        : (noOperator.useOffers
+            ? (noOperator.availableVehicles.length > 0
+                ? noOperator.availableVehicles
+                : noOperator.listedVehicles)
+            : (noOperator.availableTypes.length > 0
+                ? noOperator.availableTypes
+                : PLATFORM_VEHICLE_TYPES
+              ).map((t) => ({
+                id: t,
+                vehicleType: t,
+                name: vehicleLabel(t),
+                available: true,
+                maxPassengers: vehicleMaxPassengers(t),
+                isCargo: vehicleIsCargo(t),
+              })))
     return [...raw].sort((a, b) => {
       const at = String(a.vehicleType)
       const bt = String(b.vehicleType)
@@ -1346,7 +1387,7 @@ function Home({
                 </div>
               </div>
             )}
-            {!lockedRider && !noOperator.vehiclesReady ? (
+            {!lockedRider && !!pickup && !noOperator.vehiclesReady ? (
               <VehicleAvailabilityScan rows={4} />
             ) : (
               <div className="vehicles vehicles-list vehicles-pick">
@@ -1354,7 +1395,8 @@ function Home({
                   const type = item.vehicleType as VehicleType
                   const categoryId = 'id' in item && item.id !== type ? String(item.id) : null
                   const itemKey = quoteKey(type, categoryId)
-                  const canSelect = !('available' in item) || item.available !== false
+                  // Preference step ignores area availability; fare step still dims "Not offered".
+                  const canSelect = bookStep === 1 || !('available' in item) || item.available !== false
                   const selected = type === preferredType
                   const iconKey = 'iconKey' in item ? (item as { iconKey?: string }).iconKey : undefined
                   return (

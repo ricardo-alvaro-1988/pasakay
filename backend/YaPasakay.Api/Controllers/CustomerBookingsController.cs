@@ -338,6 +338,36 @@ public class CustomerBookingsController(
             RoutePolyline: prepared.RoutePolyline));
     }
 
+    /// <summary>
+    /// Road polyline for the map (cached Routes). Independent of fare quote / operator coverage
+    /// so the UI does not stay on a straight-line preview when quotes fail or are skipped.
+    /// </summary>
+    [HttpPost("route-preview")]
+    public async Task<ActionResult<CustomerRoutePreviewResponse>> RoutePreview(
+        [FromBody] CustomerRoutePreviewRequest request,
+        CancellationToken cancellationToken)
+    {
+        var (customer, status, message) = await CustomerContext.RequireAsync(db, User, cancellationToken);
+        if (customer is null)
+        {
+            return StatusCode(status, new { message });
+        }
+
+        if (request.PickupLat == 0 && request.PickupLng == 0
+            || request.DropoffLat == 0 && request.DropoffLng == 0)
+        {
+            return BadRequest(new { message = "Pickup and drop-off coordinates are required." });
+        }
+
+        var (km, eta, polyline) = await driving.MeasureAsync(
+            request.PickupLat,
+            request.PickupLng,
+            request.DropoffLat,
+            request.DropoffLng,
+            cancellationToken);
+        return Ok(new CustomerRoutePreviewResponse(polyline, km, eta));
+    }
+
     [HttpPost("service-check")]
     public async Task<ActionResult<CustomerServiceCheckResponse>> ServiceCheck(
         [FromBody] CustomerServiceCheckRequest request,

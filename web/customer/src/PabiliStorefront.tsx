@@ -3,6 +3,7 @@ import { api, mediaUrl, PaymentMethod, Desk, PabiliOrderDetail } from './api'
 import { AccountHub, AccountPage } from './account-screens'
 import {
   drawDrivingRoute,
+  drawEncodedRoute,
   loadGoogleMaps,
   MapHandle,
   DirectionsRendererHandle,
@@ -1677,6 +1678,22 @@ function OrderTrackMap({ order }: { order: OrderDetail }) {
           { lat: order.dropoffLat, lng: order.dropoffLng },
           routeRef.current,
         )
+        void api.routePreview({
+          pickupLat: order.pickupLat,
+          pickupLng: order.pickupLng,
+          dropoffLat: order.dropoffLat,
+          dropoffLng: order.dropoffLng,
+        }).then((preview) => {
+          if (dead || !preview.routePolyline || !mapRef.current) return
+          routeRef.current = drawEncodedRoute(
+            maps,
+            mapRef.current,
+            preview.routePolyline,
+            routeRef.current,
+          )
+        }).catch(() => {
+          /* keep straight preview */
+        })
       } catch {
         /* map optional */
       }

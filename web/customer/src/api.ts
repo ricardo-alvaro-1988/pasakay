@@ -635,6 +635,11 @@ export const api = {
     return request<{ pabiliEnabled: boolean; rentalEnabled: boolean }>(`/api/customer/services${q ? `?${q}` : ''}`)
   },
   quote: (body: BookBody) => request<Quote>('/api/customer/quote', { method: 'POST', body: JSON.stringify(body) }),
+  routePreview: (body: { pickupLat: number; pickupLng: number; dropoffLat: number; dropoffLng: number }) =>
+    request<{ routePolyline?: string | null; distanceKm: number; etaMinutes: number }>('/api/customer/route-preview', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   availableRiders: (opts: {
     vehicleType: VehicleType
     paymentMethod: PaymentMethod
