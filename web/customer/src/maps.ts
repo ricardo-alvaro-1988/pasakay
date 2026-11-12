@@ -569,6 +569,8 @@ type RouteHandle = DirectionsRendererHandle & {
   polylines: PolylineHandle[]
   requestId: number
   sourceKey?: string
+  /** Encoded polyline last drawn — used so road path always replaces a straight preview. */
+  encoded?: string
 }
 
 /** Google encoded polyline → lat/lng path (no extra Maps SKU). */
@@ -628,13 +630,20 @@ export function drawEncodedRoute(
   sourceKey?: string,
 ) {
   const next = (renderer as RouteHandle | null) ?? emptyRouteHandle()
-  if (sourceKey && next.sourceKey === sourceKey && next.polylines.length > 0) {
+  // Must compare encoded content too — a straight preview can share the same lat/lng key.
+  if (
+    sourceKey
+    && next.sourceKey === sourceKey
+    && next.encoded === encoded
+    && next.polylines.length > 0
+  ) {
     return next
   }
   next.polylines.forEach((line) => line.setMap(null))
   next.polylines = []
   next.requestId = (next.requestId || 0) + 1
   next.sourceKey = sourceKey
+  next.encoded = encoded
   const path = decodeEncodedPolyline(encoded)
   if (!path.length || !maps.Polyline) return next
   const line = new maps.Polyline({
@@ -665,6 +674,7 @@ export function drawDrivingRoute(
   next.polylines = []
   next.requestId = (next.requestId || 0) + 1
   next.sourceKey = sourceKey
+  next.encoded = undefined
   if (!maps.Polyline) return next
   const line = new maps.Polyline({
     path: [origin, destination],
