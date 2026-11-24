@@ -45,11 +45,9 @@ Current routing is defined in [deploy/branch-targets.sh](branch-targets.sh), cal
 | Branch | Site/service identifier | Loopback port |
 | --- | --- | --- |
 | Staging | yapasakay | 5003 |
-| main | pricebadz | 5004 |
 | main | pasakyaman | 5005 |
 | main | trygoride | 5006 |
 | main | pasakya | 5011 |
-| main | parasakay | 5012 |
 | main | angkasna | 5013 |
 | main | mibitgo | 5017 |
 
@@ -59,7 +57,7 @@ For each `<site>`, routing specifies `/var/www/<site>`, `<site>.service`, `/etc/
 
 Persistent paths conventionally include `/var/lib/<site>/uploads`, `/var/log/<site>`, and `/var/lib/<site>/release.json`. The helper supports environment overrides, so inspect actual values. Its default backup root is `/var/www/backups`, with site-prefixed backup directories. Preserve settings, runtime storage, and any data-protection keys across releases.
 
-Jenkins enables GitHub push triggers, two-minute SCM polling, and disables concurrent builds within the job. PR builds with `CHANGE_ID` and unlisted branches do not enter deployment. A new Git branch alone does not create a Jenkins job or configure DNS. Production sites receive the same package sequentially. The pipeline uses Pricebadz's release metadata as the version source for the other production brands; YapasaKay staging advances separately. Inspect the current pipeline before adding a new brand to this rule.
+Jenkins enables GitHub push triggers, two-minute SCM polling, and disables concurrent builds within the job. PR builds with `CHANGE_ID` and unlisted branches do not enter deployment. A new Git branch alone does not create a Jenkins job or configure DNS. Production sites receive the same package sequentially. The pipeline uses Pasakyaman's release metadata as the version source for the other production brands; YapasaKay staging advances separately. Inspect the current pipeline before adding a new brand to this rule.
 
 Yapabili's separate pipeline records ports 5007 through 5010 for Yapabili, Pakinaman, Yapabili Demo, and Pasiqlo. Treat those as occupied unless live evidence says otherwise. Check all listening ports and service reservations across the shared host; do not choose a port from an old example.
 
@@ -96,3 +94,7 @@ Yapabili's separate pipeline records ports 5007 through 5010 for Yapabili, Pakin
 - [Pricebadz](pricebadz-production.md), [Pasakyaman](pasakyaman-production.md), [Trygoride](trygoride-production.md), [Pasakya](pasakya-production.md) deployment records
 
 Website work does not imply mobile app builds. Every mobile brand/role needs its own identity and signing/provider configuration; inspect the relevant mobile project before any separate release task.
+
+## Retired sites ? 2026-11-24
+
+Pasiqlo, Parasakay and Pricebadz were retired at the owner's request. Their historical runbooks are not active deployment inventories. Production and staging routing exclude these targets. YaPasakay uses Pasakyaman as its production version source. The exact `Retire inactive websites [routing only]` commit skips application deployment; subsequent commits deploy normally.

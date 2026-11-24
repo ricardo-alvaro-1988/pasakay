@@ -10,8 +10,8 @@ for script in re.findall(r"sh '''(.*?)'''", (root / 'Jenkinsfile').read_text(), 
     subprocess.run(['bash', '-n'], input=script.replace(chr(92)*2, chr(92)), text=True, check=True)
 for branch, expected in {
     'Staging': ['yapasakay'], 'origin/Staging': ['yapasakay'],
-    'main': ['pricebadz','pasakyaman','trygoride','pasakya','parasakay','angkasna','mibitgo'],
-    'origin/main': ['pricebadz','pasakyaman','trygoride','pasakya','parasakay','angkasna','mibitgo'],
+    'main': ['pasakyaman','trygoride','pasakya','angkasna','mibitgo'],
+    'origin/main': ['pasakyaman','trygoride','pasakya','angkasna','mibitgo'],
     'staging': None, 'master': None, 'feature/test': None, 'PR-1': None, '': None
 }.items():
     result = subprocess.run(['bash', str(root / 'deploy/branch-targets.sh'), branch],

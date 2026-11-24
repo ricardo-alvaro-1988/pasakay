@@ -1,3 +1,5 @@
+> RETIRED 2026-11-24: site, database and storage removed. Historical record only; do not provision or deploy.
+
 # PriceBadz production clone
 
 Use one Jenkins build for both production sites:
