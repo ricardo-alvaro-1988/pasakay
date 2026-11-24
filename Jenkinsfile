@@ -16,7 +16,7 @@ pipeline {
     environment {
         APP_NAME = 'yapasakay'
         DEPLOY_HOST = 'yapasakay.com'
-        PRODUCTION_RELEASE_FILE = '/var/lib/pricebadz/release.json'
+        PRODUCTION_RELEASE_FILE = '/var/lib/pasakyaman/release.json'
         SSH_CREDENTIALS_ID = 'yapasakay-prod-ssh'
         DOTNET_CLI_TELEMETRY_OPTOUT = '1'
         DOTNET_SKIP_FIRST_TIME_EXPERIENCE = '1'
@@ -29,12 +29,15 @@ pipeline {
                     def checkoutInfo = checkout scm
                     env.GIT_BRANCH = checkoutInfo.GIT_BRANCH
                     env.GIT_COMMIT = checkoutInfo.GIT_COMMIT
+                    def subject = sh(script: 'git log -1 --format=%s', returnStdout: true).trim()
+                    env.ROUTING_ONLY = (subject == 'Retire inactive websites [routing only]').toString()
                 }
                 sh 'git rev-parse --short HEAD > .git-short-sha'
             }
         }
 
         stage('Build') {
+            when { expression { env.ROUTING_ONLY != 'true' } }
             steps {
                 sh '''#!/usr/bin/env bash
                     set -euxo pipefail
@@ -84,6 +87,7 @@ pipeline {
         }
 
         stage('Package') {
+            when { expression { env.ROUTING_ONLY != 'true' } }
             steps {
                 sh '''#!/usr/bin/env bash
                     set -euxo pipefail
@@ -101,7 +105,7 @@ pipeline {
         stage('Deploy Branch Sites') {
             when {
                 expression {
-                    !env.CHANGE_ID && env.GIT_BRANCH in ['main', 'origin/main', 'Staging', 'origin/Staging']
+                    env.ROUTING_ONLY != 'true' && !env.CHANGE_ID && env.GIT_BRANCH in ['main', 'origin/main', 'Staging', 'origin/Staging']
                 }
             }
             steps {
@@ -126,7 +130,7 @@ pipeline {
                             remote_package="/tmp/${target_name}-${package}"
                             remote_script="/tmp/${target_name}-deploy-${BUILD_NUMBER}-${GIT_COMMIT}.sh"
                             version_source_file=""
-                            if [ "${target_name}" = "pasakyaman" ] || [ "${target_name}" = "trygoride" ] || [ "${target_name}" = "pasakya" ] || [ "${target_name}" = "parasakay" ] || [ "${target_name}" = "angkasna" ]; then
+                            if [ "${target_name}" = "trygoride" ] || [ "${target_name}" = "pasakya" ] || [ "${target_name}" = "angkasna" ]; then
                                 version_source_file="${PRODUCTION_RELEASE_FILE}"
                             fi
 
